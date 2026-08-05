@@ -46,6 +46,12 @@ ORACLE_MANIFEST_VERSION = "0.1"
 BEHAVIOR_BASELINE_FACET = "engine_behavior_baseline"
 BEHAVIOR_BASELINE_VERSION = "0.1"
 
+#: 材料记录面：一份记录聚合力学/光学/外观字段，各域各取所需（spec/01第44行的
+#: "形制即规范种子"）。出生draft——形制取自WDS材料记录（SHA锁定+单位后缀+
+#: 适用域声明三件套），两个域各自用过之前不作兼容承诺。
+MATERIAL_RECORD_FACET = "engine_material_record"
+MATERIAL_RECORD_VERSION = "0.1"
+
 ENGINE_REGISTRY = FacetRegistry(
     Facet(
         name=ACCEPTANCE_RECEIPT_FACET,
@@ -83,6 +89,12 @@ ENGINE_REGISTRY = FacetRegistry(
         max_tested_minor=1,
         status=FacetStatus.INTERNAL,
     ),
+    Facet(
+        name=MATERIAL_RECORD_FACET,
+        major=0,
+        max_tested_minor=1,
+        status=FacetStatus.DRAFT,
+    ),
 )
 
 __all__ = [
@@ -93,6 +105,8 @@ __all__ = [
     "COLLISION_EVENTS_FACET",
     "COLLISION_EVENTS_VERSION",
     "ENGINE_REGISTRY",
+    "MATERIAL_RECORD_FACET",
+    "MATERIAL_RECORD_VERSION",
     "ORACLE_MANIFEST_FACET",
     "ORACLE_MANIFEST_VERSION",
     "PERF_BASELINE_FACET",
