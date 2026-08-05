@@ -266,7 +266,8 @@ def test_the_solver_fails_closed_when_a_degree_of_freedom_is_unconstrained():
     registry = EnergyRegistry(terms=(UniformGravity(),))  # 只有重力，无任何刚度
     with pytest.raises(SolveError, match="singular"):
         solve_equilibrium(
-            registry, context, layout, (0.0,) * 6, fixed_indices=frozenset({0, 1, 2})
+            registry, context, layout, (0.0,) * 6,
+            fixed_indices=frozenset({0, 1, 2}), residual_tol_n=1.0e-9,
         )
 
 
@@ -279,7 +280,7 @@ def test_the_solver_refuses_a_fully_fixed_problem():
     with pytest.raises(SolveError, match="没有要解的东西"):
         solve_equilibrium(
             registry, context, layout, (0.0, 0.0, 0.0),
-            fixed_indices=frozenset({0, 1, 2}),
+            fixed_indices=frozenset({0, 1, 2}), residual_tol_n=1.0e-9,
         )
 
 
@@ -331,3 +332,23 @@ def test_gravity_contributes_no_hessian_entries_at_all():
     )
     state = State(layout=_layout(2), vector=(0.0, 0.0, 0.0, 3.0, 4.0, 5.0))
     assert UniformGravity().hessian_entries(state, context) == ()
+
+
+def test_the_residual_tolerance_has_no_default_and_must_be_declared():
+    """绝对残差的可达地板随规模上升——一个"看起来能用、一放大就不收敛"的默认值
+    比没有默认值糟糕得多（决策0030第十节第1条）。
+
+    实测：同一个悬臂，10段时残差地板2.4e-10 N、160段时5.6e-8 N，
+    因为弯曲刚度标度`EI/h³`按`h⁻³`增长。旧默认值1e-9在40段以上够不到，
+    会跑满50次迭代不收敛而调用方读不出为什么。
+    """
+
+    import inspect
+
+    from physics_engine.solve import solve_equilibrium
+
+    parameter = inspect.signature(solve_equilibrium).parameters["residual_tol_n"]
+    assert parameter.default is inspect.Parameter.empty, (
+        "residual_tol_n 不许有默认值——那会把「这个容差对我的载荷尺度合不合适」"
+        "这个必须由调用方回答的问题伪装成库的实现细节"
+    )

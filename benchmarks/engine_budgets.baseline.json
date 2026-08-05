@@ -30,11 +30,25 @@
       "budget_s": 120.0,
       "measured_median_s": 0.5,
       "load_tier": "local_batch"
+    },
+    "solve_equilibrium_cantilever_160free_dof": {
+      "budget_s": 0.25,
+      "measured_median_s": 0.096,
+      "load_tier": "interactive",
+      "workload": "自重悬臂160段（重力+线性弯曲，二次能量），160个自由自由度，牛顿2步0回溯",
+      "measured_by": "docs/decisions/0030_欠账清理_20260805.md"
+    },
+    "solve_equilibrium_chain_762free_dof": {
+      "budget_s": 60.0,
+      "measured_median_s": 19.4,
+      "load_tier": "local_batch",
+      "workload": "256节点链（重力+轴向拉伸+弯曲，非二次），762个自由自由度，牛顿8步6回溯",
+      "measured_by": "docs/decisions/0030_欠账清理_20260805.md"
     }
   },
   "deterministic_gates": {
     "source_bytes": {
-      "measured": 208007,
+      "measured": 221464,
       "ceiling": 294912,
       "rationale": "source_bytes是wheel体积的确定性代理——wheel需要构建，源码字节不需要，且跨平台逐位稳定。上限**不是**“引擎必须保持小”的承诺（0015已裁决要把WDS的物理搬进来，源码注定大幅增长），而是“增长必须是一次被记录的决定”。抬上限是允许的，但必须在ceiling_history里留一行，且门校验现行上限等于历史末行——想悄悄抬过不去。"
     },
