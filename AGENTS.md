@@ -8,7 +8,7 @@
 
 - 一句话：rtime的物理引擎——规范先行、代码后置的多域仿真内核，**按用户级软件要求建设：目标机器状态未知，单机性能是一等产品需求（0014）**；
   消费方winding-deviation-sim（力学）、fts-digital-twin（光学）。
-- 开发设备：Windows+macOS平级，直接在本仓工作；**重计算上master，不占本机Mac**。
+- 开发设备：Windows+macOS平级，直接在本仓工作；**重计算上master，不占本机Mac**（内部开发约定，非产品假设——产品定位见0014）。
 - git远程：`ts-orangepi:physics-engine.git`（舰队主远程，/home/orangepi/，与fts-digital-twin.git同处）+ `github.com/Rtiming/physics-engine`（公开镜像，MIT）。发版脚本自动双推。 <!-- rtime-project: allow-abs -->
 
 ## 开工三读（顺序）
