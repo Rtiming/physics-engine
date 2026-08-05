@@ -1,0 +1,13 @@
+# 把 rtime-project 严格校验挂成 pre-commit 钩子,每次提交自动拦可移植性问题。
+# 前置: 1) pip install pre-commit  2) 把 rtime-project-check.py 拷到项目 tools/
+#        3) 在项目根执行 pre-commit install
+# 之后每次 git commit 自动运行;也可手动 pre-commit run --all-files。
+repos:
+  - repo: local
+    hooks:
+      - id: rtime-project-check
+        name: rtime-project 跨设备可移植性校验
+        entry: python tools/rtime-project-check.py . --strict
+        language: system
+        pass_filenames: false
+        always_run: true

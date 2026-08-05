@@ -1,0 +1,41 @@
+# 跨平台行尾归一化:仓库内统一 LF,签出时由各平台/编辑器处理
+# 这是 win↔mac 协作不踩 CRLF/LF 坑的根本手段
+* text=auto eol=lf
+
+# Windows 专用脚本必须 CRLF,否则在 cmd/PowerShell 里可能出错
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# Shell 脚本强制 LF(签出到 win 也保持 LF)
+*.sh    text eol=lf
+*.bash  text eol=lf
+
+# 显式标注二进制,避免被当文本做行尾/编码转换而损坏
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.pdf   binary
+*.zip   binary
+*.gz    binary
+*.7z    binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.mp4   binary
+*.mov   binary
+# 工程/CAD 资产(若项目含)
+*.step  binary
+*.stp   binary
+*.stl   binary
+*.sldprt binary
+*.sldasm binary
+*.x_t   binary
+*.dxf   binary
+*.dwg   binary
+*.docx  binary
+*.xlsx  binary
+*.pptx  binary
