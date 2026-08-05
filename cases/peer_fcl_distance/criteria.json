@@ -1,0 +1,71 @@
+{
+  "case_id": "peer_fcl_distance",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator_algorithm_id": "algorithm:physics-engine/validation/peer_fcl/run_comparison",
+  "generator_version": "0.1.0",
+  "sweep": {
+    "seed": 20260805,
+    "per_cell": 300,
+    "expected_sample_count": 2700,
+    "fault_per_cell": 60
+  },
+  "peer": {
+    "distribution": "python-fcl",
+    "pinned_version": "0.7.0.11",
+    "wheel": "python_fcl-0.7.0.11-cp313-cp313-macosx_11_0_arm64.whl",
+    "wheel_sha256": "fb10b3037d82ef754ba236a94a7f12da1864e13d4bc2f0d1ae9078c9a814915f",
+    "index_url": "https://pypi.org/simple",
+    "license": "BSD-3-Clause"
+  },
+  "expected_peer_operator": {
+    "sphere_sphere/separated": "distance.unsigned",
+    "sphere_sphere/grazing": "distance.unsigned",
+    "sphere_sphere/penetrating": "collide.penetration_depth",
+    "sphere_capsule/separated": "distance.unsigned",
+    "sphere_capsule/grazing": "distance.unsigned",
+    "sphere_capsule/penetrating": "collide.penetration_depth",
+    "capsule_capsule/separated": "distance.unsigned",
+    "capsule_capsule/grazing": "distance.unsigned",
+    "capsule_capsule/penetrating": "distance.unsigned"
+  },
+  "criteria": [
+    {
+      "id": "J1",
+      "quantity": "separation_mm（本仓闭式解 对 FCL同构型算子）",
+      "rule": "abs_deviation_mm <= abs_tolerance_mm 或 rel_deviation <= rel_tolerance",
+      "abs_tolerance_mm": 1e-09,
+      "rel_tolerance": 1e-11,
+      "reason": "坐标量级上界约1000mm，float64在该量级的ulp约1.1e-13mm；两侧各自累积十余次乘加，实测2700组的偏差上界2.27e-13mm。取1e-9留约4400倍余量，吸收平台/编译器差异；同时它比任何真实的公式错小七个量级（三条注错的最小偏差是1.5e+1mm），门不会因为容差宽而抓不到错。rel是给大值区的第二条路：grazing带的分离量本身可小到1e-7mm，那里rel会被放大到5.6e-7而abs仍在1e-13——所以判据是二者取其一，不是二者都要"
+    },
+    {
+      "id": "J2",
+      "quantity": "接触判据（本仓report事件 对 FCL的collide布尔）",
+      "rule": "predicate_disagreements == 0",
+      "abs_tolerance_mm": 0.0,
+      "rel_tolerance": 0.0,
+      "reason": "漏报为零是碰撞查询对外唯一的硬承诺（plans/02案例5），布尔量没有'差不多'。已知边界差异（恰好相切）不在随机采样的可达集内，见案例页已知失效清单第3条"
+    },
+    {
+      "id": "J3",
+      "quantity": "同行算子路由",
+      "rule": "每个(类,band)格子只用一个FCL算子，且与expected_peer_operator逐条相等",
+      "abs_tolerance_mm": 0.0,
+      "rel_tolerance": 0.0,
+      "reason": "FCL的三条路不是同一个算子且精度差六个量级（案例页第三节）。路由一变说明同行换了实现，上一轮的对拍结论**必须重新审**而不是自动继承——这正是轴7规则5'金标不得为让改动通过而漂移'的对偶：同行漂了也要停下来看"
+    },
+    {
+      "id": "J4",
+      "quantity": "样本规模",
+      "rule": "overall.count == expected_sample_count 且 missing_peer_value == 0",
+      "abs_tolerance_mm": 0.0,
+      "rel_tolerance": 0.0,
+      "reason": "防'悄悄把扫描缩小到十组然后宣布一致'。零执行等于未验收（spec/07的同一条精神）"
+    }
+  ],
+  "must_be_red": {
+    "rule": "FAULTS里除none外的每一条，都必须让J1判fail",
+    "min_expected_abs_deviation_mm": 0.01,
+    "reason": "轴7规则6：每道门要有'它必须红'的输入。三条注错都是**仓内自洽测试抓不到、只有同行对拍能抓到**的那类错——四元数次序、漏减半径、胶囊半长/全长错位"
+  }
+}
