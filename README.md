@@ -1,8 +1,12 @@
-# twin-engine
+# physics-engine
 
-两个数字孪生仿真项目的共同引擎仓：`winding-deviation-sim`（力学，绕制偏差）与
-`fts-digital-twin`（光学，傅里叶光谱仪）。2026-08-04用户裁决建立：走共同仓库、
-深度融合、接口规范统一。
+rtime的**物理引擎**：多域物理（力学、光学，将来热/电磁）+ 模型生成 + 物理性质
+（材料）+ 外观（颜色）+ 溯源纪律的仿真引擎仓。2026-08-04用户裁决建立并定位
+（原名twin-engine，同晚更名）：走共同仓库、深度融合、接口规范统一。
+
+创始消费方：`winding-deviation-sim`（力学，绕制偏差）与`fts-digital-twin`
+（光学，傅里叶光谱仪）；潜在第三个消费方`case2-digital-twin`（专利装置数字样机）。
+目标模块图与各能力现居地见[docs/spec/01_模块地图与域划分_v0.md](docs/spec/01_模块地图与域划分_v0.md)。
 
 ## 本仓是什么
 
@@ -36,6 +40,6 @@
 ## 工程约定
 
 跨设备范式按rtime-project：git同步（远程：orangepi裸仓库
-`ts-orangepi:/mnt/nvme-store/git-hub/twin-engine.git`，开源时另加GitHub）、
+`ts-orangepi:/mnt/nvme-store/git-hub/physics-engine.git`，开源时另加GitHub）、
 路径可移植（`tools/rtime-project-check.py --strict`必须全绿）、
 行尾LF归一、提交署名`[ai:名@设备]`。文档中文。

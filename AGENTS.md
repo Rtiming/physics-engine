@@ -1,4 +1,4 @@
-# twin-engine — AI 协作规则
+# physics-engine — AI 协作规则
 
 > 本项目遵循 rtime-project 跨设备范式。任何 AI 助手开工前先读本文件。
 
@@ -6,7 +6,7 @@
 
 - 一句话: winding-deviation-sim与fts-digital-twin的共同引擎仓，规范先行、代码后置
 - 开发设备: Windows + macOS(平级);运行/部署: 本地库，无服务部署
-- git 远程: ts-orangepi:/mnt/nvme-store/git-hub/twin-engine.git（开源时另加 github.com/Rtiming/twin-engine） <!-- rtime-project: allow-abs -->
+- git 远程: ts-orangepi:/mnt/nvme-store/git-hub/physics-engine.git（开源时另加 github.com/Rtiming/physics-engine） <!-- rtime-project: allow-abs -->
 
 ## 路径策略(硬性)
 
