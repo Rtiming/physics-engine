@@ -1,5 +1,6 @@
 """验收器的元门禁——轴6规则6在本仓的落地：判据本身也要被验。"""
 
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -220,3 +221,34 @@ def test_timeout_kills_the_whole_descendant_tree(tmp_path):
     assert code == accept.TIMEOUT_RETURNCODE
     time.sleep(2.0)
     assert not marker.exists(), "后代进程在超时后仍然活着——进程树没被杀干净"
+
+
+def test_repository_identity_survives_untracked_symlinks_and_tracks_their_target(tmp_path):
+    """未跟踪的符号链接不得让验收器崩——worktree里软链.venv就会踩到。
+
+    语义：链接的内容是它的**目标字符串**。跟随链接读目标字节会把仓外的东西
+    算进仓库身份；直接read_bytes()在目标是目录时抛IsADirectoryError。
+    """
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    (tmp_path / "tracked.txt").write_text("x", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"],
+        cwd=tmp_path, check=True,
+    )
+    target_dir = tmp_path / "target-dir"
+    target_dir.mkdir()
+    link = tmp_path / "link-to-dir"
+    link.symlink_to(target_dir)
+
+    first = accept.repository_identity(tmp_path)  # 修复前这里抛IsADirectoryError
+
+    link.unlink()
+    other = tmp_path / "other-dir"
+    other.mkdir()
+    link.symlink_to(other)
+    second = accept.repository_identity(tmp_path)
+    assert first.working_tree_sha256 != second.working_tree_sha256, (
+        "改了符号链接指向却没进指纹——那是一次真实的工作区变化"
+    )

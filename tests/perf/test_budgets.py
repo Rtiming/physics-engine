@@ -47,8 +47,29 @@ def test_source_bytes_stay_within_the_declared_ceiling(baseline):
     )
     assert measured <= gate["ceiling"], (
         f"源码字节 {measured} 超出声明上限 {gate['ceiling']}——"
-        "这是spec/13预算的回退。优化，或走决策记录改预算表。"
+        "这是spec/13预算的回退。优化，或走决策记录抬上限并在"
+        "source_bytes_ceiling_history里记一行。"
     )
+
+
+def test_raising_the_source_ceiling_must_be_ledgered(baseline):
+    """上限不是"引擎必须保持小"的承诺——0015已裁决要把物理搬进来，源码注定大涨。
+
+    门守的是**抬上限必须留痕**：现行上限必须等于历史末行，且每一行都带
+    决策记录与理由。想悄悄抬一下过不去——那正是固定上限用久了会退化成的样子。
+    """
+
+    gate = baseline["deterministic_gates"]["source_bytes"]
+    history = baseline["source_bytes_ceiling_history"]
+    assert history, "上限历史不得为空"
+    assert gate["ceiling"] == history[-1]["ceiling"], (
+        f"现行上限 {gate['ceiling']} 与历史末行 {history[-1]['ceiling']} 不符——"
+        "抬上限必须同批在source_bytes_ceiling_history里记一行。"
+    )
+    for entry in history:
+        assert entry.get("decision"), f"上限变更缺决策记录：{entry}"
+        assert entry.get("reason"), f"上限变更缺理由：{entry}"
+        assert (ROOT / entry["decision"]).exists(), f"决策记录不存在：{entry['decision']}"
 
 
 def test_eager_import_surface_does_not_grow_past_the_ceiling(baseline):

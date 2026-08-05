@@ -327,7 +327,18 @@ def repository_identity(root: Path) -> RepositoryIdentity:
     ).stdout
     for raw in sorted(part for part in untracked.split(b"\0") if part):
         digest.update(b"\0" + raw + b"\0")
-        digest.update((root / raw.decode("utf-8")).read_bytes())
+        path = root / raw.decode("utf-8")
+        if path.is_symlink():
+            # 符号链接的内容**是它的目标字符串**，不是目标指向的字节。
+            # 直接read_bytes()在目标是目录时崩（worktree里软链.venv就会踩到）；
+            # 跟随链接读目标字节则把仓外的东西算进了仓库身份，更糟。
+            # 链接本身仍进指纹——改指向是一次真实的工作区变化。
+            digest.update(b"symlink:" + os.readlink(path).encode("utf-8"))
+        elif path.is_file():
+            digest.update(path.read_bytes())
+        else:
+            # 命名管道/套接字之类：只记形态，不读内容（读可能阻塞到超时）。
+            digest.update(b"non-regular")
     return RepositoryIdentity(
         revision=revision,
         dirty=bool(status.strip()),
