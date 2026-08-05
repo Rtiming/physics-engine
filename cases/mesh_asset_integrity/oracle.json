@@ -1,0 +1,215 @@
+{
+  "arrays": {},
+  "case_id": "case/mesh_asset_integrity",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/mesh_asset_integrity",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/mesh_asset_integrity/generate_oracle.py",
+    "sha256": "f7ad587a1b1ea6a0a6802157b84a79bee26d2477e9393d2a3fe5a55690fee9e2"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "2fccc5ea5d9bbd91764f0dc84cd2fad6fff88f996748d794491e0b942e162379",
+  "oracles": [
+    {
+      "expected": {
+        "asset_bytes": 284,
+        "envelope_encloses_asset": true,
+        "sha256_matches": true,
+        "triangle_count": 4,
+        "true_aabb_max_mm": [
+          26.5,
+          25.25,
+          16.0
+        ],
+        "true_aabb_min_mm": [
+          -3.5,
+          1.25,
+          -2.0
+        ],
+        "violated_axes": []
+      },
+      "id": "oracle:mesh_asset_integrity/tetra_envelope",
+      "inputs": {
+        "asset_generator_path_relative": "cases/mesh_asset_integrity/assets/generate_tetra.py",
+        "asset_generator_sha256": "5b8e960e12127951e60167a0efef345c76eca408553b486b77f1ab3dea6f4408",
+        "asset_path_relative": "cases/mesh_asset_integrity/assets/tetra.stl",
+        "direction": "envelope",
+        "scene_path_relative": "cases/mesh_asset_integrity/tetra_envelope.scene.json",
+        "scene_sha256": "238575a34c7d776e780a07ac57fbf082df31e2d664449c0ed58c1374f405898c"
+      },
+      "tolerances": {
+        "asset_bytes": {
+          "abs": 0.0,
+          "reason": "三角形数与文件字节数是确定性整数，零容差。",
+          "rel": 0.0
+        },
+        "envelope_encloses_asset": {
+          "abs": 0.0,
+          "reason": "包络保守性是不等式判据（declared_min ≤ true_min 且 declared_max ≥ true_max），零容差=不给不等式任何松弛。给了松弛就等于声明『漏出去一点点没关系』，而漏出去的那一点点正是broad phase会漏掉的接触。",
+          "rel": 0.0
+        },
+        "sha256_matches": {
+          "abs": 0.0,
+          "reason": "内容寻址是逐字节判据（轴3规则1），容差概念不适用——零容差不是『选了个很严的数』，是『这里没有连续量』。SHA对不上说明字节变了，没有『变得不多』这回事。",
+          "rel": 0.0
+        },
+        "triangle_count": {
+          "abs": 0.0,
+          "reason": "三角形数与文件字节数是确定性整数，零容差。",
+          "rel": 0.0
+        },
+        "true_aabb_max_mm": {
+          "abs": 1e-12,
+          "reason": "顶点坐标全是±0.25的整数倍，float32存储无舍入、解析回float64精确；abs=1e-12mm是对『这里没有误差源』的声明，不写==0是不把解析实现的求值次序冻进契约。",
+          "rel": 0.0
+        },
+        "true_aabb_min_mm": {
+          "abs": 1e-12,
+          "reason": "顶点坐标全是±0.25的整数倍，float32存储无舍入、解析回float64精确；abs=1e-12mm是对『这里没有误差源』的声明，不写==0是不把解析实现的求值次序冻进契约。",
+          "rel": 0.0
+        },
+        "violated_axes": {
+          "abs": 0.0,
+          "reason": "包络保守性是不等式判据（declared_min ≤ true_min 且 declared_max ≥ true_max），零容差=不给不等式任何松弛。给了松弛就等于声明『漏出去一点点没关系』，而漏出去的那一点点正是broad phase会漏掉的接触。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "asset_bytes": 284,
+        "envelope_encloses_asset": false,
+        "sha256_matches": true,
+        "triangle_count": 4,
+        "true_aabb_max_mm": [
+          26.5,
+          25.25,
+          16.0
+        ],
+        "true_aabb_min_mm": [
+          -3.5,
+          1.25,
+          -2.0
+        ],
+        "violated_axes": [
+          "min_x",
+          "min_z"
+        ]
+      },
+      "id": "oracle:mesh_asset_integrity/red_wrong_aabb",
+      "inputs": {
+        "asset_generator_path_relative": "cases/mesh_asset_integrity/assets/generate_tetra.py",
+        "asset_generator_sha256": "5b8e960e12127951e60167a0efef345c76eca408553b486b77f1ab3dea6f4408",
+        "asset_path_relative": "cases/mesh_asset_integrity/assets/tetra.stl",
+        "direction": "envelope",
+        "scene_path_relative": "cases/mesh_asset_integrity/red_wrong_aabb.scene.json",
+        "scene_sha256": "d547df437ba8265aee7f86996ad31554690bf71c37e4c57805feda301ace7c88"
+      },
+      "tolerances": {
+        "asset_bytes": {
+          "abs": 0.0,
+          "reason": "三角形数与文件字节数是确定性整数，零容差。",
+          "rel": 0.0
+        },
+        "envelope_encloses_asset": {
+          "abs": 0.0,
+          "reason": "包络保守性是不等式判据（declared_min ≤ true_min 且 declared_max ≥ true_max），零容差=不给不等式任何松弛。给了松弛就等于声明『漏出去一点点没关系』，而漏出去的那一点点正是broad phase会漏掉的接触。",
+          "rel": 0.0
+        },
+        "sha256_matches": {
+          "abs": 0.0,
+          "reason": "内容寻址是逐字节判据（轴3规则1），容差概念不适用——零容差不是『选了个很严的数』，是『这里没有连续量』。SHA对不上说明字节变了，没有『变得不多』这回事。",
+          "rel": 0.0
+        },
+        "triangle_count": {
+          "abs": 0.0,
+          "reason": "三角形数与文件字节数是确定性整数，零容差。",
+          "rel": 0.0
+        },
+        "true_aabb_max_mm": {
+          "abs": 1e-12,
+          "reason": "顶点坐标全是±0.25的整数倍，float32存储无舍入、解析回float64精确；abs=1e-12mm是对『这里没有误差源』的声明，不写==0是不把解析实现的求值次序冻进契约。",
+          "rel": 0.0
+        },
+        "true_aabb_min_mm": {
+          "abs": 1e-12,
+          "reason": "顶点坐标全是±0.25的整数倍，float32存储无舍入、解析回float64精确；abs=1e-12mm是对『这里没有误差源』的声明，不写==0是不把解析实现的求值次序冻进契约。",
+          "rel": 0.0
+        },
+        "violated_axes": {
+          "abs": 0.0,
+          "reason": "包络保守性是不等式判据（declared_min ≤ true_min 且 declared_max ≥ true_max），零容差=不给不等式任何松弛。给了松弛就等于声明『漏出去一点点没关系』，而漏出去的那一点点正是broad phase会漏掉的接触。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "asset_bytes": 284,
+        "envelope_encloses_asset": true,
+        "sha256_matches": false,
+        "triangle_count": 4,
+        "true_aabb_max_mm": [
+          26.5,
+          25.25,
+          16.0
+        ],
+        "true_aabb_min_mm": [
+          -3.5,
+          1.25,
+          -2.0
+        ],
+        "violated_axes": []
+      },
+      "id": "oracle:mesh_asset_integrity/red_wrong_sha",
+      "inputs": {
+        "asset_generator_path_relative": "cases/mesh_asset_integrity/assets/generate_tetra.py",
+        "asset_generator_sha256": "5b8e960e12127951e60167a0efef345c76eca408553b486b77f1ab3dea6f4408",
+        "asset_path_relative": "cases/mesh_asset_integrity/assets/tetra.stl",
+        "direction": "envelope",
+        "scene_path_relative": "cases/mesh_asset_integrity/red_wrong_sha.scene.json",
+        "scene_sha256": "5c6df9d755d0dbd5be959a5af02584f2b15e019235298cdc0e7ba4225e9e9e81"
+      },
+      "tolerances": {
+        "asset_bytes": {
+          "abs": 0.0,
+          "reason": "三角形数与文件字节数是确定性整数，零容差。",
+          "rel": 0.0
+        },
+        "envelope_encloses_asset": {
+          "abs": 0.0,
+          "reason": "包络保守性是不等式判据（declared_min ≤ true_min 且 declared_max ≥ true_max），零容差=不给不等式任何松弛。给了松弛就等于声明『漏出去一点点没关系』，而漏出去的那一点点正是broad phase会漏掉的接触。",
+          "rel": 0.0
+        },
+        "sha256_matches": {
+          "abs": 0.0,
+          "reason": "内容寻址是逐字节判据（轴3规则1），容差概念不适用——零容差不是『选了个很严的数』，是『这里没有连续量』。SHA对不上说明字节变了，没有『变得不多』这回事。",
+          "rel": 0.0
+        },
+        "triangle_count": {
+          "abs": 0.0,
+          "reason": "三角形数与文件字节数是确定性整数，零容差。",
+          "rel": 0.0
+        },
+        "true_aabb_max_mm": {
+          "abs": 1e-12,
+          "reason": "顶点坐标全是±0.25的整数倍，float32存储无舍入、解析回float64精确；abs=1e-12mm是对『这里没有误差源』的声明，不写==0是不把解析实现的求值次序冻进契约。",
+          "rel": 0.0
+        },
+        "true_aabb_min_mm": {
+          "abs": 1e-12,
+          "reason": "顶点坐标全是±0.25的整数倍，float32存储无舍入、解析回float64精确；abs=1e-12mm是对『这里没有误差源』的声明，不写==0是不把解析实现的求值次序冻进契约。",
+          "rel": 0.0
+        },
+        "violated_axes": {
+          "abs": 0.0,
+          "reason": "包络保守性是不等式判据（declared_min ≤ true_min 且 declared_max ≥ true_max），零容差=不给不等式任何松弛。给了松弛就等于声明『漏出去一点点没关系』，而漏出去的那一点点正是broad phase会漏掉的接触。",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

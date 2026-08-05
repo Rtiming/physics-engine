@@ -1,0 +1,80 @@
+{
+  "arrays": {
+    "samples": {
+      "count": 3600,
+      "dtype": "float64",
+      "logical_sha256": "82d97df44e226c37c980d5439f6e2ef25e648bbe20b58881415ce7ab3e297465",
+      "path_relative": "cases/broadphase_superset/samples.json",
+      "raw_sha256": "2dc1c2f9df7715470be10fb53e93a916c81a4dd08d672b7378c47c8bbbc2e0c8"
+    }
+  },
+  "case_id": "case/broadphase_superset",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/broadphase_superset",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/broadphase_superset/generate_oracle.py",
+    "sha256": "847e835823469d58337045ae4fec0ba3a4b7b4e056bb5e159a9ad9e58491eda1"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "440c2261c41441bcf340d228685134a6f1090eff0093a655a647e8ffae8d2690",
+  "oracles": [
+    {
+      "expected": {
+        "aabb_overlapping_pairs": 93,
+        "broad_only_pairs": 67,
+        "narrow_phase_events": 26,
+        "negative_separation_pairs": 26,
+        "pair_count": 120,
+        "superset_counterexamples": 0
+      },
+      "id": "oracle:broadphase_superset/sphere_capsule_population",
+      "inputs": {
+        "boundary_margin_mm": 1e-06,
+        "families": [
+          "sphere",
+          "capsule"
+        ],
+        "pair_count": 120,
+        "rejected_near_boundary": 0,
+        "rng": "python:random.Random(MT19937)",
+        "samples_array": "samples",
+        "seed": 20260805
+      },
+      "tolerances": {
+        "aabb_overlapping_pairs": {
+          "abs": 0.0,
+          "reason": "分类计数是确定性整数，零容差。采样时已拒绝一切离判定边界1e-6mm以内的配置，所以两条实现路径~1e-14mm的浮点差不可能让任何一对翻面——计数因此可以钉死。",
+          "rel": 0.0
+        },
+        "broad_only_pairs": {
+          "abs": 0.0,
+          "reason": "必须>0才证明语料里真有broad假阳性；否则超集判据平凡成立，门看着绿其实什么都没守。零容差同上。",
+          "rel": 0.0
+        },
+        "narrow_phase_events": {
+          "abs": 0.0,
+          "reason": "查询报出的事件条数必须恰好等于separation<0的对数——多一条是假阳性没吃干净，少一条是漏报。零容差同上。",
+          "rel": 0.0
+        },
+        "negative_separation_pairs": {
+          "abs": 0.0,
+          "reason": "分类计数是确定性整数，零容差。采样时已拒绝一切离判定边界1e-6mm以内的配置，所以两条实现路径~1e-14mm的浮点差不可能让任何一对翻面——计数因此可以钉死。",
+          "rel": 0.0
+        },
+        "pair_count": {
+          "abs": 0.0,
+          "reason": "分类计数是确定性整数，零容差。采样时已拒绝一切离判定边界1e-6mm以内的配置，所以两条实现路径~1e-14mm的浮点差不可能让任何一对翻面——计数因此可以钉死。",
+          "rel": 0.0
+        },
+        "superset_counterexamples": {
+          "abs": 0.0,
+          "reason": "这是可证命题（AABB是保守外包）不是拟合数，反例数只能是0；任何非零都意味着broad漏报，而漏报是碰撞查询对外唯一的硬承诺。",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
