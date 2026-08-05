@@ -1,0 +1,23 @@
+{
+  "facet": "engine_perf_baseline",
+  "facet_version": "0.1",
+  "kind": "budget_declaration",
+  "declared_on": "2026-08-05",
+  "decision": "docs/decisions/0018_性能门与预算基线_20260805.md",
+  "note": "墙钟预算只由tools/bench.py测量并供人看；进门的只有deterministic_gates里的确定性量。理由见decisions/0018与research/05第四节。",
+  "wall_clock_budgets": {
+    "import_physics_engine": {"budget_s": 0.11, "measured_median_s": 0.03, "load_tier": "interactive"},
+    "pe_scene_validate": {"budget_s": 0.22, "measured_median_s": 0.1, "load_tier": "interactive"},
+    "pe_scene_check_collisions": {"budget_s": 0.22, "measured_median_s": 0.05, "load_tier": "interactive"},
+    "accept_quick": {"budget_s": 30.0, "measured_median_s": 0.3, "load_tier": "local_batch"},
+    "accept_full": {"budget_s": 120.0, "measured_median_s": 0.5, "load_tier": "local_batch"}
+  },
+  "deterministic_gates": {
+    "source_bytes": {"measured": 65680, "ceiling": 98304, "rationale": "实测65680字节；上限设为96KiB，约1.5倍余量。source_bytes是wheel体积的确定性代理——wheel需要构建，源码字节不需要，且跨平台逐位稳定。"},
+    "eager_import_modules": {"measured": 97, "ceiling": 130, "rationale": "import physics_engine新增97个模块（含标准库传递依赖）。这是import冷启动预算的结构代理：新模块进顶层eager import会同时抬高它和墙钟。上限留约1.34倍余量。"},
+    "runtime_dependencies": {"measured": 0, "ceiling": 0, "rationale": "decisions/0014的零设施承诺；decisions/0016把NumPy放进可选加速档而非运行时依赖。这一条上限为0且永远为0——破它是破坏性变更。"}
+  },
+  "wheel_budget_history": [
+    {"version": "0.4.0", "bytes": 30940, "note": "spec/13第零节原写“wheel 30KB离线装”，是对30940字节的口语化取整，不是30720字节的硬上限。0018把它改成随版本记账的曲线。"}
+  ]
+}
