@@ -146,3 +146,138 @@ def test_the_stretch_hessian_is_symmetric():
         for row in range(size)
         for column in range(size)
     )
+
+
+# ── 接缝的门：能量→力→加速度。**这是漏掉重力单位换算时缺席的那道门** ──
+
+
+def test_free_fall_acceleration_equals_g_and_does_not_depend_on_mass():
+    """自由落体：经`acceleration()`桥出来的加速度必须**恰好等于g**。
+
+    这条门在`UniformGravity`的能量单位写错时会红，而有限差分门不会——
+    因为换算因子出现在能量**之后**那一步。它一度缺席，缺席期间
+    `two_body_spring`的重力能判据靠"把g除以1000传进去"通过，
+    **两个错误互相抵消**。抵消掉的错误比暴露的错误危险得多。
+
+    第二半（与质量无关）是等效原理：重力加速度不该记得物体多重。
+    """
+
+    layout = _layout(1)
+    gravity = 9806.65
+    accelerations = []
+    for mass in (0.001, 0.37, 99.0):
+        context = EnergyContext(
+            context_id="context/free_fall", node_masses_kg=(mass,),
+            gravity_mm_s2=(0.0, -gravity, 0.0),
+        )
+        registry = EnergyRegistry(terms=(UniformGravity(),))
+        acceleration = registry.acceleration(context, layout)
+        accelerations.append(acceleration((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), 0.0))
+
+    for value in accelerations:
+        assert value == pytest.approx((0.0, -gravity, 0.0), abs=1e-9)
+    assert len(set(accelerations)) == 1, (
+        f"自由落体加速度随质量变了——等效原理被破坏：{accelerations}"
+    )
+
+
+def test_gravity_energy_is_in_newton_millimetres_not_kilogram_millimetres_squared():
+    """量纲门：重力能与拉伸能必须同量纲，否则两者相加是没有意义的数。
+
+    取一个数值上可手算的构型：质量1kg、g=1000mm/s²、高度1mm →
+    `m·g·y = 1000 kg·mm²/s² = 1 N·mm`。若漏掉除以MM_PER_M，这里会得到1000。
+    """
+
+    context = EnergyContext(
+        context_id="context/dimension", node_masses_kg=(1.0,),
+        gravity_mm_s2=(0.0, -1000.0, 0.0),
+    )
+    state = State(layout=_layout(1), vector=(0.0, 1.0, 0.0))
+    assert UniformGravity().energy(state, context) == pytest.approx(1.0, rel=1e-15)
+
+
+# ── LinearBending 与求解器 ──
+
+
+def test_bending_energy_is_zero_on_a_straight_chain_and_positive_when_bent():
+    from physics_engine.energies import LinearBending, clamped_chain_bending_stencils
+
+    nodes = 5
+    step = 10.0
+    term = LinearBending(stencils=clamped_chain_bending_stencils(nodes, step, 1.0e6))
+    context = EnergyContext(context_id="context/b", node_masses_kg=(1.0,) * nodes)
+    straight = State(
+        layout=_layout(nodes),
+        vector=tuple(v for i in range(nodes) for v in (i * step, 0.0, 0.0)),
+    )
+    assert term.energy(straight, context) == 0.0
+    bent = straight.with_vector(
+        tuple(v for i in range(nodes) for v in (i * step, 0.5 * i * i, 0.0))
+    )
+    assert term.energy(bent, context) > 0.0
+
+
+def test_bending_energy_is_invariant_under_rigid_translation():
+    """刚体平移不产生弯曲能——模板系数和为零就是为了这件事，这里把它验出来。"""
+
+    from physics_engine.energies import LinearBending, clamped_chain_bending_stencils
+
+    nodes, step = 6, 8.0
+    term = LinearBending(stencils=clamped_chain_bending_stencils(nodes, step, 3.0e5))
+    context = EnergyContext(context_id="context/b", node_masses_kg=(1.0,) * nodes)
+    bent = State(
+        layout=_layout(nodes),
+        vector=tuple(v for i in range(nodes) for v in (i * step, 0.3 * i * i, 0.1 * i)),
+    )
+    shifted = bent.with_vector(
+        tuple(
+            value + (7.0, -3.0, 11.0)[index % 3] for index, value in enumerate(bent.vector)
+        )
+    )
+    assert term.energy(shifted, context) == pytest.approx(
+        term.energy(bent, context), rel=1e-12
+    )
+
+
+def test_the_bending_hessian_is_constant_because_the_energy_is_quadratic():
+    from physics_engine.energies import LinearBending, clamped_chain_bending_stencils
+
+    nodes, step = 5, 10.0
+    term = LinearBending(stencils=clamped_chain_bending_stencils(nodes, step, 2.0e6))
+    context = EnergyContext(context_id="context/b", node_masses_kg=(1.0,) * nodes)
+    first = State(
+        layout=_layout(nodes),
+        vector=tuple(v for i in range(nodes) for v in (i * step, 0.0, 0.0)),
+    )
+    second = first.with_vector(
+        tuple(v for i in range(nodes) for v in (i * step, 2.0 * i * i, -0.7 * i))
+    )
+    assert term.hessian(first, context) == term.hessian(second, context)
+
+
+def test_the_solver_fails_closed_when_a_degree_of_freedom_is_unconstrained():
+    """欠约束的自由度让Hessian奇异——报错，而不是返回一个垃圾解。"""
+
+    from physics_engine.solve import SolveError, solve_equilibrium
+
+    layout = _layout(2)
+    context = EnergyContext(context_id="context/free", node_masses_kg=(1.0, 1.0),
+                            gravity_mm_s2=(0.0, -9806.65, 0.0))
+    registry = EnergyRegistry(terms=(UniformGravity(),))  # 只有重力，无任何刚度
+    with pytest.raises(SolveError, match="singular"):
+        solve_equilibrium(
+            registry, context, layout, (0.0,) * 6, fixed_indices=frozenset({0, 1, 2})
+        )
+
+
+def test_the_solver_refuses_a_fully_fixed_problem():
+    from physics_engine.solve import SolveError, solve_equilibrium
+
+    layout = _layout(1)
+    context = EnergyContext(context_id="context/all_fixed", node_masses_kg=(1.0,))
+    registry = EnergyRegistry(terms=(UniformGravity(),))
+    with pytest.raises(SolveError, match="没有要解的东西"):
+        solve_equilibrium(
+            registry, context, layout, (0.0, 0.0, 0.0),
+            fixed_indices=frozenset({0, 1, 2}),
+        )

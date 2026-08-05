@@ -1,0 +1,69 @@
+{
+  "arrays": {},
+  "case_id": "case/cantilever_self_weight",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/cantilever_self_weight",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/cantilever_self_weight/generate_oracle.py",
+    "sha256": "b71dfc30c4e1fe5ceb71e2e99f4767b4b648d49c9cdd18f0d1d90bfda70b5c4d"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "2e4aea0f4695e5684ed79806bbb62699965933f9bb608f732a4eb1a648ff2564",
+  "oracles": [
+    {
+      "expected": {
+        "all_refinements_converged": true,
+        "error_ratio_high": 4.1,
+        "error_ratio_low": 3.9,
+        "newton_iterations_within_bound": true,
+        "tip_deflection_mm": 3125.0
+      },
+      "id": "oracle:cantilever/tip_deflection_closed_form",
+      "inputs": {
+        "bending_stiffness_nmm2": 20000000.0,
+        "gravity_mm_s2": 9806.65,
+        "kind": "self_weight_cantilever",
+        "length_mm": 1000.0,
+        "load_per_length_n_mm": 0.5,
+        "newton_iterations_bound": 3,
+        "refinements": [
+          10,
+          20,
+          40,
+          80
+        ],
+        "residual_tol_n": 1e-07
+      },
+      "tolerances": {
+        "all_refinements_converged": {
+          "abs": 0.0,
+          "reason": "布尔前置断言：不收敛的解不许参与收敛阶比较——那会拿一个没解出来的数去算阶",
+          "rel": 0.0
+        },
+        "error_ratio_high": {
+          "abs": 0.0,
+          "reason": "区间上界。**不写死为4**——4是渐近值；本仓实测四档全为4.000，但把它写死会让任何合理实现在粗档上红（spec/12第4.3节：比阶不比单点）",
+          "rel": 0.0
+        },
+        "error_ratio_low": {
+          "abs": 0.0,
+          "reason": "区间下界，零容差比较（非数值判据）",
+          "rel": 0.0
+        },
+        "newton_iterations_within_bound": {
+          "abs": 0.0,
+          "reason": "总能量是位置的二次型（线性弯曲+均匀重力），**牛顿一步即达精确解**；容许3步是给残差地板留的余量。迭代数变多是「能量不再是二次型」的信号，是有效判据不是装饰",
+          "rel": 0.0
+        },
+        "tip_deflection_mm": {
+          "abs": 0.0,
+          "reason": "qL⁴/(8EI)，闭式，四次幂一次除法",
+          "rel": 1e-15
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

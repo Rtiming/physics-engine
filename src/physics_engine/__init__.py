@@ -30,12 +30,14 @@
 - `physics_engine.oracles` —— oracle清单面：expected/tolerances/双哈希（轴7）
 - `physics_engine.state` —— 状态形制与打包次序契约（spec/12）
 - `physics_engine.integrate` —— 时间推进：三个积分器与五项出生声明（spec/12）
-- `physics_engine.energies` —— 能量项四方法协议与前两个能量项（spec/12第三节）
+- `physics_engine.energies` —— 能量项四方法协议与三个能量项（spec/12第三节）
+- `physics_engine.solve` —— 准静态平衡：牛顿+回溯线搜索（spec/12第4.1节）
 
 **能力边界（诚实条款）**：`integrate`能推进无接触、无约束的二阶系统
 （显式/半隐式/velocity Verlet，三者`production_ready`全为`False`）。
-已有的能量项只有均匀重力与轴向拉伸。**没有求解器、没有隐式族、
-没有弯曲扭转、没有接触与摩擦**——
+能量项有均匀重力、轴向拉伸、小挠度弯曲；准静态平衡可解。
+**没有隐式时间积分族、没有几何精确（DER）弯曲、没有扭转、
+没有接触与摩擦、没有约束**——
 力学与光学按decisions/0015仍在搬迁中，路线见`docs/plans/02`。
 
 **加速档**：`pip install 'physics-engine[accel]'`装NumPy后走加速实现；

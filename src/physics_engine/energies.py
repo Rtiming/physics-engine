@@ -88,7 +88,17 @@ def _zero_matrix(n: int) -> list[list[float]]:
 
 
 class UniformGravity:
-    """均匀重力势能：``U = −Σ m_i · g · x_i``。
+    """均匀重力势能：``U = −Σ m_i · g · x_i / MM_PER_M``（单位N·mm）。
+
+    **那个除以1000不是可选的**：``m``是kg、``g``是mm/s²、``x``是mm，
+    三者相乘得kg·mm²/s²，而``1 N·mm = 1000 kg·mm²/s²``。不除，重力能就与
+    拉伸能不同量纲，两者相加是没有意义的数；且经`acceleration()`那一步
+    （除以质量再乘MM_PER_M）会得到1000·g的自由落体加速度。
+
+    这是本块抓到的**第二个**单位bug，而且比第一个更隐蔽：`two_body_spring`的
+    重力能判据一度"通过"，是因为测试把g除以1000传进来，**两个错误互相抵消**。
+    抵消掉的错误比暴露的错误危险得多——它会一直静默到某个不再抵消的调用点。
+    补上的门是自由落体：经`acceleration()`桥出来的加速度必须**恰好等于g**。
 
     梯度是常量、Hessian恒为零——**正因为它平凡，它是"能量本身写错"的第一道门**。
     WDS把自重项的独立解析基准列为最高优先级，理由写在其源码顶部：
@@ -106,7 +116,7 @@ class UniformGravity:
         for index in range(self._nodes(state)):
             mass = context.node_masses_kg[index]
             x, y, z = state.vector[3 * index : 3 * index + 3]
-            total -= mass * (gx * x + gy * y + gz * z)
+            total -= mass * (gx * x + gy * y + gz * z) / MM_PER_M
         return total
 
     def gradient(self, state: State, context: EnergyContext) -> Vector:
@@ -114,9 +124,9 @@ class UniformGravity:
         result = _zeros(len(state.vector))
         for index in range(self._nodes(state)):
             mass = context.node_masses_kg[index]
-            result[3 * index] = -mass * gx
-            result[3 * index + 1] = -mass * gy
-            result[3 * index + 2] = -mass * gz
+            result[3 * index] = -mass * gx / MM_PER_M
+            result[3 * index + 1] = -mass * gy / MM_PER_M
+            result[3 * index + 2] = -mass * gz / MM_PER_M
         return tuple(result)
 
     def hessian(self, state: State, context: EnergyContext) -> Matrix:
@@ -220,6 +230,135 @@ class AxialStretch:
 
 
 @dataclass(frozen=True)
+class LinearBending:
+    """小挠度Euler-Bernoulli弯曲能：``U = Σ_s (scale_s/2)·|Σ_k c_k·x_k|²``。
+
+    每个"模板"是一组(节点, 系数)与一个标度。三点模板`(1,−2,1)`除以`ℓ²`就是
+    离散二阶导，于是``|Δ²x|²·EI/ℓ³``是``∫EI·(x'')²``的求和。
+
+    **能量是位置的二次型**——梯度线性、Hessian**常量**。这既让解析式可写，
+    也让牛顿法一步收敛（可验证的性质，案例里有门）。
+
+    **它不是DER的几何精确弯曲**（`κ = 2·tan(θ/2)`）。适用域：小挠度、
+    无几何非线性。真正的DER弯曲随杆内核搬迁进来。这条分界写进`scope_excludes`
+    式的文档而不是留给读者猜——spec/12第4.2节对积分器的要求，对能量项同样成立。
+
+    **模板带仿射偏置**：``U = Σ_s (scale_s/2)·|Σ_k c_k·x_k − offset_s|²``。
+    内部模板的偏置是零；**固支端不是**——固支是"切向等于给定方向"这个条件，
+    写成纯Laplacian模板会把**轴向**也罚进去（直链上`2(x₁−x₀)`不为零）。
+    偏置取``2·h·t̂``后，直链的固支端能量恰为零，而横向分量退化成
+    一维原型里的``2·y₁``。偏置只平移梯度，不改变Hessian——能量仍是二次型。
+
+    **端点求积权是承重的**：`∫(x'')²`按梯形规则求和时，固支端那个模板取半权。
+    漏掉它会让整条收敛曲线从二阶掉到一阶——本仓实测：全权时误差比1.895/1.949/
+    1.975（一阶），半权时**恰好4.000/4.000/4.000**（二阶）。
+    症状与WDS登记的"固支只有一阶"一模一样，**但病根不同**：那不是边界条件的阶次，
+    是求积权重。归因错一次就会去改边界条件，而那改不动它。
+    """
+
+    name: str = "linear_bending"
+    #: 模板：((节点索引, 系数), ...)、标度（含EI、ℓ³与求积权）、仿射偏置（3矢量）
+    stencils: tuple[
+        tuple[tuple[tuple[int, float], ...], float, tuple[float, float, float]], ...
+    ] = ()
+
+    def __post_init__(self) -> None:
+        if not self.stencils:
+            raise EnergyError("linear_bending needs at least one stencil")
+        for coefficients, scale, offset in self.stencils:
+            if len(offset) != 3 or not all(math.isfinite(v) for v in offset):
+                raise EnergyError("bending stencil offset must be a finite 3-vector")
+            if len(coefficients) < 2:
+                raise EnergyError("a bending stencil needs at least two nodes")
+            if not (scale > 0.0 and math.isfinite(scale)):
+                raise EnergyError(f"bending stencil scale must be positive: {scale!r}")
+            total = sum(coefficient for _, coefficient in coefficients)
+            if abs(total) > 1.0e-12:
+                raise EnergyError(
+                    f"bending stencil coefficients must sum to zero (got {total!r}) — "
+                    "否则刚体平移会产生弯曲能，那不是弯曲"
+                )
+
+    def _stencil_vector(self, state: State, coefficients, offset) -> Vector:
+        return tuple(
+            sum(
+                coefficient * state.vector[3 * node + axis]
+                for node, coefficient in coefficients
+            )
+            - offset[axis]
+            for axis in range(3)
+        )
+
+    def energy(self, state: State, context: EnergyContext) -> float:
+        total = 0.0
+        for coefficients, scale, offset in self.stencils:
+            d = self._stencil_vector(state, coefficients, offset)
+            total += 0.5 * scale * sum(component * component for component in d)
+        return total
+
+    def gradient(self, state: State, context: EnergyContext) -> Vector:
+        result = _zeros(len(state.vector))
+        for coefficients, scale, offset in self.stencils:
+            d = self._stencil_vector(state, coefficients, offset)
+            for node, coefficient in coefficients:
+                for axis in range(3):
+                    result[3 * node + axis] += scale * coefficient * d[axis]
+        return tuple(result)
+
+    def hessian(self, state: State, context: EnergyContext) -> Matrix:
+        n = len(state.vector)
+        result = _zero_matrix(n)
+        for coefficients, scale, _offset in self.stencils:
+            for node_a, coefficient_a in coefficients:
+                for node_b, coefficient_b in coefficients:
+                    block = scale * coefficient_a * coefficient_b
+                    for axis in range(3):
+                        result[3 * node_a + axis][3 * node_b + axis] += block
+        return tuple(tuple(row) for row in result)
+
+    def quantities(self, state, context, *, need_gradient, need_hessian):
+        return (
+            self.energy(state, context),
+            self.gradient(state, context) if need_gradient else None,
+            self.hessian(state, context) if need_hessian else None,
+        )
+
+
+def clamped_chain_bending_stencils(
+    node_count: int,
+    segment_length_mm: float,
+    bending_stiffness_nmm2: float,
+    *,
+    tangent: tuple[float, float, float] = (1.0, 0.0, 0.0),
+) -> tuple[tuple[tuple[tuple[int, float], ...], float], ...]:
+    """等分链的弯曲模板，节点0固支（位置与斜率）、末端自由。
+
+    * 内部模板 ``i=1..n−1``：``(1, −2, 1)``，权1；
+    * **固支端模板**：``(−2, 2)``配偏置``2·h·tangent``，**权1/2**
+      （梯形求积的端点权）。偏置让直链的固支端能量恰为零；
+      半权是二阶收敛的必要条件之一。两者都见`LinearBending`的docstring。
+      ``tangent``是固支处的**单位切向**，缺省沿+x。
+    * 自由端不加模板——自然边界条件由能量极小自动给出。
+    """
+
+    if node_count < 3:
+        raise EnergyError("a bending chain needs at least three nodes")
+    if not (segment_length_mm > 0.0 and math.isfinite(segment_length_mm)):
+        raise EnergyError("segment length must be positive and finite")
+    if not (bending_stiffness_nmm2 > 0.0 and math.isfinite(bending_stiffness_nmm2)):
+        raise EnergyError("bending stiffness must be positive and finite")
+    scale = bending_stiffness_nmm2 / segment_length_mm**3
+    zero = (0.0, 0.0, 0.0)
+    stencils = [
+        (((index - 1, 1.0), (index, -2.0), (index + 1, 1.0)), scale, zero)
+        for index in range(1, node_count - 1)
+    ]
+    clamped_offset = tuple(2.0 * segment_length_mm * component for component in tangent)
+    stencils.append((((0, -2.0), (1, 2.0)), 0.5 * scale, clamped_offset))
+    return tuple(stencils)
+
+
+@dataclass(frozen=True)
 class EnergyRegistry:
     """注册表：``enabled``显式、**求和次序固定**（spec/12第3.3节）。
 
@@ -297,6 +436,7 @@ class EnergyRegistry:
 
 __all__ = [
     "AxialStretch",
+    "LinearBending",
     "EnergyContext",
     "EnergyError",
     "EnergyRegistry",
@@ -304,4 +444,5 @@ __all__ = [
     "Matrix",
     "UniformGravity",
     "Vector",
+    "clamped_chain_bending_stencils",
 ]

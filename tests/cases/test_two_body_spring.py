@@ -58,12 +58,15 @@ def test_stretch_energy_matches_the_closed_form():
 
 
 def test_gravity_energy_matches_the_closed_form():
+    """注意：这条一度靠**把g除以1000传进去**才通过——两个错误互相抵消。
+    `UniformGravity`的能量单位修正后抵消消失，它当场红了，这才是它该有的样子。"""
+
     entry = BY_ID["oracle:two_body_spring/gravity_energy"]
     height = entry.inputs["height_mm"]
     context = EnergyContext(
         context_id="context/gravity",
         node_masses_kg=(entry.inputs["mass_kg"],),
-        gravity_mm_s2=(0.0, entry.inputs["gravity_mm_s2"] / MM_PER_M, 0.0),
+        gravity_mm_s2=(0.0, entry.inputs["gravity_mm_s2"], 0.0),
     )
     state = State(layout=_layout(1), vector=(0.0, height, 0.0))
     entry.check_all({"energy_nmm": UniformGravity().energy(state, context)})
