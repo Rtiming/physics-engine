@@ -39,11 +39,19 @@ def test_baseline_declares_a_registered_facet(baseline):
 
 
 def test_source_bytes_stay_within_the_declared_ceiling(baseline):
+    """按`rglob`扫**含子包**的全树。
+
+    2026-08-05修：此前用`glob("*.py")`只扫顶层，`optics/`与`electromagnetics/`
+    两个子包合计115244字节（源码树的24%）**从未被这道门看见**。
+    而按spec/15，新物理域就是子包——**绊线的洞恰好开在仓被设计成要生长的地方**。
+    台账的`measured`一直是rglob口径，门却是glob口径，两边"用了百分之几"
+    说的不是一件事（决策0048第五节）。
+    """
     """wheel体积的确定性代理。破了要么优化，要么走决策记录改预算——不许默认破了不算破。"""
 
     gate = baseline["deterministic_gates"]["source_bytes"]
     measured = sum(
-        path.stat().st_size for path in sorted((ROOT / "src/physics_engine").glob("*.py"))
+        path.stat().st_size for path in sorted((ROOT / "src/physics_engine").rglob("*.py"))
     )
     assert measured <= gate["ceiling"], (
         f"源码字节 {measured} 超出声明上限 {gate['ceiling']}——"
