@@ -259,4 +259,83 @@ def solve_equilibrium(
     )
 
 
-__all__ = ["SolveError", "SolveResult", "bandwidth_of", "solve_equilibrium"]
+def _banded_cholesky_is_positive(matrix: list[list[float]], band: int) -> bool:
+    """带状Cholesky；**全部主元为正 ⟺ 矩阵正定**（Sylvester惯性定律）。
+
+    Cholesky**不需要主元交换**（正定矩阵天然对角占优够用），所以带宽严格保持，
+    复杂度``O(m·b²)``而不是``O(m³)``——与`_solve_banded`同一条理由。
+    非正定时在某个主元上出现``<= 0``而当场返回False，不继续算完。
+
+    **这不是特征值分解**：它只回答"是不是正定"，不给最小特征值。
+    要那个数就得上真正的特征求解器，本仓今天没有，**不假装有**。
+    """
+
+    size = len(matrix)
+    upper = min(band, size - 1) if size else 0
+    lower = [[0.0] * size for _ in range(size)]
+    for row in range(size):
+        for column in range(max(0, row - upper), row + 1):
+            total = matrix[row][column]
+            for k in range(max(0, row - upper), column):
+                total -= lower[row][k] * lower[column][k]
+            if row == column:
+                if total <= 0.0:
+                    return False
+                lower[row][row] = math.sqrt(total)
+            else:
+                lower[row][column] = total / lower[column][column]
+    return True
+
+
+def tangent_stiffness_is_positive_definite(
+    registry: EnergyRegistry,
+    context: EnergyContext,
+    state: State,
+    *,
+    fixed_indices: frozenset[int] = frozenset(),
+) -> bool:
+    """给定构型下**约化切线刚度是否正定**——即这个平衡态是极小还是鞍点。
+
+    本模块开头申报的适用域写着"Hessian在解附近正定（能量极小而非鞍点）"，
+    但在本函数之前**没有任何办法查这一条**——申报了一个无法验证的前提。
+    本函数把它变成可查的：`solve_equilibrium`返回``converged=True``只说明
+    ``∇U = 0``，**不说明那是不是极小**；牛顿法对鞍点一样收敛。
+
+    **失稳判据就建在这上面。** Euler屈曲的定义正是"切线刚度失去正定性的那一点"：
+    压缩使`AxialStretch`的横向项``(k·ε/L)·(I − d⊗d)``变负（``ε < 0``），
+    到某个载荷时它抵消掉弯曲刚度。对载荷二分本函数的真假翻转点，
+    就得到离散临界载荷——**而这条路径完全不需要牛顿法穿过分岔点**，
+    所以它不受本模块"无信赖域、Hessian非正定时无修正"那条缺陷的影响
+    （`cases/euler_buckling`第四节量化登记了直接穿越会发生什么）。
+
+    ``fixed_indices``与`solve_equilibrium`同义：被钉住的**标量自由度下标**。
+    自由自由度为空即失败关闭——"空矩阵是正定的"是个陷阱式的真命题。
+    """
+
+    size = len(state.vector)
+    if any(index < 0 or index >= size for index in fixed_indices):
+        raise SolveError("fixed_indices out of range")
+    free = [index for index in range(size) if index not in fixed_indices]
+    if not free:
+        raise SolveError(
+            "every degree of freedom is fixed — 空矩阵在形式上正定，"
+            "但那句真话回答不了任何问题，所以这里失败关闭"
+        )
+    entries = registry.hessian_entries(state, context)
+    position = {index: offset for offset, index in enumerate(free)}
+    reduced = [[0.0] * len(free) for _ in free]
+    for (row, column), value in entries.items():
+        row_offset = position.get(row)
+        column_offset = position.get(column)
+        if row_offset is not None and column_offset is not None:
+            reduced[row_offset][column_offset] = value
+    return _banded_cholesky_is_positive(reduced, bandwidth_of(entries, position))
+
+
+__all__ = [
+    "SolveError",
+    "SolveResult",
+    "bandwidth_of",
+    "solve_equilibrium",
+    "tangent_stiffness_is_positive_definite",
+]

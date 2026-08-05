@@ -29,6 +29,7 @@
 | [`scalar_diffraction_airy`](scalar_diffraction_airy/case.md) | 艾里斑`E(x)=2·J1(x)/x`对贝塞尔积分的独立求值，abs 1e-12（**判绝对不判相对：J1有零点**）；首零`3.8317059702`；角度↔空间频率↔半径的**单位往返** | B | interactive | 2条 | `tests/cases/test_scalar_diffraction_airy.py` |
 | [`fts_instrument_line_shape`](fts_instrument_line_shape/case.md) | 无切趾ILS半宽`1.2067091288/(2L)`对独立求根，半高点上ILS恰为0.5；Norton-Beer三组`Σ Ci = 1`（实测残差**恰为0**）；通量代价闭式对Simpson，排序弱>中>强 | B | interactive | 2条 | `tests/cases/test_fts_instrument_line_shape.py` |
 | [`large_deflection_cantilever`](large_deflection_cantilever/case.md) | 大挠度悬臂端点位置对Bisshopp-Drucker 1945椭圆积分闭式，二阶收敛实测比3.9612/4.0512/4.0600；几何精确项比小挠度理论准**1519倍**；固支Voronoi退回`h`必掉到一阶（正向必须红） | B | local_batch | 1条 | `tests/cases/test_large_deflection_cantilever.py` |
+| [`euler_buckling`](euler_buckling/case.md) | 临界载荷对`Fc = π²EI/(bL)²`，**b=1/2/0.5三种边界条件由特征方程求根而非抄表**；对铰接刚性链的**精确特征值**命中到2e-6（比连续解紧100倍）；二阶收敛3.9916/4.0033/4.0226；保长扰动的能量在0.7Fc升、1.3Fc降（**唯一验`energy()`符号的门**）；正弦半波在四个试验形状里给出最低临界载荷，间隙5.9e-7 | C | local_batch | 1条 | `tests/cases/test_euler_buckling.py` |
 
 **在建**：`peer_fcl_distance`（同行库对拍：球/胶囊距离对FCL，plans/02第四节
 第一批第2条）由同行对比轨道交付，落地后在上表补一行。
@@ -87,9 +88,10 @@ FEBio的`acceptChanges.py`是这条闭环的出处，本仓的加强是"决策�
 MuJoCo/Bullet/Chrono/Drake/PyElastica/SOFA/FEBio 等十余家共同承认的标准案例。
 **用别人的题当分母，比自己出题自己打分诚实。**
 
-**今天13条过6条**：`cantilever_self_weight`、`large_deflection_cantilever`、
-`scalar_diffraction_airy`、`fts_instrument_line_shape`（含Norton-Beer两条）。
-缺的七条与各自缺的能力见决策0040第二、三节。
+**今天13条过7条**：`cantilever_self_weight`、`large_deflection_cantilever`、
+**`euler_buckling`（第3条，决策0046打钩）**、`scalar_diffraction_airy`、
+`fts_instrument_line_shape`（含Norton-Beer两条）。
+缺的六条与各自缺的能力见决策0040第二、三节。
 
 **上表其余案例不计入分母**——它们验的是"我们自己的实现有没有内部错误"
 （协议门、逐字节门、失败关闭），而C档验的是"这个引擎算不算得对同行公认的物理"。

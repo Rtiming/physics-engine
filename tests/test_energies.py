@@ -758,3 +758,212 @@ def test_the_bandwidth_of_a_chain_hessian_is_small_which_is_why_banded_pays():
         position = {g: k for k, g in enumerate(free)}
         bandwidths.append(bandwidth_of(registry.hessian_entries(state, context), position))
     assert bandwidths == [2, 2], f"链式Hessian的半带宽不再是常数：{bandwidths}"
+
+
+# ── PointLoad：外载项。**符号是它的全部内容**（decisions/0046） ──
+
+
+def test_point_load_declarations_fail_closed():
+    from physics_engine.energies import PointLoad
+
+    with pytest.raises(EnergyError, match="at least one load"):
+        PointLoad(loads=())
+    with pytest.raises(EnergyError, match="nonnegative int"):
+        PointLoad(loads=((-1, (1.0, 0.0, 0.0)),))
+    with pytest.raises(EnergyError, match="two point loads"):
+        PointLoad(loads=((0, (1.0, 0.0, 0.0)), (0, (2.0, 0.0, 0.0))))
+    with pytest.raises(EnergyError, match="finite 3-vector"):
+        PointLoad(loads=((0, (1.0, 0.0)),))
+    with pytest.raises(EnergyError, match="finite 3-vector"):
+        PointLoad(loads=((0, (float("inf"), 0.0, 0.0)),))
+
+
+def test_a_point_load_on_a_node_the_state_does_not_have_fails_closed():
+    """越界不是"切片给个短元组然后继续算"——那会静默算出一个别的能量。"""
+
+    from physics_engine.energies import PointLoad
+
+    term = PointLoad(loads=((5, (1.0, 0.0, 0.0)),))
+    with pytest.raises(EnergyError, match="only has 2 nodes"):
+        term.energy(STATE, CONTEXT)
+
+
+def test_point_load_energy_is_the_hand_computed_negative_work():
+    """**手算数**：`U = −F·x`。这是唯一能抓住"只活在`energy()`里的符号错"的门。
+
+    decisions/0029第六节记着：求解器只用梯度与Hessian，一个只活在`energy()`里的
+    错误可以从闭式案例底下整个溜过去。本条与量纲门、有限差分门三条并存，
+    分别守表达式本身、单位、以及"梯度是不是这个能量的导数"。
+
+    取 F = (2, −3, 5) N、x = (7, 11, 13) mm：
+    `U = −(2·7 + (−3)·11 + 5·13) = −(14 − 33 + 65) = −46 N·mm`。
+    **符号写成 `+F·x` 会得到 +46**，量纲写成除以1000会得到−0.046。
+    """
+
+    from physics_engine.energies import PointLoad
+
+    context = EnergyContext(context_id="context/pl", node_masses_kg=(1.0,))
+    state = State(layout=_layout(1), vector=(7.0, 11.0, 13.0))
+    term = PointLoad(loads=((0, (2.0, -3.0, 5.0)),))
+    assert term.energy(state, context) == -46.0
+    assert term.gradient(state, context) == (-2.0, 3.0, -5.0)
+
+
+def test_point_load_energy_is_in_newton_millimetres_with_no_unit_conversion():
+    """量纲门：1 N的力把节点移到1 mm处，能量恰为−1 N·mm。
+
+    **这里没有MM_PER_M，而`UniformGravity`那里有**——因为力已经是N、位置是mm，
+    `N × mm`直接就是本仓的能量单位。照抄相邻代码除以1000，这里会得到−0.001。
+    本仓已经因单位吃过两次亏（0024的静默1000倍、`two_body_spring`那次
+    两个错误互相抵消），所以这条门与自由体门一起立在这里。
+    """
+
+    from physics_engine.energies import PointLoad
+
+    context = EnergyContext(context_id="context/pl", node_masses_kg=(1.0,))
+    state = State(layout=_layout(1), vector=(1.0, 0.0, 0.0))
+    assert PointLoad(loads=((0, (1.0, 0.0, 0.0)),)).energy(state, context) == -1.0
+
+
+def test_free_body_acceleration_under_a_point_load_is_exactly_force_over_mass():
+    """自由体门：单个自由质点在`PointLoad`下的加速度恰为`F/m`。
+
+    `a = F/m`是**米制**（N/kg = m/s²），状态是mm制，所以经`acceleration()`
+    桥出来的值必须是`F/m × 1000` mm/s²。判据写成`a·m == F·1000`——
+    **它对每一个质量都要成立**，那是牛顿第二定律而不是某个质量下的巧合。
+    """
+
+    from physics_engine.energies import MM_PER_M, PointLoad
+
+    layout = _layout(1)
+    force = 3.0
+    products = []
+    for mass in (0.002, 1.0, 57.5):
+        context = EnergyContext(
+            context_id="context/free_body", node_masses_kg=(mass,)
+        )
+        registry = EnergyRegistry(terms=(PointLoad(loads=((0, (force, 0.0, 0.0)),)),))
+        acceleration = registry.acceleration(context, layout)
+        value = acceleration((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), 0.0)
+        assert value[1] == 0.0 and value[2] == 0.0
+        products.append(value[0] * mass)
+    assert all(
+        product == pytest.approx(force * MM_PER_M, rel=1e-15) for product in products
+    ), f"a·m 不等于 F（牛顿第二定律不成立）：{products}"
+
+
+def test_the_fused_point_load_path_is_bitwise_identical_to_the_separate_calls():
+    """spec/12第3.1节的承重条款——`quantities`与单独调必须逐位相同。"""
+
+    from physics_engine.energies import PointLoad
+
+    context = EnergyContext(context_id="context/pl", node_masses_kg=(0.4, 0.7))
+    state = State(layout=_layout(2), vector=(0.1, -2.7, 3.9, 10.5, 1.0, -0.25))
+    term = PointLoad(loads=((0, (1.5, -2.25, 0.125)), (1, (-0.5, 7.0, 3.25))))
+    fused, gradient, hessian = term.quantities(
+        state, context, need_gradient=True, need_hessian=True
+    )
+    assert fused == term.energy(state, context)
+    assert gradient == term.gradient(state, context)
+    assert hessian == term.hessian(state, context)
+    assert term.hessian_entries(state, context) == ()
+    assert all(value == 0.0 for row in hessian for value in row)
+
+
+def test_the_point_load_gradient_matches_central_differences_of_its_own_energy():
+    """把`energy`与`gradient`绑在一起：符号只在其中一处翻转，这条立刻红。
+
+    （`energy`与`gradient`**同时**翻转它抓不住——那一档由手算数门守。）
+    """
+
+    from physics_engine.energies import PointLoad
+
+    context = EnergyContext(context_id="context/pl", node_masses_kg=(1.0,))
+    base = (7.0, 11.0, 13.0)
+    term = PointLoad(loads=((0, (2.0, -3.0, 5.0)),))
+    analytic = term.gradient(State(layout=_layout(1), vector=base), context)
+    for axis in range(3):
+        step = 1.0e-6 * max(1.0, abs(base[axis]))
+        shifted = []
+        for sign in (1.0, -1.0):
+            vector = list(base)
+            vector[axis] += sign * step
+            shifted.append(term.energy(State(layout=_layout(1), vector=tuple(vector)), context))
+        numeric = (shifted[0] - shifted[1]) / (2.0 * step)
+        assert numeric == pytest.approx(analytic[axis], rel=1e-9, abs=1e-12), (
+            f"轴{axis}上梯度与能量的中心差分不符：{numeric!r} 对 {analytic[axis]!r}"
+        )
+
+
+def test_a_registry_of_only_point_loads_is_singular_and_fails_closed():
+    """**零Hessian的陷阱**：只有线性势能时切线刚度全零，求解必须失败关闭。
+
+    返回一个垃圾解比报错糟糕得多——`_solve_dense`与`_solve_banded`的奇异判据
+    守着这一条，本门是它的正向断言（`PointLoad`是本仓第二个零Hessian项，
+    第一个是`UniformGravity`，两者都不该能单独撑起一个平衡问题）。
+    """
+
+    from physics_engine.energies import PointLoad
+    from physics_engine.solve import SolveError, solve_equilibrium
+
+    for nodes in (2, 8):  # 小规模走稠密、大规模走带状，两条路径都要红
+        layout = _layout(nodes)
+        context = EnergyContext(context_id="context/pl", node_masses_kg=(1.0,) * nodes)
+        registry = EnergyRegistry(terms=(
+            PointLoad(loads=tuple((i, (1.0, 0.0, 0.0)) for i in range(nodes))),
+        ))
+        with pytest.raises(SolveError, match="singular"):
+            solve_equilibrium(
+                registry, context, layout, (0.0,) * (3 * nodes),
+                residual_tol_n=1.0e-9,
+            )
+
+
+# ── 切线刚度的正定性：平衡态是极小还是鞍点（decisions/0046） ──
+
+
+def test_the_stability_check_separates_a_minimum_from_a_saddle():
+    """一根受压的三节点链：小载荷下正定，大载荷下不正定。
+
+    这是最小的屈曲：两端钉住x与y、中间节点的y自由，弯曲刚度撑着它，
+    轴向压力经`AxialStretch`的横向项`(k·ε/L)(I − d⊗d)`（**压缩时为负**）
+    抵消它。判据是符号翻转，不是某个数。
+    """
+
+    from physics_engine.energies import DiscreteElasticBending, PointLoad
+    from physics_engine.solve import (
+        SolveError,
+        solve_equilibrium,
+        tangent_stiffness_is_positive_definite,
+    )
+
+    nodes, step, stiffness_ei, stiffness_ea = 3, 10.0, 100.0, 1.0e5
+    layout = _layout(nodes)
+    context = EnergyContext(context_id="context/buckle", node_masses_kg=(1.0,) * nodes)
+    fixed_prebuckle = frozenset({0, 1, 2, 4, 5, 7, 8})
+    fixed_stability = frozenset({0, 1, 2, 5, 7, 8})
+    verdicts = []
+    for load in (0.1, 100.0):
+        registry = EnergyRegistry(terms=(
+            PointLoad(loads=((nodes - 1, (-load, 0.0, 0.0)),)),
+            AxialStretch(edges=tuple(
+                (i, i + 1, step, stiffness_ea) for i in range(nodes - 1))),
+            DiscreteElasticBending(vertices=((0, 1, 2, stiffness_ei, step),)),
+        ))
+        straight = tuple(v for i in range(nodes) for v in (i * step, 0.0, 0.0))
+        solved = solve_equilibrium(
+            registry, context, layout, straight, fixed_indices=fixed_prebuckle,
+            residual_tol_n=1.0e-8, max_iterations=10,
+        )
+        assert solved.converged, solved.reason
+        verdicts.append(tangent_stiffness_is_positive_definite(
+            registry, context, solved.state, fixed_indices=fixed_stability))
+    assert verdicts == [True, False], (
+        f"稳定性判别没有随载荷翻转：{verdicts}——压缩时几何刚度必须变负"
+    )
+    with pytest.raises(SolveError, match="every degree of freedom is fixed"):
+        tangent_stiffness_is_positive_definite(
+            EnergyRegistry(terms=(UniformGravity(),)), context,
+            State(layout=layout, vector=(0.0,) * 9),
+            fixed_indices=frozenset(range(9)),
+        )
