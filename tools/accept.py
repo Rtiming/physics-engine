@@ -80,7 +80,9 @@ OPTIONAL_FULL_COMMANDS: tuple[tuple[str, ...], ...] = (
 TIMEOUT_RETURNCODE = 124
 
 #: pytest的"一条测试都没收集到"退出码。它既不是通过也不是失败——
-#: 是**空档位**：本机批级今天还没有案例套件，`-m batch`选不中任何东西。
+#: 是**空档位**。（历史注记：立这条时本机批级确实是空的；`peer_fcl_distance`与
+#: `large_deflection_cantilever`落地后它不再空——但这条语义仍然需要，
+#: 因为`serverclass`档今天仍是空的，而且任何新档位出生时都是空的。）
 EMPTY_SELECTION_RETURNCODE = 5
 
 #: 允许为空的命令白名单。**只有申报过的档位可以空**——交互级绝不许为空，

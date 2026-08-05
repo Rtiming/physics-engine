@@ -1,0 +1,103 @@
+{
+  "arrays": {},
+  "case_id": "case/large_deflection_cantilever",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/large_deflection_cantilever",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/large_deflection_cantilever/generate_oracle.py",
+    "sha256": "9e76bbbb107beb96cb70f4428981562a17b51de407096141b7d523c3884de88c"
+  },
+  "load_tier": "local_batch",
+  "manifest_self_sha256": "15f7eea7c821624c25fdbb43e6002764ed3a90111f6e4c1be919388158fbfd03",
+  "oracles": [
+    {
+      "expected": {
+        "all_refinements_converged": true,
+        "error_ratio_high": 4.1,
+        "error_ratio_low": 3.9,
+        "geometric_nonlinearity_margin": 100.0,
+        "linear_theory_relative_error": 0.49143180699058353,
+        "newton_iterations_within_bound": true,
+        "tip_angle_rad": 0.986016946711354,
+        "tip_relative_error_max": 0.001,
+        "tip_x_over_length": 0.7455798154358129,
+        "tip_y_over_length": 0.603253441129977
+      },
+      "id": "oracle:large_deflection_cantilever/elliptic_integral_tip",
+      "inputs": {
+        "axial_stiffness_n": 10000.0,
+        "bending_stiffness_nmm2": 100.0,
+        "gravity_mm_s2": 9806.65,
+        "kind": "transverse_tip_load_elastica",
+        "length_mm": 100.0,
+        "load_parameter": 3.0,
+        "load_steps": 4,
+        "newton_iterations_bound": 60,
+        "parasitic_mass_kg": 1e-15,
+        "refinements": [
+          10,
+          20,
+          40,
+          80
+        ],
+        "residual_tol_n": 1e-07,
+        "tip_force_n": 0.03
+      },
+      "tolerances": {
+        "all_refinements_converged": {
+          "abs": 0.0,
+          "reason": "布尔前置断言：**不收敛的解不许参与收敛阶比较**——那会拿一个没解出来的数去算阶",
+          "rel": 0.0
+        },
+        "error_ratio_high": {
+          "abs": 0.0,
+          "reason": "区间上界。**不写死为4**——4是渐近值（spec/12第4.3节：比阶不比单点）。实测三档3.9612/4.0512/4.0600；n=5那一档比值只有3.6422，即h=20mm还没进渐近区，所以加密阶梯从n=10起",
+          "rel": 0.0
+        },
+        "error_ratio_low": {
+          "abs": 0.0,
+          "reason": "区间下界，零容差比较（非数值判据）",
+          "rel": 0.0
+        },
+        "geometric_nonlinearity_margin": {
+          "abs": 0.0,
+          "reason": "几何精确项的误差必须比小挠度理论小至少100倍。实测倍数1519×（4.914e-01 / 3.234e-04）。取100倍是留余量的下界，不是实测值——写实测值等于让门迁就当前实现",
+          "rel": 0.0
+        },
+        "linear_theory_relative_error": {
+          "abs": 0.0,
+          "reason": "由闭式直接算：小挠度理论在β=3给(x/L,y/L)=(1, 1)，对闭式(0.7456, 0.6033)偏差49.1%。**这个数存在的意义是证明本案例真的在考几何非线性**",
+          "rel": 1e-14
+        },
+        "newton_iterations_within_bound": {
+          "abs": 0.0,
+          "reason": "单个载荷步的牛顿迭代数上界。实测最大48步。**能量不再是二次型，所以这里没有「一步收敛」**（对比cases/cantilever_self_weight）；60是留25%余量的上界，迭代数突增是线搜索在几何非线性上失步的信号",
+          "rel": 0.0
+        },
+        "tip_angle_rad": {
+          "abs": 0.0,
+          "reason": "二分200次的α；与WDS独立路线偏差6.9e-16",
+          "rel": 1e-14
+        },
+        "tip_relative_error_max": {
+          "abs": 0.0,
+          "reason": "**上界，不是等式**。最细档(n=80)实测3.234393e-04；取1e-3留3.1倍余量，同时比固支权取h时的一阶值8.804656e-03低8.8倍——门仍能分开二阶与一阶",
+          "rel": 0.0
+        },
+        "tip_x_over_length": {
+          "abs": 0.0,
+          "reason": "x_L/L = sqrt(2·sinα/β)是**初等闭式**，唯一的数值步骤是求α的二分（200次，已到机器精度）。1e-14是与WDS独立正交求积对拍的实测偏差量级",
+          "rel": 1e-14
+        },
+        "tip_y_over_length": {
+          "abs": 0.0,
+          "reason": "y_L/L要两个椭圆积分之差；Carlson重复化在此处的截断由ERRTOL=8e-4定，实测对已知K/E值偏差<1e-15，对WDS的QUADPACK路线偏差1.1e-15",
+          "rel": 1e-14
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
