@@ -57,10 +57,32 @@ from physics_engine import FacetRegistry, canonical_sha256, verified_bytes_snaps
 from physics_engine.run_package import publish_package, read_verified_package
 ```
 
+数据层入口（场景文件+一条命令，装完即有）：
+
+```bash
+pe-scene check-collisions 场景.scene.json --out-dir runs
+```
+
 API分两档（见包docstring）：稳定倾向=facets/canonical/identity/provenance/
-run_package；实验档=shapes/collision。**0.x语义：仓库快速演进期，minor可
-破坏兼容，消费方钉精确版本、经自己门禁自觉升级。** 发版：
-`.venv/bin/python tools/release.py`（干净仓+accept全绿才发，版本不可覆盖）。
+run_package；实验档=shapes/collision/scene。**0.x语义：minor可破坏兼容，
+patch只含兼容修复且不回port；消费方钉精确版本、经自己门禁自觉升级。**
+
+**老版本共存（decisions/0012）**：wheelhouse已发版本永不覆盖、永不删除——
+钉住旧版的程序永远装得上同一份字节；同机多版本靠各自venv隔离并行，
+引擎不装共享Python。随手脚本用PEP 723内联声明+`uv run`（每台机器设一次
+`UV_FIND_LINKS=~/wheelhouse`后全自动）：
+
+```python
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["physics-engine==0.3.0"]
+# ///
+```
+
+稳定倾向档弃用给一版缓冲；变更必须写[CHANGELOG](CHANGELOG.md)（发版脚本
+强制检查）。发版：`.venv/bin/python tools/release.py`（干净仓+accept全绿+
+CHANGELOG条目才发，版本不可覆盖；有github远程时自动镜像推送）。
+公开镜像：github.com/Rtiming/physics-engine（MIT）。
 
 ## 工程约定
 

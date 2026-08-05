@@ -8,6 +8,8 @@ version = "0.3.0"
 description = "rtime的物理引擎：多域物理+模型生成+材料+外观的规范与共享内核（规范先行、代码后置）"
 requires-python = ">=3.11"
 dependencies = []
+license = "MIT"
+readme = "README.md"
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]

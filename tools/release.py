@@ -56,6 +56,12 @@ def main() -> int:
     if (WHEELHOUSE / wheel_name).exists():
         raise SystemExit(f"版本{version}已在wheelhouse——版本不可覆盖，改了字节必须跳版本")
 
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    if f"## {version} " not in changelog and f"## {version}\n" not in changelog:
+        raise SystemExit(
+            f"CHANGELOG.md没有{version}的条目——破坏性变更必须被读到，写了才准发（decisions/0012）"
+        )
+
     print(f"[release] accept full for v{version} ...")
     accept = subprocess.run(
         [str(ROOT / ".venv/bin/python"), str(ROOT / "tools/accept.py"), "full"], cwd=ROOT
@@ -84,6 +90,10 @@ def main() -> int:
 
     run(["git", "tag", f"v{version}"])
     run(["git", "push", "origin", f"v{version}"])
+    remotes = run(["git", "remote"]).split()
+    if "github" in remotes:
+        run(["git", "push", "github", "main"])
+        run(["git", "push", "github", f"v{version}"])
     print(f"[release] v{version} 已入wheelhouse并打tag，sha256={digest}")
     print(f"[release] 消费方：uv add 'physics-engine=={version}' --find-links ~/wheelhouse")
     return 0
