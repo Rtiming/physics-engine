@@ -480,6 +480,300 @@ def clamped_chain_bending_stencils(
 
 
 @dataclass(frozen=True)
+class DiscreteElasticBending:
+    """几何精确弯曲（DER形制）：``U = Σ_i (EI/(2·ℓ_i))·κ_i²``，``κ_i = 2·tan(θ_i/2)``。
+
+    ``θ_i``是顶点``i``处两条相邻边的转角，``ℓ_i``是该顶点的**参考构型**Voronoi长度
+    （形制采Bergou等2008《Discrete Elastic Rods》的曲率二法矢弯曲能；
+    WDS `model/energies.py`的`BendingEnergy`是它的各向异性版本，用同一个``κb``）。
+
+    **与`LinearBending`的分界**：那一个是位置的二次型，只在小挠度成立；
+    本项对**刚体转动严格不变**（实测偏差9.0e-16），大挠度才有意义。
+    两者都在仓里、都不改对方——`LinearBending`不是它的退化版本，是另一套适用域。
+
+    ### 求值形制：走DER的分母，不走``(1−c)/(1+c)``
+
+    ``κ² = 4·|e_a × e_b|² / (|e_a||e_b| + e_a·e_b)²``。这与``4(1−cosθ)/(1+cosθ)``
+    数学相等，但**近直链时前者无相消**：``1 − cosθ``在``θ→0``时是两个接近1的数相减，
+    相对误差被放大``2/θ²``倍；叉积平方没有这个问题。分母``D = |e_a||e_b| + e_a·e_b``
+    在``θ→π``（对折）时趋零——那是``2·tan(θ/2)``自身的奇点，**失败关闭**，不返回大数。
+
+    ### 梯度与Hessian是解析的（不是有限差分）
+
+    ``ℓ_i``取参考构型，所以``U``只经``c = cosθ``依赖位置：``U = (EI/(2ℓ))·g(c)``、
+    ``g(c) = 4(1−c)/(1+c)``、``g'(c) = −8/(1+c)²``、``g''(c) = 16/(1+c)³``
+    （代码里用``1+c = D/(|e_a||e_b|)``改写，同样避开相消）。于是
+
+        ∇U = (EI/(2ℓ))·g'(c)·∇c
+        ∇²U = (EI/(2ℓ))·[g''(c)·∇c⊗∇c + g'(c)·∇²c]
+
+    以边矢量``u = x_i − x_{i−1}``、``v = x_{i+1} − x_i``为中间变量（``â``表单位化）：
+
+        ∂c/∂u = (v̂ − c·û)/|u|,   ∂c/∂v = (û − c·v̂)/|v|
+        ∂²c/∂u∂u = [3c·û⊗û − û⊗v̂ − v̂⊗û − c·I] / |u|²
+        ∂²c/∂v∂v = [3c·v̂⊗v̂ − û⊗v̂ − v̂⊗û − c·I] / |v|²
+        ∂²c/∂u∂v = [I − û⊗û − v̂⊗v̂ + c·û⊗v̂] / (|u||v|)
+
+    再经常量线性映射``(u,v) ← (x_{i−1}, x_i, x_{i+1})``（系数``u:(−1,1,0)``、
+    ``v:(0,−1,1)``）落到九个自由度上——链式法则一次，无近似。
+    有限差分门实测：梯度相对偏差6.8e-9、Hessian偏差/量级3.3e-10。
+    **但那道门验不了物理**（spec/12第6.1节）；验物理的是
+    `cases/large_deflection_cantilever`的椭圆积分闭式。
+    """
+
+    name: str = "discrete_elastic_bending"
+    #: 顶点：(左节点, 中节点, 右节点, 弯曲刚度EI_nmm2, 参考Voronoi长度ℓ_mm)
+    vertices: tuple[tuple[int, int, int, float, float], ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.vertices:
+            raise EnergyError("discrete_elastic_bending needs at least one vertex")
+        for left, middle, right, stiffness, voronoi in self.vertices:
+            if len({left, middle, right}) != 3:
+                raise EnergyError(
+                    f"a bending vertex needs three distinct nodes: {(left, middle, right)}"
+                )
+            if not (stiffness > 0.0 and math.isfinite(stiffness)):
+                raise EnergyError(f"bending stiffness must be positive: {stiffness!r}")
+            if not (voronoi > 0.0 and math.isfinite(voronoi)):
+                raise EnergyError(f"voronoi length must be positive: {voronoi!r}")
+
+    def _vertex_terms(self, state: State, vertex):
+        """一个顶点的标量闭包：曲率核**只在这里求值**。
+
+        返回``(能量, û, v̂, |u|, |v|, c, EI/(2ℓ)·g', EI/(2ℓ)·g'')``。
+        """
+
+        left, middle, right, stiffness, voronoi = vertex
+        x = state.vector
+        u = tuple(x[3 * middle + axis] - x[3 * left + axis] for axis in range(3))
+        v = tuple(x[3 * right + axis] - x[3 * middle + axis] for axis in range(3))
+        length_a = math.sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2])
+        length_b = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+        if length_a == 0.0 or length_b == 0.0:
+            raise EnergyError(
+                f"bending vertex {middle} has a zero-length edge — 转角未定义，能量在此不可微"
+            )
+        product = length_a * length_b
+        dot = u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
+        denominator = product + dot
+        if denominator <= 0.0:
+            raise EnergyError(
+                f"bending vertex {middle} is folded back (θ→π) — "
+                "κ = 2·tan(θ/2)在此发散，这是模型自身的奇点，不是可以返回大数的地方"
+            )
+        cross = (
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        )
+        curvature_sq = 4.0 * (cross[0] * cross[0] + cross[1] * cross[1]
+                              + cross[2] * cross[2]) / (denominator * denominator)
+        scale = 0.5 * stiffness / voronoi
+        energy = scale * curvature_sq
+        cosine = dot / product
+        unit_a = tuple(component / length_a for component in u)
+        unit_b = tuple(component / length_b for component in v)
+        # g'(c) = −8/(1+c)² 与 g''(c) = 16/(1+c)³，用 1+c = D/(|u||v|) 改写。
+        ratio = product / denominator
+        first = scale * (-8.0) * ratio * ratio
+        second = scale * 16.0 * ratio * ratio * ratio
+        return energy, unit_a, unit_b, length_a, length_b, cosine, first, second
+
+    def _vertex_blocks(self, state: State, vertex):
+        """一个顶点的完整贡献：(三个节点, 能量, 三个梯度块, 3×3个Hessian块)。
+
+        **曲率核只求值一次**——`quantities`存在的理由就是这个（spec/12第3.1节）。
+        能量值由`_vertex_terms`原样带出，**没有第二个求值表达式**，
+        所以融合路径与单独调`energy`逐字节相同不靠巧合。
+        """
+
+        left, middle, right, _, _ = vertex
+        energy, unit_a, unit_b, length_a, length_b, cosine, first, second = (
+            self._vertex_terms(state, vertex)
+        )
+        grad_u = tuple(
+            (unit_b[axis] - cosine * unit_a[axis]) / length_a for axis in range(3)
+        )
+        grad_v = tuple(
+            (unit_a[axis] - cosine * unit_b[axis]) / length_b for axis in range(3)
+        )
+        square_a = length_a * length_a
+        square_b = length_b * length_b
+        product = length_a * length_b
+        block_uu = []
+        block_vv = []
+        block_uv = []
+        for a in range(3):
+            row_uu = []
+            row_vv = []
+            row_uv = []
+            for b in range(3):
+                identity = 1.0 if a == b else 0.0
+                mixed = unit_a[a] * unit_b[b] + unit_b[a] * unit_a[b]
+                curvature_uu = (
+                    3.0 * cosine * unit_a[a] * unit_a[b] - mixed - cosine * identity
+                ) / square_a
+                curvature_vv = (
+                    3.0 * cosine * unit_b[a] * unit_b[b] - mixed - cosine * identity
+                ) / square_b
+                curvature_uv = (
+                    identity - unit_a[a] * unit_a[b] - unit_b[a] * unit_b[b]
+                    + cosine * unit_a[a] * unit_b[b]
+                ) / product
+                row_uu.append(second * grad_u[a] * grad_u[b] + first * curvature_uu)
+                row_vv.append(second * grad_v[a] * grad_v[b] + first * curvature_vv)
+                row_uv.append(second * grad_u[a] * grad_v[b] + first * curvature_uv)
+            block_uu.append(row_uu)
+            block_vv.append(row_vv)
+            block_uv.append(row_uv)
+
+        #: 常量线性映射的系数：u = x_i − x_{i−1}、v = x_{i+1} − x_i。
+        weights_u = (-1.0, 1.0, 0.0)
+        weights_v = (0.0, -1.0, 1.0)
+        nodes = (left, middle, right)
+        gradients = tuple(
+            tuple(
+                first * (weights_u[m] * grad_u[axis] + weights_v[m] * grad_v[axis])
+                for axis in range(3)
+            )
+            for m in range(3)
+        )
+        blocks = tuple(
+            tuple(
+                tuple(
+                    tuple(
+                        weights_u[m] * weights_u[n] * block_uu[a][b]
+                        + weights_u[m] * weights_v[n] * block_uv[a][b]
+                        + weights_v[m] * weights_u[n] * block_uv[b][a]
+                        + weights_v[m] * weights_v[n] * block_vv[a][b]
+                        for b in range(3)
+                    )
+                    for a in range(3)
+                )
+                for n in range(3)
+            )
+            for m in range(3)
+        )
+        return nodes, energy, gradients, blocks
+
+    def energy(self, state: State, context: EnergyContext) -> float:
+        total = 0.0
+        for vertex in self.vertices:
+            total += self._vertex_terms(state, vertex)[0]
+        return total
+
+    def gradient(self, state: State, context: EnergyContext) -> Vector:
+        result = _zeros(len(state.vector))
+        for vertex in self.vertices:
+            nodes, _, gradients, _ = self._vertex_blocks(state, vertex)
+            for m in range(3):
+                for axis in range(3):
+                    result[3 * nodes[m] + axis] += gradients[m][axis]
+        return tuple(result)
+
+    def hessian(self, state: State, context: EnergyContext) -> Matrix:
+        n = len(state.vector)
+        result = _zero_matrix(n)
+        for vertex in self.vertices:
+            nodes, _, _, blocks = self._vertex_blocks(state, vertex)
+            for m in range(3):
+                for n_index in range(3):
+                    for a in range(3):
+                        for b in range(3):
+                            result[3 * nodes[m] + a][3 * nodes[n_index] + b] += (
+                                blocks[m][n_index][a][b]
+                            )
+        return tuple(tuple(row) for row in result)
+
+    def hessian_entries(self, state, context):
+        entries = []
+        for vertex in self.vertices:
+            nodes, _, _, blocks = self._vertex_blocks(state, vertex)
+            for m in range(3):
+                for n_index in range(3):
+                    for a in range(3):
+                        for b in range(3):
+                            entries.append((
+                                3 * nodes[m] + a, 3 * nodes[n_index] + b,
+                                blocks[m][n_index][a][b],
+                            ))
+        return tuple(entries)
+
+    def quantities(self, state, context, *, need_gradient, need_hessian):
+        """融合：**曲率核只求值一次**，能量/梯度/Hessian一次遍历同时出。"""
+
+        n = len(state.vector)
+        total = 0.0
+        gradient = _zeros(n) if need_gradient else None
+        hessian = _zero_matrix(n) if need_hessian else None
+        for vertex in self.vertices:
+            nodes, energy, gradients, blocks = self._vertex_blocks(state, vertex)
+            total += energy
+            if gradient is not None:
+                for m in range(3):
+                    for axis in range(3):
+                        gradient[3 * nodes[m] + axis] += gradients[m][axis]
+            if hessian is not None:
+                for m in range(3):
+                    for n_index in range(3):
+                        for a in range(3):
+                            for b in range(3):
+                                hessian[3 * nodes[m] + a][3 * nodes[n_index] + b] += (
+                                    blocks[m][n_index][a][b]
+                                )
+        return (
+            total,
+            tuple(gradient) if gradient is not None else None,
+            tuple(tuple(row) for row in hessian) if hessian is not None else None,
+        )
+
+
+def clamped_chain_bending_vertices(
+    node_count: int,
+    segment_length_mm: float,
+    bending_stiffness_nmm2: float,
+) -> tuple[tuple[int, int, int, float, float], ...]:
+    """等分链的几何精确弯曲顶点；节点0与节点1被钉住即为固支。
+
+    **固支顶点的Voronoi长度是``3h/2``，不是``h``——这不是配出来的数，是推出来的。**
+
+    以边角``φ_j``（第``j``条边与固支切向的夹角）写离散弯曲能：正确的固支处理是
+    在钳口另加一个"半格顶点"``(EI/(2·(h/2)))·φ_0²``，因为夹持点到第一条边中点
+    只有``h/2``的弧长。把第一条边整根钉死（本案例的做法，也是DER的常规做法）
+    等于强行令``φ_0 = 0``，**把那半格的柔度整个删掉**，离散梁在钳口处偏刚。
+    把``φ_0``做静态凝聚消掉即可看出该还回多少：
+
+        min_{φ_0} (EI/h)·φ_0² + (EI/(2h))·(φ_1 − φ_0)²  →  φ_0 = φ_1/3
+        代回得 (EI/(3h))·φ_1² = (EI/(2·(3h/2)))·φ_1²
+
+    即固支顶点的等效Voronoi长度**恰为``3h/2``**。实测：取``h``时收敛比
+    2.058/2.032/2.017（一阶）、取``3h/2``时3.961/4.051/4.060（二阶），
+    且该系数与载荷无关（β=0.8/3.0/5.0三档都成立），邻近取值1.45与1.55都退化。
+
+    这是决策0027那条教训的第二例，**症状相同、病根同类而不同处**：
+    那次是梯形求积的端点半权，这次是被钉死的第一条边吞掉的半格柔度。
+    两次都不是"边界条件的阶次"——0027警告过，归因错就会去改边界条件而那改不动它。
+    自由端不需要对应修正（那里``κ(L)=0``，漏掉的半格是O(h³)）：
+    实测把自由端权乘0.5或1.5，收敛比4.063/4.066与3.935/4.040均不变。
+    """
+
+    if node_count < 3:
+        raise EnergyError("a bending chain needs at least three nodes")
+    if not (segment_length_mm > 0.0 and math.isfinite(segment_length_mm)):
+        raise EnergyError("segment length must be positive and finite")
+    if not (bending_stiffness_nmm2 > 0.0 and math.isfinite(bending_stiffness_nmm2)):
+        raise EnergyError("bending stiffness must be positive and finite")
+    return tuple(
+        (
+            index - 1, index, index + 1, bending_stiffness_nmm2,
+            segment_length_mm * (1.5 if index == 1 else 1.0),
+        )
+        for index in range(1, node_count - 1)
+    )
+
+
+@dataclass(frozen=True)
 class EnergyRegistry:
     """注册表：``enabled``显式、**求和次序固定**（spec/12第3.3节）。
 
@@ -581,6 +875,7 @@ class EnergyRegistry:
 
 __all__ = [
     "AxialStretch",
+    "DiscreteElasticBending",
     "LinearBending",
     "EnergyContext",
     "EnergyError",
@@ -590,4 +885,5 @@ __all__ = [
     "UniformGravity",
     "Vector",
     "clamped_chain_bending_stencils",
+    "clamped_chain_bending_vertices",
 ]
