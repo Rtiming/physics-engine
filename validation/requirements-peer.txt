@@ -1,0 +1,12 @@
+# 同行库对比实验的依赖清单——**只装进validation/.venv，永不进主环境**。
+#
+# 版本全部钉死（==）。理由见validation/README.md第四节：同名API在不同版本里
+# 可以是不同算子，本案例实测到FCL的三条距离路精度差六个量级。
+# 改这里的任何一行，都要连带重跑语义复核、更新算子路由表与容差理由。
+#
+# 许可证结论逐库见validation/LICENSES.md。三条全部BSD/Apache系，与本仓MIT相容；
+# 但相容不等于可复制——本仓对同行库**只调用、不移植**（轴7规则4：抄了对拍就不独立）。
+
+python-fcl==0.7.0.11   # BSD-3-Clause；随轮捆 libfcl / libccd / octomap（均BSD-3-Clause）
+numpy==2.5.1           # BSD-3-Clause等复合；python-fcl的绑定层要它传数组
+Cython==3.2.9          # Apache-2.0；python-fcl声明的运行期依赖，本对拍不直接用
