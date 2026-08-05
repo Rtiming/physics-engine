@@ -79,3 +79,20 @@ FEBio的`acceptChanges.py`是这条闭环的出处，本仓的加强是"决策�
                 scalar_diffraction_airy fts_instrument_line_shape; do
       PYTHONPATH=src .venv/bin/python cases/$case/generate_oracle.py
     done
+
+## 计入成功标准的是哪些（决策0040）
+
+本仓的成功标准是**案例阶梯**，分母取 research/05 第2.3节的
+**C档13条同行标准案例**（杆梁族6、接触族3、光学族4）——它们是
+MuJoCo/Bullet/Chrono/Drake/PyElastica/SOFA/FEBio 等十余家共同承认的标准案例。
+**用别人的题当分母，比自己出题自己打分诚实。**
+
+**今天13条过6条**：`cantilever_self_weight`、`large_deflection_cantilever`、
+`scalar_diffraction_airy`、`fts_instrument_line_shape`（含Norton-Beer两条）。
+缺的七条与各自缺的能力见决策0040第二、三节。
+
+**上表其余案例不计入分母**——它们验的是"我们自己的实现有没有内部错误"
+（协议门、逐字节门、失败关闭），而C档验的是"这个引擎算不算得对同行公认的物理"。
+两者都必要，但**只有后者能回答"我们成了没有"**。
+`peer_fcl_distance`是特例：同行库对拍、判据强度高，但它验的是几何查询不是物理求解，
+所以归门不归分母。
