@@ -29,6 +29,7 @@
 | [`scalar_diffraction_airy`](scalar_diffraction_airy/case.md) | 艾里斑`E(x)=2·J1(x)/x`对贝塞尔积分的独立求值，abs 1e-12（**判绝对不判相对：J1有零点**）；首零`3.8317059702`；角度↔空间频率↔半径的**单位往返** | B | interactive | 2条 | `tests/cases/test_scalar_diffraction_airy.py` |
 | [`fts_instrument_line_shape`](fts_instrument_line_shape/case.md) | 无切趾ILS半宽`1.2067091288/(2L)`对独立求根，半高点上ILS恰为0.5；Norton-Beer三组`Σ Ci = 1`（实测残差**恰为0**）；通量代价闭式对Simpson，排序弱>中>强 | B | interactive | 2条 | `tests/cases/test_fts_instrument_line_shape.py` |
 | [`large_deflection_cantilever`](large_deflection_cantilever/case.md) | 大挠度悬臂端点位置对Bisshopp-Drucker 1945椭圆积分闭式，二阶收敛实测比3.9612/4.0512/4.0600；几何精确项比小挠度理论准**1519倍**；固支Voronoi退回`h`必掉到一阶（正向必须红） | B | local_batch | 1条 | `tests/cases/test_large_deflection_cantilever.py` |
+| [`norris_thin_strip`](norris_thin_strip/case.md) | Norris 1970薄带临界态：片电流分布对**50位十进制**参考，rel 1e-12；电流守恒`∫K dx = I`两条求积（代换式1e-9 对 直接式1e-6，**同一恒等式差三个数量级**）；`b`的两个零容差极限；损耗渐近`i⁴/3`与`i³/3`（**幂次4与3是这两条式的招牌**）。**验公式不验引擎，不进0040分母** | B | interactive | 4条 | `tests/cases/test_norris_thin_strip.py` |
 
 **在建**：`peer_fcl_distance`（同行库对拍：球/胶囊距离对FCL，plans/02第四节
 第一批第2条）由同行对比轨道交付，落地后在上表补一行。

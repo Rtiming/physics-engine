@@ -70,6 +70,12 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
     #: （连带`state`升基座，走决策），要么按域分裂。
     "mechanics": ("energies", "integrate", "sensors", "solve", "state"),
     "optics": ("optics",),
+    #: 电磁域（决策0041第三节预登记的第三个物理域）。`superconductor`是它的第一块：
+    #: Norris薄带临界态闭式。它今天**一条包内import都没有**（纯标准库闭式），
+    #: 所以门①②③在它身上都是空过——这不是门坏了，是这块代码确实还没有依赖。
+    #: 触发条件：`Jc`/`Ic`真的进材料记录那天它会import `materials`（基座），
+    #: 门③届时开始对它起作用；若哪天它想读`state`里的电流自由度，门①当场红。
+    "electromagnetics": ("electromagnetics",),
 }
 
 #: 基座登记：spec/01四圈里除物理域圈之外的部分，按其在spec/01第一节的格命名。
