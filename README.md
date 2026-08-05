@@ -43,6 +43,25 @@ rtime的**物理引擎**：多域物理（力学、光学，将来热/电磁）+
 - `winding-deviation-sim`：引擎层依赖本仓属动`src/`，须走其冻结diff→重签回执→
   全量门禁流程，并附现有案例产物指纹逐字节不变证据。
 
+## 安装与调用（舰队wheelhouse链路，decisions/0010）
+
+```bash
+git clone ts-orangepi:wheelhouse.git ~/wheelhouse   # 每台机器一次，更新=git pull
+uv add "physics-engine==0.2.0" --find-links ~/wheelhouse
+```
+
+调用示例：
+
+```python
+from physics_engine import FacetRegistry, canonical_sha256, verified_bytes_snapshot
+from physics_engine.run_package import publish_package, read_verified_package
+```
+
+API分两档（见包docstring）：稳定倾向=facets/canonical/identity/provenance/
+run_package；实验档=shapes/collision。**0.x语义：仓库快速演进期，minor可
+破坏兼容，消费方钉精确版本、经自己门禁自觉升级。** 发版：
+`.venv/bin/python tools/release.py`（干净仓+accept全绿才发，版本不可覆盖）。
+
 ## 工程约定
 
 跨设备范式按rtime-project：git同步（远程：orangepi裸仓库

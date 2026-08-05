@@ -25,6 +25,8 @@ spec/90消费方登记各记一行。
    =canonical_payload+身份绑定verifier+指纹排除三件套，另有
    `SpoolWrapOutcome`缺互斥校验的真缺口，一并归批次B）。
 
+批次B的import切换机制**已裁决**（本仓decisions/0010）：钉`physics-engine==<版本>`+`--find-links ~/wheelhouse`，uv.lock的wheel哈希让引擎字节自动进执行树回执绑定；master侧在workspace_sync.manifest加wheelhouse一行。切换门=两实现输出逐字节一致+全部既有产物指纹不变。
+
 流程硬性提醒（教训5.6原文纪律，批次B沿用）：**冻结diff→重签两份性能回执
 （负载<6，签完核status与resource_qualification两字段）→verify_project
 general/full/actual→更新design/26与本仓spec/90→提交**。
