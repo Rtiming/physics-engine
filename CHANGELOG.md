@@ -63,6 +63,24 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
 
 ### T3 oracle与案例
 
+- **`validation/`落地**：同行库对比实验的独立目录与独立venv，身份边界写死
+  （**永不进`dependencies`、永不被`src/physics_engine` import**）；建环境脚本、
+  钉死版本的依赖清单、逐库许可证结论（决策0025）。这是0015第二条
+  "把别人的库下载下来进行对比实验"的兑现
+- **案例`peer_fcl_distance`**：与python-fcl 0.7.0.11逐点对拍**2700组**固定种子
+  输入（球/球-胶囊/胶囊-胶囊 × 分离/擦边/穿透），最大绝对偏差**2.27e-13mm**、
+  接触判据分歧**0**。产物走run package，manifest带`peer_library`
+  （名称/版本/安装方式/许可证/随轮二进制SHA-256）与`runtime_environment`
+- **对拍抓到同行两处真实缺陷**，并用`fractions.Fraction`精确算术复核：
+  FCL的`distance(enable_signed_distance=True)`在**分离**构型上可错到45.6%相对误差；
+  `collide().penetration_depth`在胶囊-胶囊上与**FCL自己的`distance()`**矛盾。
+  两处均记录进产物但**不作判据**（spec/08规则1：同行的数不是真值，是另一个证人）
+- `tests/cases/test_peer_fcl_distance.py`：conformance门+三条注错必须红例
+  （四元数次序/漏减半径/胶囊半长当全长），负载级`batch`；**同行库缺席时skip**，
+  accept不因缺库而红。**`batch`档从此不再是空档位**（4条真测试）
+- `.gitignore`补`.venv`（无斜杠）：并行开发的worktree里`.venv`是符号链接，
+  带斜杠的规则只匹配目录，此前它一直显示为未跟踪
+
 ### T4 力学地基
 
 - **`docs/spec/12_力学内核与时间推进_v0.md`**：T4的规范面前置就位
