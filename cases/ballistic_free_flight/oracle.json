@@ -1,0 +1,305 @@
+{
+  "arrays": {},
+  "case_id": "case/ballistic_free_flight",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/ballistic_free_flight",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/ballistic_free_flight/generate_oracle.py",
+    "sha256": "4a2f51bd96074e660cd381f43491f79b95cb83388d18817b65ca97e4b3130697"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "93906ff0047b6288de961a04ced4a86442fea11e4a9bc1a17cc11bc0bb626047",
+  "oracles": [
+    {
+      "expected": {
+        "error_over_predicted": 1.0,
+        "exact_position_mm": -3903.325,
+        "predicted_error_mm": -4.903325
+      },
+      "id": "oracle:ballistic/symplectic_euler_h0.001",
+      "inputs": {
+        "acceleration_mm_s2": -9806.65,
+        "dt_s": 0.001,
+        "horizon_s": 1.0,
+        "initial_position_mm": 0.0,
+        "initial_velocity_mm_s": 1000.0,
+        "integrator": "symplectic_euler",
+        "kind": "constant_acceleration_flight"
+      },
+      "tolerances": {
+        "error_over_predicted": {
+          "abs": 1e-08,
+          "reason": "误差常数由闭式给出（推导见生成器docstring），被验内核只做加减乘；行程约4.9e3mm下双精度舍入~1e-12mm，判据取比值而非绝对量，1±1e-8留六个数量级余量。**判据必须带符号**：显式与半隐式同幅反号，只比绝对值的写法分不开这两个积分器。",
+          "rel": 0.0
+        },
+        "exact_position_mm": {
+          "abs": 0.0,
+          "reason": "解析终点位置，只受双精度舍入影响",
+          "rel": 1e-15
+        },
+        "predicted_error_mm": {
+          "abs": 0.0,
+          "reason": "a·T·h/2直接算出，无累加",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "error_over_predicted": -1.0,
+        "exact_position_mm": -3903.325,
+        "predicted_error_mm": -4.903325
+      },
+      "id": "oracle:ballistic/explicit_euler_h0.001",
+      "inputs": {
+        "acceleration_mm_s2": -9806.65,
+        "dt_s": 0.001,
+        "horizon_s": 1.0,
+        "initial_position_mm": 0.0,
+        "initial_velocity_mm_s": 1000.0,
+        "integrator": "explicit_euler",
+        "kind": "constant_acceleration_flight"
+      },
+      "tolerances": {
+        "error_over_predicted": {
+          "abs": 1e-08,
+          "reason": "误差常数由闭式给出（推导见生成器docstring），被验内核只做加减乘；行程约4.9e3mm下双精度舍入~1e-12mm，判据取比值而非绝对量，1±1e-8留六个数量级余量。**判据必须带符号**：显式与半隐式同幅反号，只比绝对值的写法分不开这两个积分器。",
+          "rel": 0.0
+        },
+        "exact_position_mm": {
+          "abs": 0.0,
+          "reason": "解析终点位置，只受双精度舍入影响",
+          "rel": 1e-15
+        },
+        "predicted_error_mm": {
+          "abs": 0.0,
+          "reason": "a·T·h/2直接算出，无累加",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "exact_position_mm": -3903.325,
+        "relative_error": 0.0
+      },
+      "id": "oracle:ballistic/velocity_verlet_h0.001",
+      "inputs": {
+        "acceleration_mm_s2": -9806.65,
+        "dt_s": 0.001,
+        "horizon_s": 1.0,
+        "initial_position_mm": 0.0,
+        "initial_velocity_mm_s": 1000.0,
+        "integrator": "velocity_verlet",
+        "kind": "constant_acceleration_flight"
+      },
+      "tolerances": {
+        "exact_position_mm": {
+          "abs": 0.0,
+          "reason": "解析终点位置",
+          "rel": 1e-15
+        },
+        "relative_error": {
+          "abs": 1e-12,
+          "reason": "velocity Verlet对常加速度**精确**，剩下的只是浮点噪声（实测2.4e-14/1.5e-14/2.9e-14）；abs=1e-12留约两个量级余量。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "error_over_predicted": 1.0,
+        "exact_position_mm": -3903.325,
+        "predicted_error_mm": -2.4516625
+      },
+      "id": "oracle:ballistic/symplectic_euler_h0.0005",
+      "inputs": {
+        "acceleration_mm_s2": -9806.65,
+        "dt_s": 0.0005,
+        "horizon_s": 1.0,
+        "initial_position_mm": 0.0,
+        "initial_velocity_mm_s": 1000.0,
+        "integrator": "symplectic_euler",
+        "kind": "constant_acceleration_flight"
+      },
+      "tolerances": {
+        "error_over_predicted": {
+          "abs": 1e-08,
+          "reason": "误差常数由闭式给出（推导见生成器docstring），被验内核只做加减乘；行程约4.9e3mm下双精度舍入~1e-12mm，判据取比值而非绝对量，1±1e-8留六个数量级余量。**判据必须带符号**：显式与半隐式同幅反号，只比绝对值的写法分不开这两个积分器。",
+          "rel": 0.0
+        },
+        "exact_position_mm": {
+          "abs": 0.0,
+          "reason": "解析终点位置，只受双精度舍入影响",
+          "rel": 1e-15
+        },
+        "predicted_error_mm": {
+          "abs": 0.0,
+          "reason": "a·T·h/2直接算出，无累加",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "error_over_predicted": -1.0,
+        "exact_position_mm": -3903.325,
+        "predicted_error_mm": -2.4516625
+      },
+      "id": "oracle:ballistic/explicit_euler_h0.0005",
+      "inputs": {
+        "acceleration_mm_s2": -9806.65,
+        "dt_s": 0.0005,
+        "horizon_s": 1.0,
+        "initial_position_mm": 0.0,
+        "initial_velocity_mm_s": 1000.0,
+        "integrator": "explicit_euler",
+        "kind": "constant_acceleration_flight"
+      },
+      "tolerances": {
+        "error_over_predicted": {
+          "abs": 1e-08,
+          "reason": "误差常数由闭式给出（推导见生成器docstring），被验内核只做加减乘；行程约4.9e3mm下双精度舍入~1e-12mm，判据取比值而非绝对量，1±1e-8留六个数量级余量。**判据必须带符号**：显式与半隐式同幅反号，只比绝对值的写法分不开这两个积分器。",
+          "rel": 0.0
+        },
+        "exact_position_mm": {
+          "abs": 0.0,
+          "reason": "解析终点位置，只受双精度舍入影响",
+          "rel": 1e-15
+        },
+        "predicted_error_mm": {
+          "abs": 0.0,
+          "reason": "a·T·h/2直接算出，无累加",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "exact_position_mm": -3903.325,
+        "relative_error": 0.0
+      },
+      "id": "oracle:ballistic/velocity_verlet_h0.0005",
+      "inputs": {
+        "acceleration_mm_s2": -9806.65,
+        "dt_s": 0.0005,
+        "horizon_s": 1.0,
+        "initial_position_mm": 0.0,
+        "initial_velocity_mm_s": 1000.0,
+        "integrator": "velocity_verlet",
+        "kind": "constant_acceleration_flight"
+      },
+      "tolerances": {
+        "exact_position_mm": {
+          "abs": 0.0,
+          "reason": "解析终点位置",
+          "rel": 1e-15
+        },
+        "relative_error": {
+          "abs": 1e-12,
+          "reason": "velocity Verlet对常加速度**精确**，剩下的只是浮点噪声（实测2.4e-14/1.5e-14/2.9e-14）；abs=1e-12留约两个量级余量。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "error_over_predicted": 1.0,
+        "exact_position_mm": -3903.325,
+        "predicted_error_mm": -1.22583125
+      },
+      "id": "oracle:ballistic/symplectic_euler_h0.00025",
+      "inputs": {
+        "acceleration_mm_s2": -9806.65,
+        "dt_s": 0.00025,
+        "horizon_s": 1.0,
+        "initial_position_mm": 0.0,
+        "initial_velocity_mm_s": 1000.0,
+        "integrator": "symplectic_euler",
+        "kind": "constant_acceleration_flight"
+      },
+      "tolerances": {
+        "error_over_predicted": {
+          "abs": 1e-08,
+          "reason": "误差常数由闭式给出（推导见生成器docstring），被验内核只做加减乘；行程约4.9e3mm下双精度舍入~1e-12mm，判据取比值而非绝对量，1±1e-8留六个数量级余量。**判据必须带符号**：显式与半隐式同幅反号，只比绝对值的写法分不开这两个积分器。",
+          "rel": 0.0
+        },
+        "exact_position_mm": {
+          "abs": 0.0,
+          "reason": "解析终点位置，只受双精度舍入影响",
+          "rel": 1e-15
+        },
+        "predicted_error_mm": {
+          "abs": 0.0,
+          "reason": "a·T·h/2直接算出，无累加",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "error_over_predicted": -1.0,
+        "exact_position_mm": -3903.325,
+        "predicted_error_mm": -1.22583125
+      },
+      "id": "oracle:ballistic/explicit_euler_h0.00025",
+      "inputs": {
+        "acceleration_mm_s2": -9806.65,
+        "dt_s": 0.00025,
+        "horizon_s": 1.0,
+        "initial_position_mm": 0.0,
+        "initial_velocity_mm_s": 1000.0,
+        "integrator": "explicit_euler",
+        "kind": "constant_acceleration_flight"
+      },
+      "tolerances": {
+        "error_over_predicted": {
+          "abs": 1e-08,
+          "reason": "误差常数由闭式给出（推导见生成器docstring），被验内核只做加减乘；行程约4.9e3mm下双精度舍入~1e-12mm，判据取比值而非绝对量，1±1e-8留六个数量级余量。**判据必须带符号**：显式与半隐式同幅反号，只比绝对值的写法分不开这两个积分器。",
+          "rel": 0.0
+        },
+        "exact_position_mm": {
+          "abs": 0.0,
+          "reason": "解析终点位置，只受双精度舍入影响",
+          "rel": 1e-15
+        },
+        "predicted_error_mm": {
+          "abs": 0.0,
+          "reason": "a·T·h/2直接算出，无累加",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "exact_position_mm": -3903.325,
+        "relative_error": 0.0
+      },
+      "id": "oracle:ballistic/velocity_verlet_h0.00025",
+      "inputs": {
+        "acceleration_mm_s2": -9806.65,
+        "dt_s": 0.00025,
+        "horizon_s": 1.0,
+        "initial_position_mm": 0.0,
+        "initial_velocity_mm_s": 1000.0,
+        "integrator": "velocity_verlet",
+        "kind": "constant_acceleration_flight"
+      },
+      "tolerances": {
+        "exact_position_mm": {
+          "abs": 0.0,
+          "reason": "解析终点位置",
+          "rel": 1e-15
+        },
+        "relative_error": {
+          "abs": 1e-12,
+          "reason": "velocity Verlet对常加速度**精确**，剩下的只是浮点噪声（实测2.4e-14/1.5e-14/2.9e-14）；abs=1e-12留约两个量级余量。",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

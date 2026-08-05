@@ -12,7 +12,10 @@ license = "MIT"
 readme = "README.md"
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.15,<1"]
+# 数值加速档（decisions/0016甲案）：核心永不依赖它，
+# 检测到才走加速实现，两实现逐字节对拍是进仓门。
+accel = ["numpy>=1.24"]
+dev = ["pytest>=8", "ruff>=0.15,<1", "numpy>=1.24"]
 
 [project.scripts]
 pe-scene = "physics_engine.cli:main"

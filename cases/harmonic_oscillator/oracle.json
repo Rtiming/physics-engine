@@ -1,0 +1,104 @@
+{
+  "arrays": {},
+  "case_id": "case/harmonic_oscillator",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/harmonic_oscillator",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/harmonic_oscillator/generate_oracle.py",
+    "sha256": "84ab9c2b2113e4cdb53570143173f5666adf74c1e1d36e1568a8910fc96f63c2"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "96bff74e6b63e5d839720e2f3b0e7fc933c65c34a6f657dce2401eff01a6c4d9",
+  "oracles": [
+    {
+      "expected": {
+        "position_mm": 0.960170286650366
+      },
+      "id": "oracle:harmonic/analytic_position",
+      "inputs": {
+        "horizon_s": 3.0,
+        "initial_position_mm": 1.0,
+        "initial_velocity_mm_s": 0.0,
+        "kind": "undamped_harmonic_oscillator",
+        "omega_per_s": 2.0
+      },
+      "tolerances": {
+        "position_mm": {
+          "abs": 0.0,
+          "reason": "解析解cos(ωT)，只受libm与双精度舍入影响",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "formal_order": 2,
+        "ratio_high": 4.1,
+        "ratio_low": 3.9
+      },
+      "id": "oracle:harmonic/verlet_order_ratio",
+      "inputs": {
+        "dt_s_ladder": [
+          0.02,
+          0.01,
+          0.005
+        ],
+        "horizon_s": 3.0,
+        "integrator": "velocity_verlet",
+        "kind": "convergence_order",
+        "omega_per_s": 2.0
+      },
+      "tolerances": {
+        "formal_order": {
+          "abs": 0.0,
+          "reason": "整数，非数值量必须零容差",
+          "rel": 0.0
+        },
+        "ratio_high": {
+          "abs": 0.0,
+          "reason": "区间上界，零容差比较",
+          "rel": 0.0
+        },
+        "ratio_low": {
+          "abs": 0.0,
+          "reason": "区间下界，零容差比较",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "all_nonzero": true,
+        "ordering": [
+          "explicit_euler",
+          "symplectic_euler",
+          "velocity_verlet"
+        ]
+      },
+      "id": "oracle:harmonic/drift_ordering",
+      "inputs": {
+        "dt_s": 0.01,
+        "initial_position_mm": 1.0,
+        "initial_velocity_mm_s": 0.0,
+        "kind": "energy_drift_ordering",
+        "omega_per_s": 2.0,
+        "steps": 2000
+      },
+      "tolerances": {
+        "all_nonzero": {
+          "abs": 0.0,
+          "reason": "布尔前置断言，防三者全零时排序假通过",
+          "rel": 0.0
+        },
+        "ordering": {
+          "abs": 0.0,
+          "reason": "非数值量（顺序列表）必须零容差——判据是相对优劣，不随机器/编译器漂移（MuJoCo形制）",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

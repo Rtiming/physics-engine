@@ -28,9 +28,16 @@
 - `physics_engine.geometry` —— 体积/质心/惯量张量与rounded-core SDF（spec/12）
 - `physics_engine.materials` —— 材料记录：多域字段+证据分级+单位边界（spec/14）
 - `physics_engine.oracles` —— oracle清单面：expected/tolerances/双哈希（轴7）
+- `physics_engine.state` —— 状态形制与打包次序契约（spec/12）
+- `physics_engine.integrate` —— 时间推进：三个积分器与五项出生声明（spec/12）
 
-**本包不含时间积分器与求解器，尚不能推进任何物理状态**——物理域圈按
-decisions/0015在搬迁中，路线见`docs/plans/02`。
+**能力边界（诚实条款）**：`integrate`能推进无接触、无约束的二阶系统
+（显式/半隐式/velocity Verlet，三者`production_ready`全为`False`）。
+**没有求解器、没有隐式族、没有接触与摩擦、没有任何物理域内核**——
+力学与光学按decisions/0015仍在搬迁中，路线见`docs/plans/02`。
+
+**加速档**：`pip install 'physics-engine[accel]'`装NumPy后走加速实现；
+核心永不要求它（0014零设施承诺），两实现逐字节对拍是进仓门（0016甲案）。
 
 **实验档模块不进顶层re-export，按全路径import**（`from physics_engine.geometry
 import mass_properties`）。这不是疏漏是预算纪律：顶层eager import的模块数是

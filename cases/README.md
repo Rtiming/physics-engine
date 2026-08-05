@@ -20,6 +20,8 @@
 | [`rotated_aabb`](rotated_aabb/case.md) | 八角点枚举 对 Arvo中心-半边长闭式解，abs 1e-9mm | A | interactive | 5条 | `tests/cases/test_rotated_aabb.py` |
 | [`broadphase_superset`](broadphase_superset/case.md) | `separation_mm < 0 ⟹ AABB相交`，反例数严格为0（仅球/胶囊族） | A | interactive | 1条+120对语料 | `tests/cases/test_broadphase_superset.py` |
 | [`mesh_asset_integrity`](mesh_asset_integrity/case.md) | `sha256(资产)==声明` 且 逐轴`declared_min≤true_min`、`declared_max≥true_max`，均零容差 | A | interactive | 3条 | `tests/cases/test_mesh_asset_integrity.py` |
+| [`ballistic_free_flight`](ballistic_free_flight/case.md) | 半隐式Euler误差恰为`+a·T·h/2`、显式恰为`−a·T·h/2`（**同幅反号，判据必须带符号**）；velocity Verlet对常加速度精确，rel<1e-12 | B | interactive | 9条 | `tests/cases/test_ballistic_free_flight.py` |
+| [`harmonic_oscillator`](harmonic_oscillator/case.md) | Verlet对`cos(ωT)`收敛比落在`[3.9,4.1]`（**不写死为4**）；漂移排序`explicit > symplectic > verlet`且三者先各自断非零 | B | interactive | 3条 | `tests/cases/test_harmonic_oscillator.py` |
 
 **在建**：`peer_fcl_distance`（同行库对拍：球/胶囊距离对FCL，plans/02第四节
 第一批第2条）由同行对比轨道交付，落地后在上表补一行。
