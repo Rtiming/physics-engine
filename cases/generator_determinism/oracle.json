@@ -1,0 +1,446 @@
+{
+  "arrays": {},
+  "case_id": "case/generator_determinism",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/generator_determinism",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/generator_determinism/generate_oracle.py",
+    "sha256": "e92013ed4ddf96885dd9f62e11f5c09d8619bb5c674b44dd8ea4866f74a7720e"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "3aee3ca4267137a2c17adb933b252fbbf82cd04a10e29f92bd87b042cdb33497",
+  "oracles": [
+    {
+      "expected": {
+        "absorbed_perturbation_labels": [
+          "spool.layer_thickness_ratio"
+        ],
+        "cross_process_identical": true,
+        "negative_zero_normalised": true,
+        "perturbation_count": 22,
+        "perturbations_changing_declaration": 22,
+        "repeat_calls_identical": true
+      },
+      "id": "oracle:modelgen/determinism",
+      "inputs": {
+        "former_call": {
+          "characteristic_length_mm": 512.0,
+          "root_radius_ratio": 0.0625,
+          "skeleton_ratios": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.5,
+              0.0,
+              0.0
+            ],
+            [
+              0.5,
+              0.25,
+              0.0
+            ]
+          ],
+          "tip_radius_ratio": 0.03125
+        },
+        "hash_seeds": [
+          "0",
+          "1"
+        ],
+        "roller_call": {
+          "characteristic_length_mm": 128.0,
+          "face_width_ratio": 0.125,
+          "radius_ratio": 0.375
+        },
+        "spool_call": {
+          "barrel_radius_ratio": 0.25,
+          "barrel_width_ratio": 0.375,
+          "characteristic_length_mm": 256.0,
+          "flange_outer_radius_ratio": 0.4375,
+          "flange_width_ratio": 0.0625,
+          "layer_thickness_ratio": 0.001953125,
+          "wound_layers": 8
+        }
+      },
+      "tolerances": {
+        "absorbed_perturbation_labels": {
+          "abs": 0.0,
+          "reason": "只改参数表、不改形几何的扰动**名单**（不是个数）：`layer_thickness_ratio`的末位被`0.25 + 8t`的加法吃掉。名单必须逐字相等——名单变长意味着有新的参数不再影响几何，那是参数面该重新审的信号。",
+          "rel": 0.0
+        },
+        "cross_process_identical": {
+          "abs": 0.0,
+          "reason": "**换`PYTHONHASHSEED`起两个子进程**，`declaration_sha256`与本进程相同。进程内比两次抓不到集合/字典哈希序这类隐患——同一进程里哈希种子是同一个，两次调用会一起错。跨种子子进程是唯一能抓到它的口径。",
+          "rel": 0.0
+        },
+        "negative_zero_normalised": {
+          "abs": 0.0,
+          "reason": "骨架坐标写`-0.0`与写`0.0`产出同一份字节。`-0.0 == 0.0`为真而`json.dumps`给出`\"-0.0\"`与`\"0.0\"`——同一个几何点两份声明，是逐字节判据的真实隐患，不是理论顾虑。",
+          "rel": 0.0
+        },
+        "perturbation_count": {
+          "abs": 0.0,
+          "reason": "扰动条数本身冻进金标：**防止判据变空**。少扰几条时「全部改变」会自动成立，这个数把它钉死（带盘6浮点+1整数、导轮3、骨架3+9=12，共22）。",
+          "rel": 0.0
+        },
+        "perturbations_changing_declaration": {
+          "abs": 0.0,
+          "reason": "22条一位扰动**全部**改变声明字节。与上一个数相等才算通过——两个数分开写是为了红的时候能一眼看出是「漏扰」还是「扰了没变」。",
+          "rel": 0.0
+        },
+        "repeat_calls_identical": {
+          "abs": 0.0,
+          "reason": "同一进程内两次调用的`declaration_bytes`逐字节相等。纯函数的最低门。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "compared_length_count": 40,
+        "lengths_scaling_exactly": 40
+      },
+      "id": "oracle:modelgen/scale_homogeneity",
+      "inputs": {
+        "former_call": {
+          "characteristic_length_mm": 512.0,
+          "root_radius_ratio": 0.0625,
+          "skeleton_ratios": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.5,
+              0.0,
+              0.0
+            ],
+            [
+              0.5,
+              0.25,
+              0.0
+            ]
+          ],
+          "tip_radius_ratio": 0.03125
+        },
+        "roller_call": {
+          "characteristic_length_mm": 128.0,
+          "face_width_ratio": 0.125,
+          "radius_ratio": 0.375
+        },
+        "scale_factor": 2.0,
+        "spool_call": {
+          "barrel_radius_ratio": 0.25,
+          "barrel_width_ratio": 0.375,
+          "characteristic_length_mm": 256.0,
+          "flange_outer_radius_ratio": 0.4375,
+          "flange_width_ratio": 0.0625,
+          "layer_thickness_ratio": 0.001953125,
+          "wound_layers": 8
+        }
+      },
+      "tolerances": {
+        "compared_length_count": {
+          "abs": 0.0,
+          "reason": "参与比较的长度个数（带盘15+导轮5+骨架20=40）。同样是**防止判据变空**：漏采一半长度时「全部逐位相等」会自动成立。",
+          "rel": 0.0
+        },
+        "lengths_scaling_exactly": {
+          "abs": 0.0,
+          "reason": "特征长度乘2后，产出的每一个长度**逐位**等于原值的2倍。零容差是算出来的而不是乐观：2的幂缩放在IEEE-754下无舍入（尾数不变、指数加1，除非溢出或落进次正规），所以这是一条位判据。**任何写死的毫米量都会当场破它**——这就是「系数化不写死毫米」的可执行形式（case2 robot_links §J1）。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "any_flanged_cylinder_produced": false,
+        "assembly_centroid_mm": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "assembly_inertia_diag_kg_mm2": [
+          83362.42902494111,
+          83362.42902494111,
+          87398.81117715871
+        ],
+        "assembly_mass_kg": 20.84666385815167,
+        "assembly_volume_mm3": 2655625.969191295,
+        "barrel_inertia_diag_kg_mm2": [
+          21062.681256870786,
+          21062.681256870786,
+          25310.24899474286
+        ],
+        "barrel_mass_kg": 10.947339530598121,
+        "barrel_volume_mm3": 1394565.5452991237,
+        "flange_inertia_diag_kg_mm2": [
+          15627.7333384312,
+          15627.7333384312,
+          31044.281091207926
+        ],
+        "flange_mass_kg": 4.9496621637767735,
+        "flange_volume_mm3": 630530.2119460858,
+        "inertia_offdiag_max_kg_mm2": 0.0,
+        "part_ids": [
+          "barrel",
+          "flange_low",
+          "flange_high"
+        ]
+      },
+      "id": "oracle:modelgen/spool_mass_properties",
+      "inputs": {
+        "call": {
+          "barrel_radius_ratio": 0.25,
+          "barrel_width_ratio": 0.375,
+          "characteristic_length_mm": 256.0,
+          "flange_outer_radius_ratio": 0.4375,
+          "flange_width_ratio": 0.0625,
+          "layer_thickness_ratio": 0.001953125,
+          "wound_layers": 8
+        },
+        "density_kg_m3": 7850.0,
+        "flange_offset_mm": 56.0
+      },
+      "tolerances": {
+        "any_flanged_cylinder_produced": {
+          "abs": 0.0,
+          "reason": "产出的任何`FiniteCylinder`的`flange_outer_radius_mm`**恒为None**。这是上一条的另一半：一旦有人产了带法兰的圆柱，它的质量属性就永远算不出来（`geometry.mass_properties`对它失败关闭），本案例第三条判据会从「红」退化成「不可达」——那比红更坏。",
+          "rel": 0.0
+        },
+        "assembly_centroid_mm": {
+          "abs": 0.0,
+          "reason": "轴对称+两片法兰关于中面镜像，质心**恰在原点**。零容差不是乐观：`(−56m) + (+56m)`在IEEE-754下精确为0（同幅反号相加无舍入）。",
+          "rel": 0.0
+        },
+        "assembly_inertia_diag_kg_mm2": {
+          "abs": 0.0,
+          "reason": "平行轴定理合并：`I_xx = I_xx,筒 + 2(I_xx,兰 + m_兰·d²)`、`I_zz = I_zz,筒 + 2I_zz,兰`，d=56.0。实测偏差1.75e-16。**这一条同时验了`shift_inertia_kg_mm2`用在生成产物上是对的。**",
+          "rel": 1e-15
+        },
+        "assembly_mass_kg": {
+          "abs": 0.0,
+          "reason": "同上。",
+          "rel": 1e-15
+        },
+        "assembly_volume_mm3": {
+          "abs": 0.0,
+          "reason": "三件互不重叠，体积可直接相加（分解是精确的，不是近似）。",
+          "rel": 1e-15
+        },
+        "barrel_inertia_diag_kg_mm2": {
+          "abs": 0.0,
+          "reason": "`I_xx = I_yy = m(3R²+W²)/12`、`I_zz = ½mR²`（Beer & Johnston附录B）。实测偏差1.4e-16（I_zz），横向两个恰为0——横向那条两边的乘法次序碰巧一致。",
+          "rel": 1e-15
+        },
+        "barrel_mass_kg": {
+          "abs": 0.0,
+          "reason": "`m = ρV/1e9`，mm³→m³是spec/14第五节登记的纯长度换算。",
+          "rel": 1e-15
+        },
+        "barrel_volume_mm3": {
+          "abs": 0.0,
+          "reason": "`V = πR²W`，R=68.0、W=96.0均由比值×L精确得到。",
+          "rel": 1e-15
+        },
+        "flange_inertia_diag_kg_mm2": {
+          "abs": 0.0,
+          "reason": "同筒。实测偏差2.34e-16（I_zz）——本案例全部质量属性里的最大值，容差1e-15由它定。",
+          "rel": 1e-15
+        },
+        "flange_mass_kg": {
+          "abs": 0.0,
+          "reason": "同筒。实测偏差恰为0。",
+          "rel": 1e-15
+        },
+        "flange_volume_mm3": {
+          "abs": 0.0,
+          "reason": "同筒，R=112.0、w=16.0。实测偏差恰为0。",
+          "rel": 1e-15
+        },
+        "inertia_offdiag_max_kg_mm2": {
+          "abs": 0.0,
+          "reason": "圆柱的惯量张量在局部轴下是对角的，`geometry._diagonal`写的是字面0.0——所以是位判据不是数值判据。非零即说明轴向搞错了。",
+          "rel": 0.0
+        },
+        "part_ids": {
+          "abs": 0.0,
+          "reason": "件名与件序逐字相等。法兰走**独立第二个形**那条路（spec/11第二之二节两条候选修法的后者），产物是3件不是1件——件数变了就是那条路被改了。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "half_width_mm": 8.0,
+        "inertia_diag_kg_mm2": [
+          543.0486488257947,
+          543.0486488257947,
+          1047.308108449747
+        ],
+        "inertia_offdiag_max_kg_mm2": 0.0,
+        "mass_kg": 0.909121621918183,
+        "part_ids": [
+          "face"
+        ],
+        "radius_mm": 48.0,
+        "volume_mm3": 115811.67158193413
+      },
+      "id": "oracle:modelgen/roller_mass_properties",
+      "inputs": {
+        "call": {
+          "characteristic_length_mm": 128.0,
+          "face_width_ratio": 0.125,
+          "radius_ratio": 0.375
+        },
+        "density_kg_m3": 7850.0
+      },
+      "tolerances": {
+        "half_width_mm": {
+          "abs": 0.0,
+          "reason": "`0.5×0.125×128 = 8.0`精确。全宽16.0与半宽8.0写在两处，把全/半宽这条最容易差2倍的口径钉死。",
+          "rel": 0.0
+        },
+        "inertia_diag_kg_mm2": {
+          "abs": 0.0,
+          "reason": "圆柱三式同带盘。实测偏差2.09e-16（横向）。",
+          "rel": 1e-15
+        },
+        "inertia_offdiag_max_kg_mm2": {
+          "abs": 0.0,
+          "reason": "同带盘：局部轴下对角，位判据。",
+          "rel": 0.0
+        },
+        "mass_kg": {
+          "abs": 0.0,
+          "reason": "`m = ρV/1e9`。",
+          "rel": 1e-15
+        },
+        "part_ids": {
+          "abs": 0.0,
+          "reason": "导轮是单件（WDS `CylinderSurface`就是一个形）。",
+          "rel": 0.0
+        },
+        "radius_mm": {
+          "abs": 0.0,
+          "reason": "`0.375×128`在二进制下精确，逐位判据。它顺带钉住了「`face_width_ratio`是**全**宽不是半宽」这条易错的口径。",
+          "rel": 0.0
+        },
+        "volume_mm3": {
+          "abs": 0.0,
+          "reason": "`V = πR²W`。实测偏差恰为0。",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "inertia_offdiag_max_kg_mm2": 0.0,
+        "inertia_symmetric": true,
+        "inertia_triangle_inequality_holds": true,
+        "link_centroids_mm": [
+          [
+            128.0,
+            0.0,
+            0.0
+          ],
+          [
+            256.0,
+            64.0,
+            0.0
+          ]
+        ],
+        "link_masses_kg": [
+          5.67148789599422,
+          1.5257249441913951
+        ],
+        "link_radii_mm": [
+          28.0,
+          20.0
+        ],
+        "link_volumes_mm3": [
+          722482.5345215567,
+          194359.86550208853
+        ],
+        "part_ids": [
+          "link_0",
+          "link_1"
+        ]
+      },
+      "id": "oracle:modelgen/former_mass_properties",
+      "inputs": {
+        "call": {
+          "characteristic_length_mm": 512.0,
+          "root_radius_ratio": 0.0625,
+          "skeleton_ratios": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.5,
+              0.0,
+              0.0
+            ],
+            [
+              0.5,
+              0.25,
+              0.0
+            ]
+          ],
+          "tip_radius_ratio": 0.03125
+        },
+        "density_kg_m3": 7850.0
+      },
+      "tolerances": {
+        "inertia_offdiag_max_kg_mm2": {
+          "abs": 0.0,
+          "reason": "两段的轴向分别是`(1,0,0)`与`(0,1,0)`，`_axisymmetric`的`Δ·n_i·n_j`含因子0.0，精确为零。位判据。",
+          "rel": 0.0
+        },
+        "inertia_symmetric": {
+          "abs": 0.0,
+          "reason": "`I_ij = I_ji`。惯量张量必对称，与胶囊闭式无关的**普适**判据。",
+          "rel": 0.0
+        },
+        "inertia_triangle_inequality_holds": {
+          "abs": 0.0,
+          "reason": "主矩三角不等式`I_i + I_j ≥ I_k`。任何真实质量分布必满足，同样与胶囊闭式无关。**本案例不独立验证胶囊惯量张量的数值**（见案例页第四节），这两条普适律是那个空缺处唯一诚实的判据。",
+          "rel": 0.0
+        },
+        "link_centroids_mm": {
+          "abs": 0.0,
+          "reason": "胶囊质心在两端点中点。端点坐标由比值×L精确得到，中点再除2也精确，故逐位判据。它钉住的是「骨架点确实进了端点」——插值搞反时它先红。",
+          "rel": 0.0
+        },
+        "link_masses_kg": {
+          "abs": 0.0,
+          "reason": "`m = ρV/1e9`。",
+          "rel": 1e-15
+        },
+        "link_radii_mm": {
+          "abs": 0.0,
+          "reason": "锥度插值的**手推值**：段中点t=0.25与0.75，`(0.0625−0.03125t)×512`给出28.0与20.0，两步都无舍入，故逐位判据。这条是case2 `fo_h_el→fo_h_tip`锥度形制的落点。",
+          "rel": 0.0
+        },
+        "link_volumes_mm3": {
+          "abs": 0.0,
+          "reason": "`V = πr²h + (4/3)πr³`。实测两段偏差均恰为0。",
+          "rel": 1e-15
+        },
+        "part_ids": {
+          "abs": 0.0,
+          "reason": "n个骨架点产n−1件胶囊，件名带段序。",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
