@@ -79,7 +79,15 @@ SUBSTRATE_RINGS: dict[str, tuple[str, ...]] = {
     "contracts": ("__init__", "canonical", "engine_facets", "facets", "identity"),
     "provenance": ("provenance", "run_package"),
     "verification": ("oracles",),
-    "scene": ("scene",),
+    #: `scene`圈=spec/10那一页的内核接口面。`motion`与`actuators`归这里而不是力学
+    #: （2026-08-05，决策0038），判据仍是0035那条：**import决定环，不是愿望决定环**。
+    #: 两者的包内import只有`identity`（基座contracts）——位姿来源按spec/12第2.3节
+    #: 明确"不是状态"，驱动器的`apply`物理未实现所以够不着`state`。
+    #: 对照`sensors`：它import `state`（力学）来判"这一路是不是在读一个自由度"，
+    #: 于是只能归力学。同一页的三个接口分在两个圈，正是这条判据在起作用。
+    #: 触发条件：`actuators`的`apply`物理落地那天它会import `state`，届时门当场红,
+    #: 要么整体改归力学、要么按"声明层留在scene / 物理半边进力学"分裂——两条都走决策。
+    "scene": ("actuators", "motion", "scene"),
     "orchestration": ("cli",),
     "modelgen": ("collision", "geometry", "modelgen", "shapes"),
     "materials": ("materials",),
