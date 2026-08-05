@@ -51,6 +51,19 @@ plans/03第四节D登记着"电磁会是第一个跑不通spec/14规则1的域"�
 
 自感、一般位形（倾斜/偏心）、电容、磁介质、匝间几何、回路间的力与力矩、
 时变与感应电动势——一个都不做。见`inductance.py`第五节。
+
+## 长度制（决策0047实测）
+
+电磁量天然米制（`μ0`是H/m、片电流密度是A/m），与力学的mm制不混一条材料记录。
+**安培不在轴2的单位后缀基础集里**——`BASE_UNIT_SUFFIXES`有开尔文有瓦特没有安培——
+`Jc`/`Ic`因此今天**进不了任何材料记录**（除非撒谎声明成无量纲）。
+实测与裁决请求见决策0047第四节。这是**临时避开不是长期方案**。
+
+## 本子包今天有什么
+
+* `inductance`/`loops`/`elliptic`/`units`：同轴圆环互感的Maxwell闭式（决策0042）；
+* `superconductor`：Norris 1970薄带临界态的片电流分布与两条交流损耗闭式（决策0047）。
+  **它验的是公式不是引擎**——今天`shapes`里没有"带材"、`state`里没有电流自由度。
 """
 
 from __future__ import annotations
@@ -77,6 +90,24 @@ from physics_engine.electromagnetics.inductance import (
     mutual_inductance_h,
 )
 from physics_engine.electromagnetics.loops import CircularLoop
+from physics_engine.electromagnetics.superconductor import (
+    LOSS_SERIES_LIMIT,
+    NORRIS_LOSS_RELATIVE_ACCURACY,
+    SHEET_CURRENT_RELATIVE_ACCURACY,
+    SUPERCONDUCTOR_DIMENSIONLESS_RESULTS,
+    SUPERCONDUCTOR_EXTRA_UNIT_SUFFIXES,
+    SUPERCONDUCTOR_LENGTH_UNIT,
+    SuperconductorError,
+    current_ratio,
+    flux_free_half_width_m,
+    norris_ellipse_loss_j_per_m_per_cycle,
+    norris_ellipse_normalised_loss,
+    norris_strip_loss_j_per_m_per_cycle,
+    norris_strip_normalised_loss,
+    sheet_critical_current_a_per_m,
+    sheet_current_density_a_per_m,
+    strip_critical_current_a,
+)
 from physics_engine.electromagnetics.units import (
     EM_LENGTH_UNIT,
     GEOMETRY_LENGTH_UNIT,
@@ -100,9 +131,16 @@ __all__ = [
     "ElectromagneticsError",
     "GEOMETRY_LENGTH_UNIT",
     "LEGACY_EXACT_VACUUM_PERMEABILITY_H_PER_M",
+    "LOSS_SERIES_LIMIT",
     "MAXWELL_BRACKET_RELATIVE_ACCURACY",
     "MILLIMETRES_PER_METRE",
     "MODULUS_MAX",
+    "NORRIS_LOSS_RELATIVE_ACCURACY",
+    "SHEET_CURRENT_RELATIVE_ACCURACY",
+    "SUPERCONDUCTOR_DIMENSIONLESS_RESULTS",
+    "SUPERCONDUCTOR_EXTRA_UNIT_SUFFIXES",
+    "SUPERCONDUCTOR_LENGTH_UNIT",
+    "SuperconductorError",
     "VACUUM_PERMEABILITY_EVIDENCE_GRADE",
     "VACUUM_PERMEABILITY_H_PER_M",
     "VACUUM_PERMEABILITY_RELATIVE_UNCERTAINTY",
@@ -113,12 +151,21 @@ __all__ = [
     "complete_elliptic_e_of_parameter",
     "complete_elliptic_k",
     "complete_elliptic_k_of_parameter",
+    "current_ratio",
     "dipole_mutual_inductance_h",
+    "flux_free_half_width_m",
     "flux_linkage_wb",
     "maxwell_mutual_bracket",
     "metres_from_millimetres",
     "millimetres_from_metres",
     "mutual_inductance_h",
+    "norris_ellipse_loss_j_per_m_per_cycle",
+    "norris_ellipse_normalised_loss",
+    "norris_strip_loss_j_per_m_per_cycle",
+    "norris_strip_normalised_loss",
     "require_em_length_unit",
+    "sheet_critical_current_a_per_m",
+    "sheet_current_density_a_per_m",
+    "strip_critical_current_a",
     "vacuum_permeability_relative_deviation_from_legacy",
 ]
