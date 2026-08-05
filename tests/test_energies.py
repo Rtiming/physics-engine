@@ -639,3 +639,122 @@ def test_the_residual_tolerance_has_no_default_and_must_be_declared():
         "residual_tol_n 不许有默认值——那会把「这个容差对我的载荷尺度合不合适」"
         "这个必须由调用方回答的问题伪装成库的实现细节"
     )
+
+
+# ── 带状求解：换数值路径，走**声明容差**对拍（spec/13第一节义务2第二档） ──
+
+
+def test_banded_matches_dense_within_a_declared_tolerance():
+    """带状LU与稠密高斯-约当**不是同一条数值路径**，因此判据是容差不是逐字节。
+
+    **第一版试图做成逐字节，那是错的**：给高斯-约当加带宽限制会得到错答案
+    （实测收敛比从4.0掉到0.01），因为高斯-约当上下都消、会把带状结构破坏掉。
+    带状只对LU+回代成立，而LU+回代与高斯-约当的运算次序本就不同。
+
+    容差怎么算出来的：两条路径都是`O(m)`量级的累加，条件数由弯曲刚度标度
+    `EI/h³`定。实测端点挠度偏差 n=40时1.6e-8mm、n=80时9.3e-8mm、
+    n=160与320上**恰为0**；挠度量级3125mm，故相对偏差≤3e-11。
+    判据取`rel=1e-9`，留约30倍余量。**不是放宽到能过——是把两条路径的
+    数值差异算出来再留余量**（决策0024第三节的先例）。
+    """
+
+    from physics_engine import solve as solve_module
+    from physics_engine.energies import LinearBending, clamped_chain_bending_stencils
+    from physics_engine.solve import solve_equilibrium
+
+    length, stiffness, load, gravity = 1000.0, 2.0e7, 0.5, 9806.65
+    segments = 40
+    nodes = segments + 1
+    step = length / segments
+    layout = StateLayout(
+        layout_id="layout/banded_parity",
+        fields=tuple(
+            field
+            for index in range(nodes)
+            for field in (
+                StateField(f"node{index}_x_mm", 1),
+                StateField(f"node{index}_y_mm", 1),
+                StateField(f"node{index}_z_mm", 1),
+            )
+        ),
+    )
+    masses = tuple(
+        load * step * (0.5 if i in (0, nodes - 1) else 1.0) / gravity * 1000.0
+        for i in range(nodes)
+    )
+    context = EnergyContext(
+        context_id="context/banded_parity", node_masses_kg=masses,
+        gravity_mm_s2=(0.0, -gravity, 0.0),
+    )
+    registry = EnergyRegistry(terms=(
+        UniformGravity(),
+        LinearBending(stencils=clamped_chain_bending_stencils(nodes, step, stiffness)),
+    ))
+    initial = tuple(v for i in range(nodes) for v in (i * step, 0.0, 0.0))
+    fixed = frozenset(
+        {3 * i for i in range(nodes)} | {3 * i + 2 for i in range(nodes)} | {1}
+    )
+
+    def run():
+        return solve_equilibrium(
+            registry, context, layout, initial,
+            fixed_indices=fixed, residual_tol_n=1.0e-7,
+        ).state.vector[3 * (nodes - 1) + 1]
+
+    banded = run()
+    original = solve_module._solve_banded
+    solve_module._solve_banded = lambda m, r, b: original.__globals__["_solve_dense"](m, r)
+    try:
+        dense = run()
+    finally:
+        solve_module._solve_banded = original
+    assert abs(banded - dense) <= 1.0e-9 * abs(dense), (
+        f"带状 {banded!r} 与稠密 {dense!r} 的偏差超出声明容差 rel=1e-9"
+    )
+
+
+def test_the_bandwidth_of_a_chain_hessian_is_small_which_is_why_banded_pays():
+    """带状之所以值得，是因为链式Hessian的半带宽**与规模无关**。
+
+    实测：自重悬臂在40/160/320段上半带宽恒为**2**——弯曲模板只耦合相邻三个节点。
+    于是`O(m³)`降到`O(m·b²)`，m=320时理论比11378×、实测端到端**47×**
+    （16.9秒→0.36秒）。这条断言守的是"带宽不随规模长"，
+    它一旦不成立，带状路径的收益就没了，判据也该重估。
+    """
+
+    from physics_engine.energies import LinearBending, clamped_chain_bending_stencils
+    from physics_engine.solve import bandwidth_of
+
+    bandwidths = []
+    for segments in (40, 160):
+        nodes = segments + 1
+        step = 1000.0 / segments
+        layout = StateLayout(
+            layout_id=f"layout/band{segments}",
+            fields=tuple(
+                field
+                for index in range(nodes)
+                for field in (
+                    StateField(f"node{index}_x_mm", 1),
+                    StateField(f"node{index}_y_mm", 1),
+                    StateField(f"node{index}_z_mm", 1),
+                )
+            ),
+        )
+        context = EnergyContext(
+            context_id="context/band", node_masses_kg=(1.0,) * nodes,
+            gravity_mm_s2=(0.0, -9806.65, 0.0),
+        )
+        registry = EnergyRegistry(terms=(
+            UniformGravity(),
+            LinearBending(stencils=clamped_chain_bending_stencils(nodes, step, 2.0e7)),
+        ))
+        state = State(
+            layout=layout,
+            vector=tuple(v for i in range(nodes) for v in (i * step, 0.0, 0.0)),
+        )
+        fixed = {3 * i for i in range(nodes)} | {3 * i + 2 for i in range(nodes)} | {1}
+        free = [i for i in range(3 * nodes) if i not in fixed]
+        position = {g: k for k, g in enumerate(free)}
+        bandwidths.append(bandwidth_of(registry.hessian_entries(state, context), position))
+    assert bandwidths == [2, 2], f"链式Hessian的半带宽不再是常数：{bandwidths}"

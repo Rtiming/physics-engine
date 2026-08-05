@@ -85,6 +85,81 @@ def _solve_dense(matrix: list[list[float]], rhs: list[float]) -> list[float]:
     return [augmented[index][size] / augmented[index][index] for index in range(size)]
 
 
+def bandwidth_of(entries: dict[tuple[int, int], float], position: dict[int, int]) -> int:
+    """约化矩阵的半带宽：``max|i−j|``（只数结构非零）。
+
+    链式问题的Hessian是**带状**的——实测自重悬臂在40/160/320段上半带宽恒为**2**，
+    因为弯曲模板只耦合相邻三个节点，而本案例每节点只有一个自由自由度。
+    """
+
+    band = 0
+    for (row, column), value in entries.items():
+        if value == 0.0:
+            continue
+        i, j = position.get(row), position.get(column)
+        if i is not None and j is not None:
+            band = max(band, abs(i - j))
+    return band
+
+
+def _solve_banded(matrix: list[list[float]], rhs: list[float], band: int) -> list[float]:
+    """带状LU（部分主元）+ 前代 + 回代。复杂度``O(m·b²)``而不是``O(m³)``。
+
+    **这是换数值路径，不是跳过零——如实声明。** 第一版试图让带状版与
+    `_solve_dense`逐字节相同，做法是给高斯-约当加带宽限制。**那是错的**：
+    高斯-约当上下都消，会把带状结构破坏掉、填充扩散到整个矩阵，
+    限制带宽就得到错答案（实测收敛比从4.0掉到0.01）。带状只对**LU+回代**成立。
+
+    因此本函数与`_solve_dense`的关系是spec/13第一节义务2的**第二档**：
+    数值路径不同 → **分量声明容差**对拍，不是逐字节。容差与理由见
+    `test_banded_matches_dense_within_a_declared_tolerance`。
+
+    部分主元把上带宽从``b``扩到``2b``（LAPACK的``kl+ku``形制），
+    `reach`按此取；主元只在带内找，因为带外该列恒为零。
+    """
+
+    size = len(rhs)
+    lower = min(band, size - 1)
+    upper = min(2 * band, size - 1)
+    augmented = [row[:] for row in matrix]
+    right = list(rhs)
+    for step_index in range(size - 1):
+        pivot_high = min(step_index + lower, size - 1)
+        pivot = max(
+            range(step_index, pivot_high + 1),
+            key=lambda row: abs(augmented[row][step_index]),
+        )
+        if abs(augmented[pivot][step_index]) < 1.0e-300:
+            raise SolveError(
+                f"singular system at column {step_index} — "
+                "Hessian在此不可逆（可能是欠约束：有自由度不受任何能量项约束）"
+            )
+        if pivot != step_index:
+            augmented[step_index], augmented[pivot] = augmented[pivot], augmented[step_index]
+            right[step_index], right[pivot] = right[pivot], right[step_index]
+        column_high = min(step_index + upper, size - 1)
+        for row in range(step_index + 1, pivot_high + 1):
+            factor = augmented[row][step_index] / augmented[step_index][step_index]
+            if factor == 0.0:
+                continue
+            augmented[row][step_index] = 0.0
+            for column in range(step_index + 1, column_high + 1):
+                augmented[row][column] -= factor * augmented[step_index][column]
+            right[row] -= factor * right[step_index]
+    if abs(augmented[size - 1][size - 1]) < 1.0e-300:
+        raise SolveError(
+            f"singular system at column {size - 1} — "
+            "Hessian在此不可逆（可能是欠约束：有自由度不受任何能量项约束）"
+        )
+    solution = [0.0] * size
+    for row in range(size - 1, -1, -1):
+        total = right[row]
+        for column in range(row + 1, min(row + upper, size - 1) + 1):
+            total -= augmented[row][column] * solution[column]
+        solution[row] = total / augmented[row][row]
+    return solution
+
+
 def _max_abs(values) -> float:
     return max((abs(value) for value in values), default=0.0)
 
@@ -135,7 +210,14 @@ def solve_equilibrium(
             if row_offset is not None and column_offset is not None:
                 reduced[row_offset][column_offset] = value
         rhs = [-gradient[index] for index in free]
-        step = _solve_dense(reduced, rhs)
+        # 带状问题走带状消元——链式Hessian的半带宽实测为2，`O(m³)`降到`O(m·b²)`。
+        # 判据是**结构性的**：带宽小于规模的三分之一才走，否则带状没有意义。
+        band = bandwidth_of(entries, position)
+        step = (
+            _solve_banded(reduced, rhs, band)
+            if 2 * band + 1 < len(free) // 3
+            else _solve_dense(reduced, rhs)
+        )
         if not all(math.isfinite(value) for value in step):
             return SolveResult(
                 state, False, iteration, residual, backtracks,
@@ -177,4 +259,4 @@ def solve_equilibrium(
     )
 
 
-__all__ = ["SolveError", "SolveResult", "solve_equilibrium"]
+__all__ = ["SolveError", "SolveResult", "bandwidth_of", "solve_equilibrium"]

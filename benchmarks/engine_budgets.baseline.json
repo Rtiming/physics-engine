@@ -32,10 +32,10 @@
       "load_tier": "local_batch"
     },
     "solve_equilibrium_cantilever_160free_dof": {
-      "budget_s": 0.25,
-      "measured_median_s": 0.096,
+      "budget_s": 0.05,
+      "measured_median_s": 0.0066,
       "load_tier": "interactive",
-      "workload": "自重悬臂160段（重力+线性弯曲，二次能量），160个自由自由度，牛顿2步0回溯",
+      "workload": "自重悬臂160段，160个自由自由度，**带状LU**（半带宽2），牛顿2步0回溯",
       "measured_by": "docs/decisions/0030_欠账清理_20260805.md"
     },
     "solve_equilibrium_chain_762free_dof": {
@@ -48,8 +48,8 @@
   },
   "deterministic_gates": {
     "source_bytes": {
-      "measured": 267848,
-      "ceiling": 294912,
+      "measured": 328273,
+      "ceiling": 458752,
       "rationale": "source_bytes是wheel体积的确定性代理——wheel需要构建，源码字节不需要，且跨平台逐位稳定。上限**不是**“引擎必须保持小”的承诺（0015已裁决要把WDS的物理搬进来，源码注定大幅增长），而是“增长必须是一次被记录的决定”。抬上限是允许的，但必须在ceiling_history里留一行，且门校验现行上限等于历史末行——想悄悄抬过不去。"
     },
     "eager_import_modules": {
@@ -91,6 +91,13 @@
       "measured_then": 208007,
       "decision": "docs/decisions/0032_modelgen参数化生成器_20260805.md",
       "reason": "modelgen入仓后208007字节，余量降到9.3%（21369字节），而此刻有三条轨道在并行（光学域＋域隔离、几何精确弯曲、欠账清理），每条预计10—25KB——它们撞红这道门会被卡死，而它们的任务书写明「不许自己抬上限」。这是调度方（我）造成的死锁，由调度方解。抬到288KiB约1.42倍余量：够这三条落地并留约30%，但**不足以让它长期不响**——绊线要保持会响才有意义，抬到一个很久不响的数等于自己把它拆了。"
+    },
+    {
+      "raised_on": "2026-08-05",
+      "ceiling": 458752,
+      "measured_then": 328273,
+      "decision": "docs/decisions/0039_带状求解与预算抬升_20260805.md",
+      "reason": "本次是**真撞破**不是逼近：光学子包＋modelgen＋sensors＋motion＋actuators＋带状求解一并落地，328273字节对旧上限294912超出33361。门按设计红了，这正是它存在的理由——增长被迫成为一次被记录的决定。抬到448KiB约1.4倍余量。用户已裁决走「全面」方向（多域＋多接口），源码注定继续大涨；但仍**刻意不抬到很久不响的数**——绊线一旦长期不响就等于被拆了。"
     }
   ],
   "wheel_budget_history": [
