@@ -1,0 +1,307 @@
+"""能量项协议与第一批能量项——spec/12第三节（T5搬迁轨第一块）。
+
+**这是搬迁的接缝。** 形制直接采WDS `model/energies.py`的`EnergyTerm`协议：
+一个能量项要满足四方法（``energy``/``gradient``/``hessian``/``quantities``）
+才能进引擎，求解器只认协议、不认具体项。
+
+三条承重条款：
+
+1. **``quantities``不是性能糖，是承重条款**。已测事实：单解75%时间在能量装配
+   （spec/12第8.1节）。融合路径存在的理由是"算一次拿三样"，而不是省几个函数调用。
+2. **融合路径的能量值必须与单独调``energy``逐字节相同**（spec/12第3.1节）。
+   WDS为守这条专门保留了零阶读值通道——不是顺手声明一个容差。本模块有门守着。
+3. **注册表``enabled``显式、求和次序固定**（spec/12第3.3节）。浮点加法不结合，
+   次序变了总能量的末位就变；次序是形制不是实现细节。
+
+**本块的数值形态**（0016与spec/12第五节）：纯Python实现先行。
+批量加速档随真正的DER内核搬迁进来，**那时对拍义务才附着**——
+今天没有第二个实现，就没有可对拍的对象，声明这一点比假装有门更诚实。
+融合路径与单独调之间的逐字节门今天就在，它守的是另一件事。
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Protocol
+
+from physics_engine.state import State, StateLayout
+
+Vector = tuple[float, ...]
+#: 稠密对称矩阵，行优先。本块的规模是"几个节点"，稠密够用且可逐字节对拍；
+#: 稀疏表示随真正的杆内核进来（那时才有几百到几千自由度）。
+Matrix = tuple[tuple[float, ...], ...]
+
+
+#: 单位边界的显式常量。梯度是N、质量是kg，而 N/kg = m/s²（**米制**）；
+#: 状态是mm制，所以从力算加速度时必须乘它。写成有名字的常量而不是字面量1000，
+#: 是因为一个裸的1000在半年后没人认得出它是单位换算还是某个物理系数。
+MM_PER_M = 1000.0
+
+
+class EnergyError(ValueError):
+    """能量层的一切失败关闭。"""
+
+
+@dataclass(frozen=True)
+class EnergyContext:
+    """案例内冻结的参数与外载声明（spec/12第2.1节的上下文层）。"""
+
+    context_id: str
+    #: 每个节点的质量。节点数由布局定，这里只存值。
+    node_masses_kg: tuple[float, ...]
+    #: 重力加速度矢量（mm/s²）。零矢量表示不加重力。
+    gravity_mm_s2: tuple[float, float, float] = (0.0, 0.0, 0.0)
+
+    def __post_init__(self) -> None:
+        if not self.context_id.startswith("context/"):
+            raise EnergyError("context_id must be namespaced like 'context/...'")
+        if not self.node_masses_kg:
+            raise EnergyError("a context needs at least one node mass")
+        if any(mass <= 0.0 or not math.isfinite(mass) for mass in self.node_masses_kg):
+            raise EnergyError("node masses must be positive and finite")
+        if len(self.gravity_mm_s2) != 3:
+            raise EnergyError("gravity_mm_s2 must be a 3-vector")
+
+
+class EnergyTerm(Protocol):
+    """四方法协议（形制采WDS `model/energies.py:43`的`EnergyTerm`）。"""
+
+    name: str
+
+    def energy(self, state: State, context: EnergyContext) -> float: ...
+    def gradient(self, state: State, context: EnergyContext) -> Vector: ...
+    def hessian(self, state: State, context: EnergyContext) -> Matrix: ...
+    def quantities(
+        self, state: State, context: EnergyContext, *,
+        need_gradient: bool, need_hessian: bool,
+    ) -> tuple[float, Vector | None, Matrix | None]: ...
+
+
+def _zeros(n: int) -> list[float]:
+    return [0.0] * n
+
+
+def _zero_matrix(n: int) -> list[list[float]]:
+    return [[0.0] * n for _ in range(n)]
+
+
+class UniformGravity:
+    """均匀重力势能：``U = −Σ m_i · g · x_i``。
+
+    梯度是常量、Hessian恒为零——**正因为它平凡，它是"能量本身写错"的第一道门**。
+    WDS把自重项的独立解析基准列为最高优先级，理由写在其源码顶部：
+    有限差分门只验"雅可比是不是我写的那个能量的导数"，不验"那个能量对不对"。
+    """
+
+    name = "uniform_gravity"
+
+    def _nodes(self, state: State) -> int:
+        return len(state.vector) // 3
+
+    def energy(self, state: State, context: EnergyContext) -> float:
+        gx, gy, gz = context.gravity_mm_s2
+        total = 0.0
+        for index in range(self._nodes(state)):
+            mass = context.node_masses_kg[index]
+            x, y, z = state.vector[3 * index : 3 * index + 3]
+            total -= mass * (gx * x + gy * y + gz * z)
+        return total
+
+    def gradient(self, state: State, context: EnergyContext) -> Vector:
+        gx, gy, gz = context.gravity_mm_s2
+        result = _zeros(len(state.vector))
+        for index in range(self._nodes(state)):
+            mass = context.node_masses_kg[index]
+            result[3 * index] = -mass * gx
+            result[3 * index + 1] = -mass * gy
+            result[3 * index + 2] = -mass * gz
+        return tuple(result)
+
+    def hessian(self, state: State, context: EnergyContext) -> Matrix:
+        n = len(state.vector)
+        return tuple(tuple(row) for row in _zero_matrix(n))
+
+    def quantities(self, state, context, *, need_gradient, need_hessian):
+        return (
+            self.energy(state, context),
+            self.gradient(state, context) if need_gradient else None,
+            self.hessian(state, context) if need_hessian else None,
+        )
+
+
+@dataclass(frozen=True)
+class AxialStretch:
+    """逐单元轴向拉伸能：``U = Σ ½·(EA/l0_i)·(|x_j − x_i| − l0_i)²``。
+
+    这是DER杆五个能量项里最刚的一个（轴向刚度比弯曲刚度高约七个数量级，
+    spec/12第8.1节），也是搬迁顺序里第一个真正非平凡的项——
+    梯度与Hessian都不是常量，能被有限差分门真正考验。
+
+    **逐单元标量闭包就是独立oracle路径**（spec/12第3.2节，形制采WDS
+    `_LocalEnergyBase.local_terms`的"per-element scalar closures"注释）：
+    每条边的能量单独可算，装配只是求和，因此"装配对不对"与"单元公式对不对"
+    可以分开验。
+    """
+
+    name: str = "axial_stretch"
+    #: 边：(节点i, 节点j, 静止长度mm, 轴向刚度EA_n)
+    edges: tuple[tuple[int, int, float, float], ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.edges:
+            raise EnergyError("axial_stretch needs at least one edge")
+        for i, j, rest_mm, stiffness_n in self.edges:
+            if i == j:
+                raise EnergyError(f"edge connects a node to itself: {i}")
+            if not (rest_mm > 0.0 and math.isfinite(rest_mm)):
+                raise EnergyError(f"rest length must be positive and finite: {rest_mm!r}")
+            if not (stiffness_n > 0.0 and math.isfinite(stiffness_n)):
+                raise EnergyError(f"axial stiffness must be positive: {stiffness_n!r}")
+
+    def _edge_energy(self, state: State, edge) -> tuple[float, Vector, float, float]:
+        """单条边的标量闭包：返回(能量, 单位方向, 伸长量, 刚度/l0)。"""
+
+        i, j, rest_mm, stiffness_n = edge
+        xi = state.vector[3 * i : 3 * i + 3]
+        xj = state.vector[3 * j : 3 * j + 3]
+        delta = tuple(b - a for a, b in zip(xi, xj, strict=True))
+        length = math.sqrt(sum(component * component for component in delta))
+        if length == 0.0:
+            raise EnergyError(
+                f"edge ({i},{j}) has zero length — 方向未定义，能量在此不可微"
+            )
+        direction = tuple(component / length for component in delta)
+        elongation = length - rest_mm
+        k = stiffness_n / rest_mm
+        return 0.5 * k * elongation * elongation, direction, elongation, k
+
+    def energy(self, state: State, context: EnergyContext) -> float:
+        total = 0.0
+        for edge in self.edges:
+            total += self._edge_energy(state, edge)[0]
+        return total
+
+    def gradient(self, state: State, context: EnergyContext) -> Vector:
+        result = _zeros(len(state.vector))
+        for edge in self.edges:
+            i, j = edge[0], edge[1]
+            _, direction, elongation, k = self._edge_energy(state, edge)
+            force = k * elongation
+            for axis in range(3):
+                result[3 * i + axis] -= force * direction[axis]
+                result[3 * j + axis] += force * direction[axis]
+        return tuple(result)
+
+    def hessian(self, state: State, context: EnergyContext) -> Matrix:
+        n = len(state.vector)
+        result = _zero_matrix(n)
+        for edge in self.edges:
+            i, j, rest_mm, _ = edge
+            _, direction, elongation, k = self._edge_energy(state, edge)
+            length = rest_mm + elongation
+            for a in range(3):
+                for b in range(3):
+                    # d²U/dx² = k·(d⊗d) + (k·ε/L)·(I − d⊗d)
+                    outer = direction[a] * direction[b]
+                    identity = 1.0 if a == b else 0.0
+                    block = k * outer + (k * elongation / length) * (identity - outer)
+                    for si, sj, sign in ((i, i, 1.0), (j, j, 1.0), (i, j, -1.0), (j, i, -1.0)):
+                        result[3 * si + a][3 * sj + b] += sign * block
+        return tuple(tuple(row) for row in result)
+
+    def quantities(self, state, context, *, need_gradient, need_hessian):
+        return (
+            self.energy(state, context),
+            self.gradient(state, context) if need_gradient else None,
+            self.hessian(state, context) if need_hessian else None,
+        )
+
+
+@dataclass(frozen=True)
+class EnergyRegistry:
+    """注册表：``enabled``显式、**求和次序固定**（spec/12第3.3节）。
+
+    浮点加法不结合——次序变了总能量的末位就变。所以次序是声明的一部分，
+    不是"字典恰好这么排"。
+    """
+
+    terms: tuple[EnergyTerm, ...]
+
+    def __post_init__(self) -> None:
+        if not self.terms:
+            raise EnergyError("an energy registry needs at least one enabled term")
+        names = [term.name for term in self.terms]
+        duplicates = sorted({name for name in names if names.count(name) > 1})
+        if duplicates:
+            raise EnergyError(f"duplicate energy term names: {duplicates}")
+
+    @property
+    def order(self) -> tuple[str, ...]:
+        return tuple(term.name for term in self.terms)
+
+    def total(
+        self, state: State, context: EnergyContext, *,
+        need_gradient: bool = False, need_hessian: bool = False,
+    ) -> tuple[float, Vector | None, Matrix | None]:
+        n = len(state.vector)
+        energy = 0.0
+        gradient = _zeros(n) if need_gradient else None
+        hessian = _zero_matrix(n) if need_hessian else None
+        for term in self.terms:  # 次序即声明次序，不排序、不并行
+            term_energy, term_gradient, term_hessian = term.quantities(
+                state, context, need_gradient=need_gradient, need_hessian=need_hessian
+            )
+            energy += term_energy
+            if gradient is not None and term_gradient is not None:
+                for index in range(n):
+                    gradient[index] += term_gradient[index]
+            if hessian is not None and term_hessian is not None:
+                for row in range(n):
+                    for column in range(n):
+                        hessian[row][column] += term_hessian[row][column]
+        return (
+            energy,
+            tuple(gradient) if gradient is not None else None,
+            tuple(tuple(row) for row in hessian) if hessian is not None else None,
+        )
+
+    def acceleration(self, context: EnergyContext, layout: StateLayout):
+        """把能量梯度变成加速度回调，接`integrate`——**这是内核与积分器的接缝**。
+
+        ``a_i = −∇U_i / m_i × MM_PER_M``。
+
+        **那个换算因子不是凑出来的，它是本仓单位制的必然结果**：能量是N·mm、
+        位置是mm，所以梯度的单位是N；质量是kg；而``N/kg = m/s²``——**米制**。
+        状态是mm制，于是必须乘1000。
+
+        这正是spec/14第五节盯着的那类静默1000倍。它在本块的开发中真的发生过一次：
+        有限差分门（梯度对能量、Hessian对梯度）**全绿**，因为那道门只验
+        "雅可比是不是我写的那个能量的导数"——换算因子不在能量里，FD看不见它。
+        抓住它的是`cases/two_body_spring`的解析频率门。这就是spec/12第6.1节
+        "有限差分验不了物理"最锋利的那句话的一个活标本。
+        """
+
+        def acceleration_of(x: Sequence[float], v: Sequence[float], t: float):
+            state = State(layout=layout, vector=tuple(x))
+            _, gradient, _ = self.total(state, context, need_gradient=True)
+            assert gradient is not None
+            return tuple(
+                -gradient[index] / context.node_masses_kg[index // 3] * MM_PER_M
+                for index in range(len(gradient))
+            )
+
+        return acceleration_of
+
+
+__all__ = [
+    "AxialStretch",
+    "EnergyContext",
+    "EnergyError",
+    "EnergyRegistry",
+    "EnergyTerm",
+    "Matrix",
+    "UniformGravity",
+    "Vector",
+]

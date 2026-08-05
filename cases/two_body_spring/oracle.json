@@ -1,0 +1,98 @@
+{
+  "arrays": {},
+  "case_id": "case/two_body_spring",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/two_body_spring",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/two_body_spring/generate_oracle.py",
+    "sha256": "1c35bd28576e3c6fceffb3d3bb150af29135b5069f3450cf2004f8bbbc1f39af"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "1af75352b8e0cff63e53056f57d6923daa47bffeb2ea5a52f04a76cbc08ba9a1",
+  "oracles": [
+    {
+      "expected": {
+        "energy_nmm": 0.0056250000000000015
+      },
+      "id": "oracle:two_body_spring/stretch_energy",
+      "inputs": {
+        "axial_stiffness_n": 45.0,
+        "elongation_mm": 0.05,
+        "kind": "analytic_energy",
+        "rest_length_mm": 10.0,
+        "term": "axial_stretch"
+      },
+      "tolerances": {
+        "energy_nmm": {
+          "abs": 0.0,
+          "reason": "oracle直接由δ算½·(EA/l0)·δ²；**被验内核走的是另一条路**——先求|x_j−x_i|再减l0，而10.05−10.0是相消，相对误差被放大约L/δ=200倍（机器eps 2.2e-16×200≈4.4e-14）。实测相对偏差2.7e-14，rel=2e-13留约七倍余量。**容差不是放宽到能过为止，是把两条路径的数值差异算出来**——这个200倍就是相消放大因子，δ取得更小它会更大。这一条验的是能量本身，不是它的导数，有限差分门验不了它。",
+          "rel": 2e-13
+        }
+      }
+    },
+    {
+      "expected": {
+        "energy_nmm": 21.32946375
+      },
+      "id": "oracle:two_body_spring/gravity_energy",
+      "inputs": {
+        "gravity_mm_s2": -9806.65,
+        "height_mm": 7.25,
+        "kind": "analytic_energy",
+        "mass_kg": 0.3,
+        "term": "uniform_gravity"
+      },
+      "tolerances": {
+        "energy_nmm": {
+          "abs": 0.0,
+          "reason": "−m·g·y。**注意除以1000**：m·g是N·mm/s²·kg→需换算到N，与加速度接缝上那个乘1000是同一条单位边界的两侧。",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "centre_of_mass_drift_mm": 0.0,
+        "elongation_after_full_period_mm": 0.05,
+        "elongation_after_half_period_mm": -0.05,
+        "omega_per_s": 154.91933384829667
+      },
+      "id": "oracle:two_body_spring/analytic_angular_frequency",
+      "inputs": {
+        "axial_stiffness_n": 45.0,
+        "initial_elongation_mm": 0.05,
+        "integrator": "velocity_verlet",
+        "kind": "two_body_oscillation",
+        "mass_a_kg": 0.3,
+        "mass_b_kg": 0.5,
+        "rest_length_mm": 10.0,
+        "steps_per_period": 20000
+      },
+      "tolerances": {
+        "centre_of_mass_drift_mm": {
+          "abs": 1e-09,
+          "reason": "无外力则质心不动（动量守恒）。它验的是「两端受力等大反向」，与频率正确与否正交——实测1.2e-14mm。",
+          "rel": 0.0
+        },
+        "elongation_after_full_period_mm": {
+          "abs": 1e-09,
+          "reason": "velocity Verlet每周期20000步，实测偏差1.0e-13mm；abs=1e-9留四个量级余量。**这一条是那个1000倍单位bug的捕手**。",
+          "rel": 0.0
+        },
+        "elongation_after_half_period_mm": {
+          "abs": 1e-09,
+          "reason": "半周期必须反相。只看整周期分不出「频率对」与「频率差整数倍」。",
+          "rel": 0.0
+        },
+        "omega_per_s": {
+          "abs": 0.0,
+          "reason": "sqrt(k/μ·1000)，闭式",
+          "rel": 1e-15
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
