@@ -1,0 +1,394 @@
+{
+  "arrays": {},
+  "case_id": "case/mutual_inductance_coaxial",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/mutual_inductance_coaxial",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/mutual_inductance_coaxial/generate_oracle.py",
+    "sha256": "0ac5ba2a259f7e7167749c1726c0ee10631236dd560e50ca4aec33050bd8c14c"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "3aac7e4d9128c753497d8b75160e28c728ae7907bcbde0a550bcf1acba06e7c3",
+  "oracles": [
+    {
+      "expected": {
+        "moduli": [
+          0.9805806756909202,
+          0.6880209161537814,
+          0.9998611400395999,
+          0.18490006540840973,
+          0.5749595745760689,
+          0.01999600119960014,
+          0.001999996000012
+        ],
+        "mutual_inductances_h": [
+          6.753694368850173e-08,
+          5.648353610695754e-09,
+          1.312574198511159e-07,
+          4.5278241836208943e-11,
+          1.9813696870463645e-09,
+          1.973328888687914e-14,
+          9.869574791065573e-18
+        ]
+      },
+      "id": "oracle:mutual_inductance_coaxial/maxwell_closed_form",
+      "inputs": {
+        "configurations_r1_r2_d_m": [
+          [
+            0.05,
+            0.05,
+            0.02
+          ],
+          [
+            0.1,
+            0.02,
+            0.05
+          ],
+          [
+            0.03,
+            0.03,
+            0.001
+          ],
+          [
+            0.02,
+            0.04,
+            0.3
+          ],
+          [
+            0.1,
+            0.01,
+            0.0
+          ],
+          [
+            0.01,
+            0.01,
+            1.0
+          ],
+          [
+            0.005,
+            0.005,
+            5.0
+          ]
+        ],
+        "kind": "neumann_double_loop_integral_periodic_trapezoid",
+        "reference_floor": 1e-14,
+        "reference_nodes": 8192,
+        "reference_self_check_nodes": 2048,
+        "vacuum_permeability_h_per_m": 1.25663706127e-06
+      },
+      "tolerances": {
+        "moduli": {
+          "abs": 0.0,
+          "reason": "k = sqrt(4 r1 r2 / ((r1+r2)^2 + d^2))，两侧同一表达式，差异只有一次sqrt的舍入（<=1eps=2.2e-16）；4e-16约2eps。**这条钉的是k^2的表达式本身**，尤其是最容易漏的`+ d^2`：漏了它k与间距无关、等径时恒为1，本条当场红且报的就是k",
+          "rel": 4e-16
+        },
+        "mutual_inductances_h": {
+          "abs": 0.0,
+          "reason": "闭式（AGM）对Neumann周期梯形积分，两条无共用代码的路。实测最坏4.86e-14落在k=0.99986那一组（近重合）——那里`1-k^2`相消到只剩2.8e-4，K对k'的对数依赖把k'的4e-13相对误差折算成K的4.5e-14，与实测吻合。其余六组<=1.4e-15。取1e-12是实测最坏的20.6倍。**它同时是教科书分组的捕手**：把方括号按(2/k-k)K-(2/k)E直接算，k=0.002那一组的相对误差是1.1e-4（相消放大约1/k^4），红过头1e8倍",
+          "rel": 1e-12
+        }
+      }
+    },
+    {
+      "expected": {
+        "complete_elliptic_e": [
+          1.0489202927856858,
+          1.3639294882482198,
+          1.0006916461830402,
+          1.5572834061886183,
+          1.431568889219231,
+          1.5706392981954325,
+          1.5707947560036746
+        ],
+        "complete_elliptic_k": [
+          3.0351156917894304,
+          1.832149965878266,
+          5.481088918451884,
+          1.5844864159918424,
+          1.7322201176690917,
+          1.5709533789453143,
+          1.5707978975884742
+        ],
+        "parameter_convention_agrees": true,
+        "parameter_convention_is_not_the_same_as_modulus": true
+      },
+      "id": "oracle:mutual_inductance_coaxial/elliptic_integrals",
+      "inputs": {
+        "convention": "本清单的moduli是**模k**；Carlson那一份收参数m = k^2，生成器在complete_k_of_parameter处显式换算",
+        "convention_probe_modulus": 0.5,
+        "kind": "carlson_symmetric_forms_rf_rd",
+        "moduli": [
+          0.9805806756909202,
+          0.6880209161537814,
+          0.9998611400395999,
+          0.18490006540840973,
+          0.5749595745760689,
+          0.01999600119960014,
+          0.001999996000012
+        ]
+      },
+      "tolerances": {
+        "complete_elliptic_e": {
+          "abs": 0.0,
+          "reason": "同上。E没有对数奇性，k->1处条件数远好于K，实测最坏6.66e-16（3eps）。取5e-15是7.5倍",
+          "rel": 5e-15
+        },
+        "complete_elliptic_k": {
+          "abs": 0.0,
+          "reason": "AGM 对 Carlson重复化，两条不同算法。实测最坏3.24e-15落在k=0.99986——差异主要来自Carlson那一侧：它收参数m并算`1-m`，而AGM算`(1-k)(1+k)`，后者在k->1处少一次相消。其余六组<=4.4e-16（1-2eps）。取1e-14是3.1倍。**这一条是K/E互换的唯一捕手**：本仓的M不经过K与E的差（见elliptic.py第三节的无相消改写），所以把两个公开函数对调，上一条oracle一个字都不会红",
+          "rel": 1e-14
+        },
+        "parameter_convention_agrees": {
+          "abs": 0.0,
+          "reason": "布尔：`K_of_parameter(0.25)`与`K(0.5)`**逐位相同**。零容差因为前者的实现就是`K(sqrt(m))`，而sqrt(0.25)=0.5精确",
+          "rel": 0.0
+        },
+        "parameter_convention_is_not_the_same_as_modulus": {
+          "abs": 0.0,
+          "reason": "布尔：`K_of_parameter(0.5) != K(0.5)`。**一条判据要守两件事**：换算对、以及两种约定确实不同。只断前一条的话，一个把两个入口写成同一个函数的实现照样绿——而那正是模块docstring警告的那个错（差10%，不会离谱到一眼看出）",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "loop_reciprocity_max_abs_difference_h": 0.0,
+        "scalar_reciprocity_max_abs_difference_h": 0.0
+      },
+      "id": "oracle:mutual_inductance_coaxial/reciprocity",
+      "inputs": {
+        "configurations_r1_r2_d_m": [
+          [
+            0.05,
+            0.05,
+            0.02
+          ],
+          [
+            0.1,
+            0.02,
+            0.05
+          ],
+          [
+            0.03,
+            0.03,
+            0.001
+          ],
+          [
+            0.02,
+            0.04,
+            0.3
+          ],
+          [
+            0.1,
+            0.01,
+            0.0
+          ],
+          [
+            0.01,
+            0.01,
+            1.0
+          ],
+          [
+            0.005,
+            0.005,
+            5.0
+          ]
+        ],
+        "kind": "self_consistency_independent_of_the_closed_form",
+        "loop_turns": [
+          3,
+          7
+        ]
+      },
+      "tolerances": {
+        "loop_reciprocity_max_abs_difference_h": {
+          "abs": 0.0,
+          "reason": "回路级同上，且**匝数不同**（3与7）——`N1*N2`是整数乘法，可交换且精确，所以零容差在带匝数时照样成立。它另外抓一类错：匝数因子若写成`N1*single`再乘`N2`与写成`N2*single`再乘`N1`，浮点下末位可能不同，本条会红",
+          "rel": 0.0
+        },
+        "scalar_reciprocity_max_abs_difference_h": {
+          "abs": 0.0,
+          "reason": "M(1->2)与M(2->1)必须**逐位相同**，不是近似相同。理由是表达式在IEEE754下真的对称：`r1*r2 == r2*r1`、`r1+r2 == r2+r1`、`sqrt(r1*r2)`对称、`|z2-z1| == |z1-z2|`。**因此零容差是算出来的不是许愿**。它抓的是闭式抓不到的一类错：把`sqrt(r1*r2)`写成`r1`（量纲、量级、远场退化阶全部照旧，只有对称性没了）",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "dipole_convergence_orders": [
+          1.9806190872206912,
+          1.9951116625146832,
+          1.9987751858788372,
+          1.9996936252964983,
+          1.9999233955951865
+        ],
+        "dipole_ratio_deviations": [
+          -0.018416360969778944,
+          -0.004666358096562129,
+          -0.0011705490272700958,
+          -0.0002928858044489724,
+          -7.323700227301888e-05,
+          -1.831022278098171e-05
+        ]
+      },
+      "id": "oracle:mutual_inductance_coaxial/far_field_dipole",
+      "inputs": {
+        "first_order_prediction": [
+          -0.018749999999999996,
+          -0.004687499999999999,
+          -0.0011718749999999997,
+          -0.00029296874999999993,
+          -7.324218749999998e-05,
+          -1.8310546874999996e-05
+        ],
+        "kind": "degeneration_to_the_magnetic_dipole_limit",
+        "radii_m": [
+          0.01,
+          0.02
+        ],
+        "separations_m": [
+          0.2,
+          0.4,
+          0.8,
+          1.6,
+          3.2,
+          6.4
+        ]
+      },
+      "tolerances": {
+        "dipole_convergence_orders": {
+          "abs": 1e-09,
+          "reason": "相邻两档偏差之比取log2。理论值恰为2：`M/M_dipole - 1 ~ -3(r1^2+r2^2)/(2 d^2)`，d翻倍偏差降4倍。实测1.9806 -> 1.9999单调逼近2，**不写死为2**（harmonic_oscillator那条纪律：收敛阶是测出来的不是断言的），而是把这五个数逐个钉住。误差来源是M的1e-15折算到最小偏差1.8e-5上再除ln2，约8e-11；取1e-9是12倍",
+          "rel": 0.0
+        },
+        "dipole_ratio_deviations": {
+          "abs": 5e-14,
+          "reason": "偏差`M/M_dipole - 1`。两侧的M_dipole是同一表达式同一mu0，所以偏差之差只等于M的相对误差（因为M/M_dipole ~ 1），实测<=8.2e-16。**判绝对不判相对**：偏差本身从1.8e-2扫到1.8e-5跨三个数量级，相对容差会在小端把噪声放大成判据。取5e-14是实测的61倍。**这一条只有无相消求值做得到**：教科书分组在d=6.4m处的相对误差就已经淹没掉1.8e-5的待测偏差",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "mutual_inductances_h": [
+          6.753694368850173e-08,
+          1.013054155327526e-06,
+          3.241773297048083e-05,
+          9.455172116390242e-05
+        ],
+        "turns_factor_is_bit_exact": true
+      },
+      "id": "oracle:mutual_inductance_coaxial/turns",
+      "inputs": {
+        "configuration_r1_r2_d_m": [
+          0.05,
+          0.05,
+          0.02
+        ],
+        "kind": "lumped_turns_are_a_linear_factor",
+        "turns_pairs": [
+          [
+            1,
+            1
+          ],
+          [
+            3,
+            5
+          ],
+          [
+            12,
+            40
+          ],
+          [
+            200,
+            7
+          ]
+        ]
+      },
+      "tolerances": {
+        "mutual_inductances_h": {
+          "abs": 0.0,
+          "reason": "`M_N = N1 N2 M_1`，金标是`N1 N2 x Neumann积分值`。容差与第一条oracle同源（同一构型k=0.9806，实测1.37e-15），外加一次整数乘法的舍入（<=1eps）。它抓的是匝数写漏、写成`N1+N2`、只乘一侧、或按`(N1 N2)^2`——四种错在N=(200,7)那一组分别差1400倍、6.8倍、7倍、1400倍",
+          "rel": 1e-12
+        },
+        "turns_factor_is_bit_exact": {
+          "abs": 0.0,
+          "reason": "布尔：`M(N1,N2)`与`(N1*N2)*M(1,1)`**逐位相同**。这条与上一条不重复：上一条验的是数对不对，本条验的是**因子的结合次序**——`N1*(N2*M)`与`(N1*N2)*M`在浮点下可以差末位，实现若改了次序本条会红而上一条不会。0030记过同型的一次末位漂移（`k*(d_a.d_b)`写成`(k*d_a).d_b`）",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "flux_linkages_wb": [
+          0.0,
+          4.0522166213101034e-07,
+          -1.418275817458536e-06,
+          0.40522166213101035
+        ],
+        "millimetre_and_metre_declarations_agree": true,
+        "millimetre_round_trip": [
+          50.0,
+          20.0,
+          0.1,
+          1234.5678
+        ],
+        "mu0_relative_deviation_from_legacy": 1.3203274224226515e-10,
+        "mutual_inductance_from_millimetres_h": 6.753694368850173e-08
+      },
+      "id": "oracle:mutual_inductance_coaxial/unit_boundary",
+      "inputs": {
+        "flux_linkage_currents_a": [
+          0.0,
+          1.0,
+          -3.5,
+          1000000.0
+        ],
+        "flux_linkage_turns": [
+          2,
+          3
+        ],
+        "kind": "millimetre_to_metre_boundary_and_mu0_grade",
+        "legacy_exact_vacuum_permeability_h_per_m": 1.2566370614359173e-06,
+        "radius_mm": 50.0,
+        "round_trip_millimetres": [
+          50.0,
+          20.0,
+          0.1,
+          1234.5678
+        ],
+        "separation_mm": 20.0
+      },
+      "tolerances": {
+        "flux_linkages_wb": {
+          "abs": 0.0,
+          "reason": "磁链`lambda = M x I_source`，M已含两侧匝数。它抓的是**再乘一次匝数**这个最常见的错（本组差6倍），以及对电流的线性（I=0给出恰为0、I=1e6不溢出）。容差与第一条oracle同源加一次乘法舍入",
+          "rel": 1e-12
+        },
+        "millimetre_and_metre_declarations_agree": {
+          "abs": 0.0,
+          "reason": "布尔：同一几何用mm声明与用m声明给出**逐位相同**的M。零容差成立是因为50.0/1000恰好是0.05的double表示（实测相等）。**若哪天不成立，那说明换算路径上多了一步运算，本条该红**",
+          "rel": 0.0
+        },
+        "millimetre_round_trip": {
+          "abs": 0.0,
+          "reason": "mm -> m -> mm必须**逐位复原**。零容差是算出来的：两个方向共用同一个因子1000，一除一乘；1000是2的幂乘5^3，对这四个测试值除1000再乘1000在double下精确可逆（实测四个全等）。**方向写反不会报任何错**，只会把互感放大1e6倍——本仓有过三次单位事故（1000倍、被抵消、静默1e12方向反），往返判据是唯一抓得住方向的门",
+          "rel": 0.0
+        },
+        "mu0_relative_deviation_from_legacy": {
+          "abs": 0.0,
+          "reason": "本仓采信的mu0（CODATA 2022）与2019年前按定义精确的4pi*1e-7的相对偏差，实测1.3203e-10——**落在CODATA的相对标准不确定度1.6e-10之内**，即两个值物理上不冲突，冲突的只是`benchmark_constant`那条'按定义精确'的声明（research/08第4.4节）。两侧是同一对字面量的两次独立抄写，差异只有一次减法与一次除法的舍入(<=2eps)；1e-12约4500eps。**这条是mu0量级错的捕手**：写成1.2566e-5，本量从1.32e-10跳到9.0，任何有理由的容差都拦得住",
+          "rel": 1e-12
+        },
+        "mutual_inductance_from_millimetres_h": {
+          "abs": 0.0,
+          "reason": "从mm制声明的几何算出的互感，金标由米制的Neumann积分给出。与上一条不重复：往返判据只验换算可逆，**验不出方向**（乘1000再除1000同样可逆）。本条把换算的**方向**钉死在一个物理值上，方向反了差1e6倍。容差与第一条oracle同源",
+          "rel": 1e-12
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

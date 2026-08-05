@@ -28,6 +28,7 @@
 | [`generator_determinism`](generator_determinism/case.md) | 参数化生成器：同参数逐字节相同（**含换`PYTHONHASHSEED`的子进程**）；22条一位扰动全改变声明；特征长度乘2时40个长度**逐位**翻倍；产出的形对圆柱/胶囊教科书闭式，rel 1e-15 | A | interactive | 5条 | `tests/cases/test_generator_determinism.py` |
 | [`scalar_diffraction_airy`](scalar_diffraction_airy/case.md) | 艾里斑`E(x)=2·J1(x)/x`对贝塞尔积分的独立求值，abs 1e-12（**判绝对不判相对：J1有零点**）；首零`3.8317059702`；角度↔空间频率↔半径的**单位往返** | B | interactive | 2条 | `tests/cases/test_scalar_diffraction_airy.py` |
 | [`fts_instrument_line_shape`](fts_instrument_line_shape/case.md) | 无切趾ILS半宽`1.2067091288/(2L)`对独立求根，半高点上ILS恰为0.5；Norton-Beer三组`Σ Ci = 1`（实测残差**恰为0**）；通量代价闭式对Simpson，排序弱>中>强 | B | interactive | 2条 | `tests/cases/test_fts_instrument_line_shape.py` |
+| [`mutual_inductance_coaxial`](mutual_inductance_coaxial/case.md) | 同轴圆环互感Maxwell闭式`M = μ0·√(r1r2)·[(2/k−k)K−(2/k)E]`对Neumann双回路积分，rel 1e-12（**7组构型，含d=0与k=0.002的极远场**）；椭圆积分对Carlson（**模k与参数m两种约定各一对函数并互钉**）；互易零容差；远场退化到偶极子**收敛阶实测1.9806→1.9999**；匝数`N1·N2`逐位精确；mm↔m往返零容差 | B | interactive | 6条 | `tests/cases/test_mutual_inductance_coaxial.py` |
 | [`large_deflection_cantilever`](large_deflection_cantilever/case.md) | 大挠度悬臂端点位置对Bisshopp-Drucker 1945椭圆积分闭式，二阶收敛实测比3.9612/4.0512/4.0600；几何精确项比小挠度理论准**1519倍**；固支Voronoi退回`h`必掉到一阶（正向必须红） | B | local_batch | 1条 | `tests/cases/test_large_deflection_cantilever.py` |
 
 **在建**：`peer_fcl_distance`（同行库对拍：球/胶囊距离对FCL，plans/02第四节
