@@ -1,0 +1,153 @@
+{
+  "arrays": {},
+  "case_id": "case/scalar_diffraction_airy",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/scalar_diffraction_airy",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/scalar_diffraction_airy/generate_oracle.py",
+    "sha256": "7aa4d65915432445b83acabdde8bda3979098add27c174bbd33f9c96f27a2c89"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "2c234580690b045138660779cfd7da74571e819c122cc9f96d5495a67473d9ff",
+  "oracles": [
+    {
+      "expected": {
+        "airy_amplitude_values": [
+          1.0,
+          0.9690738306994957,
+          0.8801011714898671,
+          0.5767248077568734,
+          1.5793317747262906e-12,
+          -0.13103165503658606,
+          0.058659086713478664,
+          -0.03848457977511328,
+          -0.03724118408177126,
+          -0.03683171264435874,
+          -0.03566098733502889,
+          0.019053593528399044,
+          0.006683312417585008,
+          -0.00791673750777486,
+          -0.0039004731250070045,
+          0.0015532794586055464
+        ],
+        "j1_values": [
+          0.0,
+          0.24226845767487393,
+          0.44005058574493355,
+          0.5767248077568734,
+          3.0257674950726443e-12,
+          -0.3275791375914652,
+          0.23463634685391466,
+          -0.22898324966192402,
+          -0.22344710449062757,
+          -0.2215059198431735,
+          -0.21574897337692478,
+          0.1333751546987933,
+          0.06683312417585008,
+          -0.11875106261662291,
+          -0.09751182812517512,
+          0.04659838375816639
+        ]
+      },
+      "id": "oracle:airy/bessel_j1_reference_table",
+      "inputs": {
+        "arguments": [
+          0.0,
+          0.5,
+          1.0,
+          2.0,
+          3.8317059702,
+          5.0,
+          8.0,
+          11.9,
+          12.0,
+          12.028,
+          12.1,
+          14.0,
+          20.0,
+          30.0,
+          50.0,
+          60.0
+        ],
+        "kind": "bessel_integral_periodic_trapezoid",
+        "reference_floor": 1e-15,
+        "reference_nodes": 4096
+      },
+      "tolerances": {
+        "airy_amplitude_values": {
+          "abs": 5e-13,
+          "reason": "E = 2 J1/x，除以x把J1的绝对误差按1/x缩小；最坏点仍是x=12.028，实测1.38e-13。取5e-13是实测的3.6倍",
+          "rel": 0.0
+        },
+        "j1_values": {
+          "abs": 1e-12,
+          "reason": "被验实现申报的绝对精度（bessel.py的J1_ABSOLUTE_ACCURACY）。**判绝对不判相对**：J1有零点，x=3.83处值3e-12而绝对误差9e-17，相对误差3e-5毫无意义。实测最坏8.27e-13落在x=12.028（分段点右侧），余量1.2倍——收到5e-13会红，红的是渐近展开在分段点附近的固有误差",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "amplitude_at_axis": 1.0,
+        "amplitude_at_literature_zero": 0.0,
+        "argument_at_first_minimum": 3.8317059702,
+        "constant_matches_literature_quote": true,
+        "first_minimum_half_angle_rad": 0.00077180718381776,
+        "first_zero_x": 3.831705970207512,
+        "intensity_at_literature_zero": 0.0
+      },
+      "id": "oracle:airy/first_zero_and_units",
+      "inputs": {
+        "aperture_diameter_m": 0.001,
+        "bisection_bracket": [
+          3.0,
+          4.5
+        ],
+        "kind": "airy_first_zero_and_unit_round_trip",
+        "literature_first_zero": 3.8317059702,
+        "literature_quote_step": 1e-10,
+        "wavelength_m": 6.328e-07
+      },
+      "tolerances": {
+        "amplitude_at_axis": {
+          "abs": 0.0,
+          "reason": "E(0)=1是极限的精确值，实现里直接返回1.0不走除法——零容差；写成除法会给出一个带舍入的1",
+          "rel": 0.0
+        },
+        "amplitude_at_literature_zero": {
+          "abs": 3e-12,
+          "reason": "物理上E在首零处**恰为0**。偏差全部来自文献引用值被截断了7.512e-12：|dE/dx|=0.21022，预测残值1.5793e-12，实测1.5793e-12与之吻合。取3e-12≈预测值的1.9倍。**容差是算出来的**：换一个位数更多的引用值它会更小，而不是反过来调这个数",
+          "rel": 0.0
+        },
+        "argument_at_first_minimum": {
+          "abs": 0.0,
+          "reason": "**单位边界的往返**：角度→sin/lambda（空间频率，周/米）→乘2pi*a（角波数×半径）必须落回首零。把半径写成直径差2倍、把谱学波数当角波数差2pi倍——两者都不会报错，只有这条往返能抓。**期望值是文献引用值不是真值**：内核的1.22因子由被截过的引用值除以pi得到，所以往返闭合在引用值上，与真零点差7.512e-12（第一次写成真值时这条当场红，红得对——它测出了那个截断）。实测往返偏差恰为0",
+          "rel": 1e-15
+        },
+        "constant_matches_literature_quote": {
+          "abs": 0.0,
+          "reason": "布尔：模块常量AIRY_FIRST_ZERO_X与A&S表9.5引用值逐位相同（引用值截到1e-10）。这条锁的是research/05第2.3节写下的那个判据数没有在实现里被改掉",
+          "rel": 0.0
+        },
+        "first_minimum_half_angle_rad": {
+          "abs": 0.0,
+          "reason": "arcsin(x1/pi * lambda/D)，三次乘除一次arcsin，各1eps量级；1e-15约4.5eps",
+          "rel": 1e-15
+        },
+        "first_zero_x": {
+          "abs": 1e-14,
+          "reason": "两侧都二分到浮点地板，差异只来自J1求值本身：首零邻域`J1`走级数段无相消，绝对误差约1e-16，经|J1'(x1)|=0.40276折算成自变量偏差约2.5e-16。实测4.4e-16，取1e-14是它的23倍",
+          "rel": 0.0
+        },
+        "intensity_at_literature_zero": {
+          "abs": 1e-23,
+          "reason": "I = E^2，容差是振幅容差的平方(3e-12)^2=9e-24。实测2.49e-24。这条与上一条不是重复：它验的是intensity真的是amplitude的平方而不是另写了一遍",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

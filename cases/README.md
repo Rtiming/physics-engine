@@ -24,6 +24,8 @@
 | [`harmonic_oscillator`](harmonic_oscillator/case.md) | Verlet对`cos(ωT)`收敛比落在`[3.9,4.1]`（**不写死为4**）；漂移排序`explicit > symplectic > verlet`且三者先各自断非零 | B | interactive | 3条 | `tests/cases/test_harmonic_oscillator.py` |
 | [`two_body_spring`](two_body_spring/case.md) | 拉伸能与重力能的闭式值；两体振动角频率`ω=sqrt(k/μ·1000)`（**1000倍单位bug的捕手**）；质心不动 | B | interactive | 3条 | `tests/cases/test_two_body_spring.py` |
 | [`cantilever_self_weight`](cantilever_self_weight/case.md) | 自重悬臂端点挠度对教科书闭式，**二阶收敛实测比恰为4.000**；牛顿一步收敛（二次能量） | B | interactive | 1条 | `tests/cases/test_cantilever_self_weight.py` |
+| [`scalar_diffraction_airy`](scalar_diffraction_airy/case.md) | 艾里斑`E(x)=2·J1(x)/x`对贝塞尔积分的独立求值，abs 1e-12（**判绝对不判相对：J1有零点**）；首零`3.8317059702`；角度↔空间频率↔半径的**单位往返** | B | interactive | 2条 | `tests/cases/test_scalar_diffraction_airy.py` |
+| [`fts_instrument_line_shape`](fts_instrument_line_shape/case.md) | 无切趾ILS半宽`1.2067091288/(2L)`对独立求根，半高点上ILS恰为0.5；Norton-Beer三组`Σ Ci = 1`（实测残差**恰为0**）；通量代价闭式对Simpson，排序弱>中>强 | B | interactive | 2条 | `tests/cases/test_fts_instrument_line_shape.py` |
 
 **在建**：`peer_fcl_distance`（同行库对拍：球/胶囊距离对FCL，plans/02第四节
 第一批第2条）由同行对比轨道交付，落地后在上表补一行。
@@ -70,6 +72,7 @@ FEBio的`acceptChanges.py`是这条闭环的出处，本仓的加强是"决策�
 
 跑一遍全部生成器（改了生成器之后必须做）：
 
-    for case in segment_distance rotated_aabb broadphase_superset mesh_asset_integrity; do
+    for case in segment_distance rotated_aabb broadphase_superset mesh_asset_integrity \
+                scalar_diffraction_airy fts_instrument_line_shape; do
       PYTHONPATH=src .venv/bin/python cases/$case/generate_oracle.py
     done

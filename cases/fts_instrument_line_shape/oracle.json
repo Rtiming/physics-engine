@@ -1,0 +1,174 @@
+{
+  "arrays": {},
+  "case_id": "case/fts_instrument_line_shape",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/fts_instrument_line_shape",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/fts_instrument_line_shape/generate_oracle.py",
+    "sha256": "28ebc24316f98b5a8afa19d6e9a1d098f71ef9104bd1b9349a26796f9a378c59"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "636311845740fe4e2480b52d16e730d66c27325f77ab018ab2744e02a651ac2c",
+  "oracles": [
+    {
+      "expected": {
+        "first_zero_per_m": 10.0,
+        "fwhm_in_sinc_units": 1.2067091288032286,
+        "fwhm_matches_textbook_quote": true,
+        "fwhm_per_m": 12.067091288032286,
+        "line_shape_at_first_zero": 0.0,
+        "line_shape_at_minus_half_fwhm": 0.5,
+        "line_shape_at_peak": 1.0,
+        "line_shape_at_plus_half_fwhm": 0.5
+      },
+      "id": "oracle:fts/unapodised_line_shape",
+      "inputs": {
+        "kind": "boxcar_instrument_line_shape",
+        "max_opd_m": 0.05,
+        "textbook_fwhm_in_sinc_units": 1.20671,
+        "textbook_half_step": 5e-06
+      },
+      "tolerances": {
+        "first_zero_per_m": {
+          "abs": 0.0,
+          "reason": "1/(2L)，一次乘一次除；1e-15约4.5eps。**这条同时是L与2L的捕手**：把单边最大光程差当成全程，首零差2倍且看起来完全合理",
+          "rel": 1e-15
+        },
+        "fwhm_in_sinc_units": {
+          "abs": 1e-15,
+          "reason": "内核里是写死的常量，本金标是**独立二分求根**的结果——所以这条真的在验那个常量。二分100次把区间压到浮点地板（0.2/2^100远小于eps），残差只剩sinc求值的1eps量级；1e-15约4.5eps",
+          "rel": 0.0
+        },
+        "fwhm_matches_textbook_quote": {
+          "abs": 0.0,
+          "reason": "布尔：|因子 - 1.20671| <= 5e-6（教科书末位1e-5的四舍五入半宽）。实测8.712e-7。这条锁的是research/05第2.3节写下的那个判据数，与上一条分工：上一条验精度，这条验没写错数",
+          "rel": 0.0
+        },
+        "fwhm_per_m": {
+          "abs": 0.0,
+          "reason": "因子/(2L)，两次乘除；同上",
+          "rel": 1e-15
+        },
+        "line_shape_at_first_zero": {
+          "abs": 1e-16,
+          "reason": "sinc(1)在float64上不是0而是sin(pi_float)/pi_float：sin(pi的浮点表示)=1.2246e-16，除以pi得3.898e-17。**容差是算出来的**：1e-16是这个必然残值的2.6倍，不是'放宽到能过'",
+          "rel": 0.0
+        },
+        "line_shape_at_minus_half_fwhm": {
+          "abs": 1e-15,
+          "reason": "负侧同值——ILS是偶函数。两侧都验是因为只验一侧的话，把偏移取了绝对值的实现与真正对称的实现分不开",
+          "rel": 0.0
+        },
+        "line_shape_at_peak": {
+          "abs": 0.0,
+          "reason": "sinc(0)=1是极限的精确值，实现直接返回1.0不走除法——零容差",
+          "rel": 0.0
+        },
+        "line_shape_at_plus_half_fwhm": {
+          "abs": 1e-15,
+          "reason": "半高点上ILS必须恰为0.5——**这条才是半高全宽那个常量的物理门**（常量错了这里就不是0.5）。实测0.4999999999999999，偏差1.11e-16即0.5eps；1e-15约4.5eps",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "coefficient_sums": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "throughput": [
+          0.7008998000000001,
+          0.5863161333333334,
+          0.5240300857142858
+        ],
+        "throughput_strictly_decreasing": true,
+        "window_at_scan_end": [
+          0.384093,
+          0.152442,
+          0.045335
+        ],
+        "window_at_zero_opd": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "window_beyond_scan": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "window_minimum_reduced_opd": [
+          0.9683774074380624,
+          0.9647725990125988,
+          1.0
+        ],
+        "window_minimum_value": [
+          0.3813673762015199,
+          0.14772936859354258,
+          0.045335
+        ]
+      },
+      "id": "oracle:fts/norton_beer_apodisation",
+      "inputs": {
+        "beyond_scan_factor": 1.5,
+        "kind": "norton_beer_windows",
+        "max_opd_m": 0.05,
+        "minimum_scan_points": 4096,
+        "simpson_floor": 1e-15,
+        "simpson_nodes": 20000,
+        "strengths": [
+          "weak",
+          "medium",
+          "strong"
+        ]
+      },
+      "tolerances": {
+        "coefficient_sums": {
+          "abs": 1e-06,
+          "reason": "**每组sum(Ci)=1是一条门**（research/05第2.3节）。它是物理必要条件：A(0)=sum(Ci)，零光程差点承载全部通量，sum!=1会把整条谱线整体缩放。1e-6是文献系数的申报位数（六位小数），也就是'这组数确实求和为一'能被断言的分辨率。本仓三组实测残差**恰为0**（十进制系数在二进制下相加正好落回1.0）",
+          "rel": 0.0
+        },
+        "throughput": {
+          "abs": 0.0,
+          "reason": "内核走求和闭式sum_i C_i 2^(2i)(i!)^2/(2i+1)!，金标走复合Simpson数值积分——**两条不同的路**，所以这条验的是那个闭式推导本身。Simpson对三次以下精确、窗是六次多项式，h=5e-5时截断约3e-18，远低于浮点地板；两条路的实测差<=1.11e-16（<=0.5eps）。1e-15约4.5eps",
+          "rel": 1e-15
+        },
+        "throughput_strictly_decreasing": {
+          "abs": 0.0,
+          "reason": "布尔排序判据（spec/12第6.2节写法2）：弱>中>强，**越强的切趾扔掉越多信号**。排序不受实现常数影响。假通过口子是三者全零时的0>0>0——所以测试里先各自断言落在(0,1)开区间，再断严格不等号",
+          "rel": 0.0
+        },
+        "window_at_scan_end": {
+          "abs": 0.0,
+          "reason": "A(L)=C0**逐位相等**：x=1时(1-x^2)=0，高阶项全灭，只剩C0，没有任何算术发生。零容差。这个残值越小切趾越强：弱0.384 > 中0.152 > 强0.045",
+          "rel": 0.0
+        },
+        "window_at_zero_opd": {
+          "abs": 1e-06,
+          "reason": "A(0)=sum(Ci)的另一面：上一条验系数表，这一条验窗函数真的在Delta=0处取到那个和（幂次写错、区间判断写反都会在这里露出）。容差同源",
+          "rel": 0.0
+        },
+        "window_beyond_scan": {
+          "abs": 0.0,
+          "reason": "扫描区间外没有数据，窗**是0不是延拓**。零容差。不写这条的话，一个把(1-x^2)^i在|x|>1上继续算的实现会给出正负乱跳的'窗'，且在别的判据上全绿",
+          "rel": 0.0
+        },
+        "window_minimum_reduced_opd": {
+          "abs": 0.0003,
+          "reason": "读侧在4096个等距点上取最小，位置误差上界是网格半间距1.221e-04；3e-4是它的2.5倍。**weak与medium的极小落在扫描端点内侧**（x*≈0.968与0.965），strong的落在端点上（x*=1）——这个差别只由C1的符号决定，是C1抄错的直接捕手",
+          "rel": 0.0
+        },
+        "window_minimum_value": {
+          "abs": 1e-07,
+          "reason": "网格取最小的值误差是(1/2)|A''|delta^2，三组里最大的界是5.460e-08；1e-7约它的1.8倍。**这条判的是一件反直觉的真事**：weak与medium的切趾窗在扫描端点附近**不单调**——C1为负，窗先跌到极小（比A(L)低2.7e-3与4.7e-3）再回升到C0。Norton-Beer从未要求窗单调；本仓第一版把'窗单调不增'写成判据，当场红，红得对",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
