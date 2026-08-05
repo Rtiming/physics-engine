@@ -52,6 +52,10 @@ fp64→fp32=换物理不是优化；GPU三门槛不过不动手；本机Mac无GP
   **在`.claude/worktrees/`里的并行开发副本内跑它等于空跑**——路径含`.claude/`
   被当忽略目录，实测"查了0个文件"（主仓同一命令查78个）。worktree内的"0错误"
   是空的，真验收要在主仓合入后跑一遍。
+- **worktree内跑`accept.py`必须导出`PYTHONPATH="$PWD/src"`**：共享`.venv`里的
+  editable安装指向**主仓**的`src`，不导出时新模块会报`No module named ...`而判FAIL，
+  或者更糟——测的是主仓的代码而你以为测的是自己的。与上一条同源：
+  **worktree里的绿和红都要先确认它测的是谁**。
 - 代码只走git（不靠文件夹同步搬`.git`）；`.venv`/`work/`/`dist/`不进版本控制不同步。
 - 不经用户明确指示不`git push`（发版脚本内的推送视为发版授权的一部分）。
 
