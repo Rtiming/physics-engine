@@ -38,6 +38,19 @@ def _require_positive(value: float, name: str) -> None:
         raise ShapeError(f"{name} must be positive and finite")
 
 
+#: `Literal`只在类型检查期成立；跨边界字节（场景文件）走的是运行时这条路，
+#: 所以取值集合要在运行时校验一次。缺省与非法值走同一个门。
+MESH_UNITS: tuple[str, ...] = ("mm", "m")
+MESH_USAGES: tuple[str, ...] = ("visual", "collision")
+MESH_CONVEXITIES: tuple[str, ...] = ("convex_hull", "exact_convex", "nonconvex_declared")
+COLLISION_DIRECTIONS: tuple[str, ...] = ("envelope", "fitted")
+
+
+def _require_choice(value: object, allowed: tuple[str, ...], name: str) -> None:
+    if value not in allowed:
+        raise ShapeError(f"{name} must be one of {list(allowed)}: {value!r}")
+
+
 @dataclass(frozen=True)
 class Sphere:
     radius_mm: float
@@ -128,6 +141,9 @@ class MeshAsset:
     def __post_init__(self) -> None:
         if not self.path_relative or "\\" in self.path_relative or self.path_relative.startswith("/"):
             raise ShapeError("path_relative must be a nonempty relative path")
+        _require_choice(self.units, MESH_UNITS, "units")
+        _require_choice(self.usage, MESH_USAGES, "usage")
+        _require_choice(self.convexity, MESH_CONVEXITIES, "convexity")
         if len(self.sha256) != 64 or any(c not in "0123456789abcdef" for c in self.sha256):
             raise ShapeError("sha256 must be 64 lowercase hex characters")
         _require_vector(self.aabb_min_mm, "aabb_min_mm")
@@ -169,6 +185,7 @@ class CollisionShape:
     direction: Literal["envelope", "fitted"]
 
     def __post_init__(self) -> None:
+        _require_choice(self.direction, COLLISION_DIRECTIONS, "collision direction")
         if isinstance(self.shape, MeshAsset) and self.shape.usage != "collision":
             raise ShapeError(
                 "a visual asset must never enter collision declarations (spec/11 rule 1)"
@@ -258,6 +275,10 @@ class PosedBody:
 
 
 __all__ = [
+    "COLLISION_DIRECTIONS",
+    "MESH_CONVEXITIES",
+    "MESH_UNITS",
+    "MESH_USAGES",
     "Aabb",
     "Capsule",
     "CollisionShape",

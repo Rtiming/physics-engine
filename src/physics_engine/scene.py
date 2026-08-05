@@ -169,6 +169,10 @@ def load_scene(payload: bytes) -> Scene:
             )
         except TypeError as error:
             raise SceneError(f"invalid collision declaration: {error}") from error
+        except ShapeError as error:
+            # 缺省的direction会以None走到这里——spec/11规则5"保守方向缺省禁止"
+            # 对写场景文件的人同样成立，不只对写Python的人。
+            raise SceneError(f"invalid collision declaration: {error}") from error
         if collision_field:
             raise SceneError(f"unknown collision keys: {sorted(collision_field)}")
         visual = None
@@ -191,13 +195,25 @@ def load_scene(payload: bytes) -> Scene:
         except ShapeError as error:
             raise SceneError(str(error)) from error
 
+    # 装配期统一校验（spec/10第3条：finalize统一校验、配错当场炸）。
+    # 这两条此前推迟到BroadPhaseCollisionQuery构造期才炸，后果是
+    # `pe-scene validate`对非法场景报valid并以0退出。
+    identifiers = [entry.body.body_id for entry in posed]
+    duplicates = sorted({name for name in identifiers if identifiers.count(name) > 1})
+    if duplicates:
+        raise SceneError(f"duplicate body_id in scene: {duplicates}")
+
     pairs_field = document.get("allowed_pairs", [])
     allowed = frozenset(
         frozenset(pair) for pair in pairs_field
     )
+    known = set(identifiers)
     for pair in allowed:
         if len(pair) != 2:
             raise SceneError(f"allowed pair must name two distinct bodies: {sorted(pair)}")
+        unknown_members = sorted(pair - known)
+        if unknown_members:
+            raise SceneError(f"allowed pair references unknown bodies: {unknown_members}")
 
     return Scene(
         scene_id=scene_id,

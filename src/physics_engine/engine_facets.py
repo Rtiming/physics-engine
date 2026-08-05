@@ -1,9 +1,14 @@
 """本仓自己的面清册——引擎吃自己的药。
 
-physics-engine目前只有一个序列化面：验收器的回执。它在这里登记，
-验收器写回执时盖它的名与版本，governance测试用同一清册验"回执声明的
-版本能过失败关闭的读取端"。以后本仓每新增一个跨边界字节形制，先来这里
-登记再落盘——和我们要求消费方做的一模一样。
+本仓每新增一个跨边界字节形制，先来这里登记再落盘——和我们要求消费方做的
+一模一样。清册在此**一次登记齐**（plans/02的T0a闸门）：并行开发期间各轨道
+只`from physics_engine.engine_facets import ...`，不再改本文件；要加第五个面的
+轨道走一次闸门提交。
+
+登记时机的教训（decisions/0017）：`cli.py`从0.3.0起就在落盘
+`physics_scene_collision_events`这个形制，却一直没有登记——本仓自己违反了
+轴1规则1近两个版本。面清册的价值不在于它记了什么，在于**落盘前必须先来登记**
+这条纪律本身。
 """
 
 from __future__ import annotations
@@ -19,6 +24,28 @@ ACCEPTANCE_RECEIPT_VERSION = "0.1"
 PHYSICS_SCENE_FACET = "physics_scene"
 PHYSICS_SCENE_VERSION = "1.0.0"
 
+#: 碰撞事件产物面：`pe-scene check-collisions --out-dir`落盘的判定结果
+#: （cli.py）。出生draft，与场景面同理。
+COLLISION_EVENTS_FACET = "physics_scene_collision_events"
+COLLISION_EVENTS_VERSION = "0.1"
+
+#: 性能基线面：spec/13第零节的延迟预算与wheel预算的落盘形制（plans/02 T1）。
+#: 内部消费——它是**开发计时裁决**的输入，永不进功能路径（0014争用韧性条款）。
+PERF_BASELINE_FACET = "engine_perf_baseline"
+PERF_BASELINE_VERSION = "0.1"
+
+#: oracle清单面：轴7规则2要求的形制（生成器身份+逐条expected+逐条tolerances
+#: +数组双哈希+清单自指哈希）。出生draft——两个消费方（WDS的B1—B6/C1/X2/
+#: free_rod、FTS的m0清单）评审后才谈升档。
+ORACLE_MANIFEST_FACET = "engine_oracle_manifest"
+ORACLE_MANIFEST_VERSION = "0.1"
+
+#: 行为基线面：确定性整数计数器的金标（plans/02第一批案例7）。
+#: **它不是轴7 oracle**——spec/08规则1明写实测数不作金标；这一面记的是
+#: "本实现当前的确定性行为"，用途是回退网，不是物理真值。分开命名以免稀释轴7。
+BEHAVIOR_BASELINE_FACET = "engine_behavior_baseline"
+BEHAVIOR_BASELINE_VERSION = "0.1"
+
 ENGINE_REGISTRY = FacetRegistry(
     Facet(
         name=ACCEPTANCE_RECEIPT_FACET,
@@ -32,10 +59,44 @@ ENGINE_REGISTRY = FacetRegistry(
         max_tested_minor=0,
         status=FacetStatus.DRAFT,
     ),
+    Facet(
+        name=COLLISION_EVENTS_FACET,
+        major=0,
+        max_tested_minor=1,
+        status=FacetStatus.DRAFT,
+    ),
+    Facet(
+        name=PERF_BASELINE_FACET,
+        major=0,
+        max_tested_minor=1,
+        status=FacetStatus.INTERNAL,
+    ),
+    Facet(
+        name=ORACLE_MANIFEST_FACET,
+        major=0,
+        max_tested_minor=1,
+        status=FacetStatus.DRAFT,
+    ),
+    Facet(
+        name=BEHAVIOR_BASELINE_FACET,
+        major=0,
+        max_tested_minor=1,
+        status=FacetStatus.INTERNAL,
+    ),
 )
 
 __all__ = [
     "ACCEPTANCE_RECEIPT_FACET",
     "ACCEPTANCE_RECEIPT_VERSION",
+    "BEHAVIOR_BASELINE_FACET",
+    "BEHAVIOR_BASELINE_VERSION",
+    "COLLISION_EVENTS_FACET",
+    "COLLISION_EVENTS_VERSION",
     "ENGINE_REGISTRY",
+    "ORACLE_MANIFEST_FACET",
+    "ORACLE_MANIFEST_VERSION",
+    "PERF_BASELINE_FACET",
+    "PERF_BASELINE_VERSION",
+    "PHYSICS_SCENE_FACET",
+    "PHYSICS_SCENE_VERSION",
 ]

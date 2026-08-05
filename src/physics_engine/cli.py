@@ -19,7 +19,12 @@ from pathlib import Path
 
 from physics_engine.canonical import canonical_file_bytes, strict_loads
 from physics_engine.collision import BroadPhaseCollisionQuery
-from physics_engine.engine_facets import PHYSICS_SCENE_FACET, PHYSICS_SCENE_VERSION
+from physics_engine.engine_facets import (
+    COLLISION_EVENTS_FACET,
+    COLLISION_EVENTS_VERSION,
+    PHYSICS_SCENE_FACET,
+    PHYSICS_SCENE_VERSION,
+)
 from physics_engine.run_package import publish_package, read_verified_package
 from physics_engine.scene import SCENE_CANONICAL_PROFILE, SceneError, load_scene
 
@@ -33,7 +38,8 @@ def _load(path: Path):
 
 def _events_document(scene, events) -> dict:
     return {
-        "facet": "physics_scene_collision_events",
+        "facet": COLLISION_EVENTS_FACET,
+        "facet_version": COLLISION_EVENTS_VERSION,
         "scene_id": scene.scene_id,
         "scene_sha256": scene.source_sha256,
         "events": [
@@ -72,9 +78,17 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    events = BroadPhaseCollisionQuery(
-        scene.posed_bodies, allowed_pairs=scene.allowed_pairs
-    ).check_state()
+    # 查询构造也是装配期校验的一部分（重复body_id、未知白名单成员），
+    # 必须纳入捕获——否则非法场景会抛栈回溯并以1退出，而1的语义是"有候选"。
+    try:
+        query = BroadPhaseCollisionQuery(
+            scene.posed_bodies, allowed_pairs=scene.allowed_pairs
+        )
+    except ValueError as error:
+        print(f"invalid scene: {error}", file=sys.stderr)
+        return 2
+
+    events = query.check_state()
     for event in events:
         print(f"{event.confidence}: {event.body_a} <-> {event.body_b}")
     print(f"{len(events)} broad-phase candidate(s) in {scene.scene_id}")

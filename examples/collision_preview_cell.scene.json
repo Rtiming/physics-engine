@@ -2,7 +2,7 @@
   "contract_type": "physics_scene",
   "contract_version": "1.0.0",
   "scene_id": "scene/collision_preview_cell",
-  "description": "WDS碰撞预演对象集雏形：R1导轮与带盘包盒相接（真实参数），连杆与工装分开",
+  "description": "WDS碰撞预演对象集雏形：R1导轮与带盘包盒相接（真实参数），连杆与工装分开。连杆的AABB是资产真实包盒向外取整到0.1mm（资产坐标在机器人基坐标系，非连杆局部系），pose只作分隔用",
   "extensions": [],
   "bodies": [
     {
@@ -32,8 +32,8 @@
           "units": "mm",
           "usage": "collision",
           "convexity": "nonconvex_declared",
-          "aabb_min_mm": [-400.0, -300.0, -300.0],
-          "aabb_max_mm": [400.0, 300.0, 300.0]
+          "aabb_min_mm": [52.4, -273.3, 1133.9],
+          "aabb_max_mm": [453.1, 138.3, 1559.7]
         }
       },
       "pose": {"translation_mm": [1500.0, 0.0, 0.0]}

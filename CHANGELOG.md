@@ -4,6 +4,38 @@
 minor可破坏兼容，patch只含兼容修复，**不回port**——修复只进新版本）。
 发版脚本强制：版本必须先在本页有条目才准发。
 
+## Unreleased
+
+并行开发期的分槽（plans/02第三节规避规则3）：每条轨道只在自己的小节内append，
+合并冲突面为零。发版时由一次收口提交合并成版本条目。
+
+### T0 收口（缺陷清零+面清册+文档对账）
+
+- 面清册一次登记齐四个新面（`physics_scene_collision_events`、
+  `engine_perf_baseline`、`engine_oracle_manifest`、`engine_behavior_baseline`），
+  其中`physics_scene_collision_events`补登记了自0.3.0起就在落盘却未登记的形制
+  （本仓自己违反轴1规则1近两个版本）
+- `pyproject.toml`登记与负载三级对应的pytest marker（`batch`/`serverclass`）
+- **失败关闭补齐（破坏性：此前被放行的非法场景现在会被拒）**：
+  `MeshAsset`的`units`/`usage`/`convexity`与`CollisionShape.direction`
+  运行时校验取值；场景文件缺`direction`不再放行；重复`body_id`与
+  未知`allowed_pairs`成员在**加载期**失败关闭（此前推迟到查询构造期才炸）
+- `pe-scene`退出码修复：查询构造异常纳入捕获，非法场景两个子命令一律退出码2
+  （此前`check-collisions`抛栈回溯并以1退出，而1的语义是"有候选"）
+- `collision_events.json`补`facet_version`字段（**破坏字节**，实验档minor内声明）
+- `examples/collision_preview_cell.scene.json`的网格AABB改为资产真值
+  （此前声明的包络在z轴上与资产完全不相交，`direction: "envelope"`不成立）
+
+### T1 性能门
+
+### T2 几何
+
+### T3 oracle与案例
+
+### T4 力学地基
+
+### T6 资产（materials）
+
 ## 0.4.0 — 2026-08-05
 
 新增：

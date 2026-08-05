@@ -23,6 +23,12 @@ packages = ["src/physics_engine"]
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers"
 testpaths = ["tests"]
+# marker与spec/13零之二的负载三级一一对应：无marker=交互级（<1秒，永远本机跑）。
+# 新案例/设施出生时在案例页申报级别，marker必须与之一致。
+markers = [
+    "batch: 本机批级（<2分钟，与30/120验收预算同源）",
+    "serverclass: 服务器级（>2分钟或天然可并行的批；本机不跑，独立入口）",
+]
 
 [tool.ruff]
 line-length = 100
