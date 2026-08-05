@@ -1,17 +1,20 @@
-"""narrow phase第一片的门：手算穿透值、假阳性消除、诚实降级、位姿旋转。"""
+"""narrow phase第一片的**诚实性**门：可信度分级与降级行为。
+
+原先本文件里的手算判据（球-球侵入5.0、球-胶囊2.0、旋转胶囊0.5、平行3.0、
+交错2.0）已按轴7规则3搬进`cases/segment_distance/oracle.json`，由
+`tests/cases/test_segment_distance.py`对拍——判据写死在测试里，验的是
+"测试和内核是不是同一个人写的"，不是内核对不对。搬过去之后那批判据
+多了五条退化分支、生成器身份与自指哈希。
+
+留在这里的是**没有金标数值**的那一类事实：哪一族给什么可信度、
+不支持的族会不会冒充精确。这类判据不属于oracle清单（它不是物理量的值），
+属于接口诚实性（AGENTS.md本仓纪律第四条）。
+"""
 
 from __future__ import annotations
 
-import math
-
-import pytest
-
-from physics_engine.collision import (
-    BroadPhaseCollisionQuery,
-    segment_segment_distance_mm,
-)
+from physics_engine.collision import BroadPhaseCollisionQuery
 from physics_engine.shapes import (
-    Capsule,
     CollisionShape,
     FiniteCylinder,
     PosedBody,
@@ -28,59 +31,32 @@ def _body(name: str, shape, translation=(0.0, 0.0, 0.0), rotation=(0.0, 0.0, 0.0
     )
 
 
-def test_two_spheres_overlapping_report_exact_penetration():
-    a = _body("a", Sphere(radius_mm=10.0))
-    b = _body("b", Sphere(radius_mm=10.0), translation=(15.0, 0.0, 0.0))
-    events = BroadPhaseCollisionQuery((a, b)).check_state()
-    assert len(events) == 1
-    assert events[0].confidence == "narrow_phase"
-    assert events[0].penetration_mm == pytest.approx(5.0, abs=1e-12)
-
-
-def test_broad_hit_but_narrow_clear_is_eliminated():
-    # AABB相交（各轴距离8<10）但欧氏距离11.31>10：broad的假阳性必须被吃掉。
-    a = _body("a", Sphere(radius_mm=5.0))
-    b = _body("b", Sphere(radius_mm=5.0), translation=(8.0, 8.0, 0.0))
-    assert BroadPhaseCollisionQuery((a, b)).check_state() == ()
-
-
-def test_sphere_capsule_hand_value():
-    capsule = _body("cap", Capsule((0.0, 0.0, 0.0), (20.0, 0.0, 0.0), radius_mm=3.0))
-    sphere = _body("sph", Sphere(radius_mm=4.0), translation=(10.0, 5.0, 0.0))
-    events = BroadPhaseCollisionQuery((capsule, sphere)).check_state()
-    assert events[0].confidence == "narrow_phase"
-    assert events[0].penetration_mm == pytest.approx(2.0, abs=1e-12)  # 5-(3+4)=-2
-
-
-def test_rotated_capsule_uses_world_endpoints():
-    # 胶囊沿x，绕z转90°后沿y；球放在y轴上正好压进0.5。
-    half = math.sqrt(0.5)
-    capsule = _body(
-        "cap", Capsule((0.0, 0.0, 0.0), (20.0, 0.0, 0.0), radius_mm=2.0),
-        rotation=(0.0, 0.0, half, half),
-    )
-    sphere = _body("sph", Sphere(radius_mm=1.0), translation=(0.0, 10.0, 2.5))
-    events = BroadPhaseCollisionQuery((capsule, sphere)).check_state()
-    assert events[0].confidence == "narrow_phase"
-    assert events[0].penetration_mm == pytest.approx(0.5, abs=1e-9)
-
-
 def test_unsupported_pair_stays_broad_phase_honestly():
+    """圆柱族没有narrow phase实现——事件必须自报`broad_phase`且不给穿透值。
+
+    "不知道就说不知道"：冒充一个`penetration_mm`比不给更糟，因为调用方
+    没有办法分辨哪个数是算出来的、哪个是编的。
+    """
+
     sphere = _body("sph", Sphere(radius_mm=30.0))
-    roller = _body("rol", FiniteCylinder(radius_mm=45.0, half_width_mm=9.0),
-                   translation=(40.0, 0.0, 0.0))
+    roller = _body(
+        "rol", FiniteCylinder(radius_mm=45.0, half_width_mm=9.0), translation=(40.0, 0.0, 0.0)
+    )
     events = BroadPhaseCollisionQuery((sphere, roller)).check_state()
+    assert len(events) == 1
     assert events[0].confidence == "broad_phase"
     assert events[0].penetration_mm is None
 
 
-def test_parallel_segments_distance():
-    assert segment_segment_distance_mm(
-        (0, 0, 0), (10, 0, 0), (0, 3, 0), (10, 3, 0)
-    ) == pytest.approx(3.0, abs=1e-12)
+def test_supported_pair_never_reports_broad_phase_confidence():
+    """反向：球/胶囊族一旦报事件，可信度只能是`narrow_phase`。
 
+    这条守的是降级不许反向发生——精确可算的对被降级成"大概撞了"，
+    调用方会以为引擎能力比实际弱，同样是不诚实。
+    """
 
-def test_crossing_segments_distance():
-    assert segment_segment_distance_mm(
-        (-5, 0, 1), (5, 0, 1), (0, -5, -1), (0, 5, -1)
-    ) == pytest.approx(2.0, abs=1e-12)
+    a = _body("a", Sphere(radius_mm=10.0))
+    b = _body("b", Sphere(radius_mm=10.0), translation=(15.0, 0.0, 0.0))
+    events = BroadPhaseCollisionQuery((a, b)).check_state()
+    assert [event.confidence for event in events] == ["narrow_phase"]
+    assert events[0].penetration_mm is not None

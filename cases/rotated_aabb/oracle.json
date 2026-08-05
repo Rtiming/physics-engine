@@ -1,0 +1,369 @@
+{
+  "arrays": {},
+  "case_id": "case/rotated_aabb",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/rotated_aabb",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/rotated_aabb/generate_oracle.py",
+    "sha256": "f576bef2a771155fbdcc10a7fdcd1c5e27d777d482a92d5db59fcc7cbf212f76"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "733cbbd3346214530135e4da228cb3237cb7932320265d5d5a5d1093fc4eb7b6",
+  "oracles": [
+    {
+      "expected": {
+        "local_aabb_max_mm": [
+          23.0,
+          3.0,
+          3.0
+        ],
+        "local_aabb_min_mm": [
+          -3.0,
+          -3.0,
+          -3.0
+        ],
+        "world_aabb_max_mm": [
+          30.610708247025606,
+          -4.637035794222227,
+          34.44878785264264
+        ],
+        "world_aabb_min_mm": [
+          5.022075231114888,
+          -24.360619591690607,
+          19.67205457858575
+        ]
+      },
+      "id": "oracle:rotated_aabb/capsule_offcentre_general_rotation",
+      "inputs": {
+        "guards_against": "非居中局部盒 + 一般轴旋转 + 非零平移：直接对hi套Arvo式、矩阵转置、平移漏加三错皆红",
+        "rotation_xyzw": [
+          0.0916432938695913,
+          0.1832865877391826,
+          0.2749298816087739,
+          0.9393727128473789
+        ],
+        "shape": {
+          "kind": "capsule",
+          "point_a_mm": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "point_b_mm": [
+            20.0,
+            0.0,
+            0.0
+          ],
+          "radius_mm": 3.0
+        },
+        "translation_mm": [
+          10.0,
+          -20.0,
+          30.0
+        ]
+      },
+      "tolerances": {
+        "local_aabb_max_mm": {
+          "abs": 1e-12,
+          "reason": "局部盒由形状参数的加减与min/max得到，量级50mm下双精度精确可表示；abs=1e-12mm是对『没有额外误差源』的声明，不写==0是不想把求值次序冻进契约。",
+          "rel": 0.0
+        },
+        "local_aabb_min_mm": {
+          "abs": 1e-12,
+          "reason": "局部盒由形状参数的加减与min/max得到，量级50mm下双精度精确可表示；abs=1e-12mm是对『没有额外误差源』的声明，不写==0是不想把求值次序冻进契约。",
+          "rel": 0.0
+        },
+        "world_aabb_max_mm": {
+          "abs": 1e-09,
+          "reason": "内核枚举八角点后取min/max，Arvo走中心-半边长求和——两条路径的加法次序不同，量级50mm下双精度误差~1e-14mm；abs=1e-9mm留五个量级余量。rel=0：判据是绝对包盒坐标，写成相对量在坐标接近0的轴上会退化成==0。",
+          "rel": 0.0
+        },
+        "world_aabb_min_mm": {
+          "abs": 1e-09,
+          "reason": "内核枚举八角点后取min/max，Arvo走中心-半边长求和——两条路径的加法次序不同，量级50mm下双精度误差~1e-14mm；abs=1e-9mm留五个量级余量。rel=0：判据是绝对包盒坐标，写成相对量在坐标接近0的轴上会退化成==0。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "local_aabb_max_mm": [
+          32.0,
+          12.0,
+          7.0
+        ],
+        "local_aabb_min_mm": [
+          -32.0,
+          -12.0,
+          -7.0
+        ],
+        "world_aabb_max_mm": [
+          38.712812921102035,
+          32.392304845413264,
+          14.0
+        ],
+        "world_aabb_min_mm": [
+          -28.712812921102035,
+          -20.392304845413264,
+          0.0
+        ]
+      },
+      "id": "oracle:rotated_aabb/rounded_box_fillet_counted",
+      "inputs": {
+        "guards_against": "圆角半径必须计入局部盒：漏计则局部盒判据先红",
+        "rotation_xyzw": [
+          0.0,
+          0.0,
+          0.25881904510252074,
+          0.9659258262890683
+        ],
+        "shape": {
+          "fillet_radius_mm": 2.0,
+          "half_extents_mm": [
+            30.0,
+            10.0,
+            5.0
+          ],
+          "kind": "rounded_box"
+        },
+        "translation_mm": [
+          5.0,
+          6.0,
+          7.0
+        ]
+      },
+      "tolerances": {
+        "local_aabb_max_mm": {
+          "abs": 1e-12,
+          "reason": "局部盒由形状参数的加减与min/max得到，量级50mm下双精度精确可表示；abs=1e-12mm是对『没有额外误差源』的声明，不写==0是不想把求值次序冻进契约。",
+          "rel": 0.0
+        },
+        "local_aabb_min_mm": {
+          "abs": 1e-12,
+          "reason": "局部盒由形状参数的加减与min/max得到，量级50mm下双精度精确可表示；abs=1e-12mm是对『没有额外误差源』的声明，不写==0是不想把求值次序冻进契约。",
+          "rel": 0.0
+        },
+        "world_aabb_max_mm": {
+          "abs": 1e-09,
+          "reason": "内核枚举八角点后取min/max，Arvo走中心-半边长求和——两条路径的加法次序不同，量级50mm下双精度误差~1e-14mm；abs=1e-9mm留五个量级余量。rel=0：判据是绝对包盒坐标，写成相对量在坐标接近0的轴上会退化成==0。",
+          "rel": 0.0
+        },
+        "world_aabb_min_mm": {
+          "abs": 1e-09,
+          "reason": "内核枚举八角点后取min/max，Arvo走中心-半边长求和——两条路径的加法次序不同，量级50mm下双精度误差~1e-14mm；abs=1e-9mm留五个量级余量。rel=0：判据是绝对包盒坐标，写成相对量在坐标接近0的轴上会退化成==0。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "local_aabb_max_mm": [
+          7.0,
+          7.0,
+          7.0
+        ],
+        "local_aabb_min_mm": [
+          -7.0,
+          -7.0,
+          -7.0
+        ],
+        "world_aabb_max_mm": [
+          8.0,
+          9.0,
+          10.0
+        ],
+        "world_aabb_min_mm": [
+          -6.0,
+          -5.0,
+          -4.0
+        ]
+      },
+      "id": "oracle:rotated_aabb/sphere_translation_only",
+      "inputs": {
+        "guards_against": "单位四元数+非零平移：平移漏加当场红，且旋转无关项不掩盖它",
+        "rotation_xyzw": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "shape": {
+          "kind": "sphere",
+          "radius_mm": 7.0
+        },
+        "translation_mm": [
+          1.0,
+          2.0,
+          3.0
+        ]
+      },
+      "tolerances": {
+        "local_aabb_max_mm": {
+          "abs": 1e-12,
+          "reason": "局部盒由形状参数的加减与min/max得到，量级50mm下双精度精确可表示；abs=1e-12mm是对『没有额外误差源』的声明，不写==0是不想把求值次序冻进契约。",
+          "rel": 0.0
+        },
+        "local_aabb_min_mm": {
+          "abs": 1e-12,
+          "reason": "局部盒由形状参数的加减与min/max得到，量级50mm下双精度精确可表示；abs=1e-12mm是对『没有额外误差源』的声明，不写==0是不想把求值次序冻进契约。",
+          "rel": 0.0
+        },
+        "world_aabb_max_mm": {
+          "abs": 1e-09,
+          "reason": "内核枚举八角点后取min/max，Arvo走中心-半边长求和——两条路径的加法次序不同，量级50mm下双精度误差~1e-14mm；abs=1e-9mm留五个量级余量。rel=0：判据是绝对包盒坐标，写成相对量在坐标接近0的轴上会退化成==0。",
+          "rel": 0.0
+        },
+        "world_aabb_min_mm": {
+          "abs": 1e-09,
+          "reason": "内核枚举八角点后取min/max，Arvo走中心-半边长求和——两条路径的加法次序不同，量级50mm下双精度误差~1e-14mm；abs=1e-9mm留五个量级余量。rel=0：判据是绝对包盒坐标，写成相对量在坐标接近0的轴上会退化成==0。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "local_aabb_max_mm": [
+          50.0,
+          50.0,
+          9.0
+        ],
+        "local_aabb_min_mm": [
+          -50.0,
+          -50.0,
+          -9.0
+        ],
+        "world_aabb_max_mm": [
+          26.190654995216562,
+          51.03700818249921,
+          65.26167837757303
+        ],
+        "world_aabb_min_mm": [
+          -106.19065499521656,
+          -21.037008182499207,
+          -65.26167837757303
+        ]
+      },
+      "id": "oracle:rotated_aabb/finite_cylinder_flange_counted",
+      "inputs": {
+        "guards_against": "法兰外径必须取代基圆半径进局部盒；扁盒被一般旋转后三轴半边长全变",
+        "rotation_xyzw": [
+          0.4562388174021825,
+          -0.22811940870109124,
+          0.11405970435054562,
+          0.8525245220595057
+        ],
+        "shape": {
+          "flange_outer_radius_mm": 50.0,
+          "half_width_mm": 9.0,
+          "kind": "finite_cylinder",
+          "radius_mm": 45.0
+        },
+        "translation_mm": [
+          -40.0,
+          15.0,
+          0.0
+        ]
+      },
+      "tolerances": {
+        "local_aabb_max_mm": {
+          "abs": 1e-12,
+          "reason": "局部盒由形状参数的加减与min/max得到，量级50mm下双精度精确可表示；abs=1e-12mm是对『没有额外误差源』的声明，不写==0是不想把求值次序冻进契约。",
+          "rel": 0.0
+        },
+        "local_aabb_min_mm": {
+          "abs": 1e-12,
+          "reason": "局部盒由形状参数的加减与min/max得到，量级50mm下双精度精确可表示；abs=1e-12mm是对『没有额外误差源』的声明，不写==0是不想把求值次序冻进契约。",
+          "rel": 0.0
+        },
+        "world_aabb_max_mm": {
+          "abs": 1e-09,
+          "reason": "内核枚举八角点后取min/max，Arvo走中心-半边长求和——两条路径的加法次序不同，量级50mm下双精度误差~1e-14mm；abs=1e-9mm留五个量级余量。rel=0：判据是绝对包盒坐标，写成相对量在坐标接近0的轴上会退化成==0。",
+          "rel": 0.0
+        },
+        "world_aabb_min_mm": {
+          "abs": 1e-09,
+          "reason": "内核枚举八角点后取min/max，Arvo走中心-半边长求和——两条路径的加法次序不同，量级50mm下双精度误差~1e-14mm；abs=1e-9mm留五个量级余量。rel=0：判据是绝对包盒坐标，写成相对量在坐标接近0的轴上会退化成==0。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "local_aabb_max_mm": [
+          32.5,
+          -1.5,
+          2.5
+        ],
+        "local_aabb_min_mm": [
+          -2.5,
+          -6.5,
+          -2.5
+        ],
+        "world_aabb_max_mm": [
+          32.5,
+          1.98,
+          -0.7399999999999998
+        ],
+        "world_aabb_min_mm": [
+          -2.5,
+          -4.220000000000001,
+          -6.9399999999999995
+        ]
+      },
+      "id": "oracle:rotated_aabb/capsule_quaternion_order_trap",
+      "inputs": {
+        "guards_against": "xyzw按wxyz读会把绕x的旋转读成绕z：细长胶囊下两个包盒差出十几毫米",
+        "rotation_xyzw": [
+          0.6,
+          0.0,
+          0.0,
+          0.8
+        ],
+        "shape": {
+          "kind": "capsule",
+          "point_a_mm": [
+            0.0,
+            -4.0,
+            0.0
+          ],
+          "point_b_mm": [
+            30.0,
+            -4.0,
+            0.0
+          ],
+          "radius_mm": 2.5
+        },
+        "translation_mm": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "tolerances": {
+        "local_aabb_max_mm": {
+          "abs": 1e-12,
+          "reason": "局部盒由形状参数的加减与min/max得到，量级50mm下双精度精确可表示；abs=1e-12mm是对『没有额外误差源』的声明，不写==0是不想把求值次序冻进契约。",
+          "rel": 0.0
+        },
+        "local_aabb_min_mm": {
+          "abs": 1e-12,
+          "reason": "局部盒由形状参数的加减与min/max得到，量级50mm下双精度精确可表示；abs=1e-12mm是对『没有额外误差源』的声明，不写==0是不想把求值次序冻进契约。",
+          "rel": 0.0
+        },
+        "world_aabb_max_mm": {
+          "abs": 1e-09,
+          "reason": "内核枚举八角点后取min/max，Arvo走中心-半边长求和——两条路径的加法次序不同，量级50mm下双精度误差~1e-14mm；abs=1e-9mm留五个量级余量。rel=0：判据是绝对包盒坐标，写成相对量在坐标接近0的轴上会退化成==0。",
+          "rel": 0.0
+        },
+        "world_aabb_min_mm": {
+          "abs": 1e-09,
+          "reason": "内核枚举八角点后取min/max，Arvo走中心-半边长求和——两条路径的加法次序不同，量级50mm下双精度误差~1e-14mm；abs=1e-9mm留五个量级余量。rel=0：判据是绝对包盒坐标，写成相对量在坐标接近0的轴上会退化成==0。",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

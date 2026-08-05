@@ -1,0 +1,71 @@
+# 案例套件（中央索引）
+
+案例是一等交付物（decisions/0015第二条），不是测试的附属品。
+本目录的形制按plans/02第四节"案例套件的仓内布局"：
+
+- **布局抄Chrono**：案例与参考数据同库，**生成金标的输入卡/脚本一起入库**；
+- **测试组织抄MuJoCo**：conformance测试在`tests/cases/`，与案例目录一一对应；
+- **金标形制抄FEBio**：只比确定性量、零容差、判据表逐条带理由；
+- **oracle清单抄FTS**的`manifest.json`（轴7规则2，参考实现在`src/physics_engine/oracles.py`）；
+- **容差声明抄GROMACS**：成对rel/abs**并写理由**。
+
+**本仓不做"不炸即过"**——PyElastica那个`examples/`只判脚本退出码为0、
+25个案例README全是0字节，是明确的反面教材（research/05第一节）。
+
+## 一、现有案例
+
+| 案例 | 判据 | 档 | 负载级 | 清单 | conformance |
+|---|---|---|---|---|---|
+| [`segment_distance`](segment_distance/case.md) | `d = segdist − (r1+r2)`，abs 1e-12mm；五条退化分支+一条一般路径各一条手算用例 | A | interactive | 11条 | `tests/cases/test_segment_distance.py` |
+| [`rotated_aabb`](rotated_aabb/case.md) | 八角点枚举 对 Arvo中心-半边长闭式解，abs 1e-9mm | A | interactive | 5条 | `tests/cases/test_rotated_aabb.py` |
+| [`broadphase_superset`](broadphase_superset/case.md) | `separation_mm < 0 ⟹ AABB相交`，反例数严格为0（仅球/胶囊族） | A | interactive | 1条+120对语料 | `tests/cases/test_broadphase_superset.py` |
+| [`mesh_asset_integrity`](mesh_asset_integrity/case.md) | `sha256(资产)==声明` 且 逐轴`declared_min≤true_min`、`declared_max≥true_max`，均零容差 | A | interactive | 3条 | `tests/cases/test_mesh_asset_integrity.py` |
+
+**在建**：`peer_fcl_distance`（同行库对拍：球/胶囊距离对FCL，plans/02第四节
+第一批第2条）由同行对比轨道交付，落地后在上表补一行。
+
+## 二、案例页六必填字段（缺一即红）
+
+`tools/check_case_pages.py`逐条校验，进`accept.py full`档：
+
+1. `## 一、物理/几何设定`——全部参数与单位；
+2. `## 二、参考解出处`——闭式解引文献作者/年/式号；无闭式解则生成脚本入库并给SHA；
+3. `## 三、判据表`——量→rel/abs→**理由**（必须是表格，表头含"理由"列，至少一行数据）；
+4. `## 四、已知失效清单`——每条一行理由，**禁止静默skip**；
+5. `## 五、档位与负载级`——A/B/C档 + 交互级/本机批级/服务器级，与清单`load_tier`一致；
+6. `## 六、本案例不是什么`——Drake形制的负空间声明。
+
+外加三条结构校验：案例目录必须出现在本页（新案例不许悄悄进仓）；
+有`oracle.json`就必须过`physics_engine.oracles`的严格加载器；
+清单的`case_id`与`load_tier`必须在案例页里出现。
+
+新建案例：`cp -r cases/_template cases/<新案例>`，照着填。
+下划线开头的目录不被当作案例。
+
+## 三、一个案例目录长什么样
+
+    cases/<case_id>/
+      case.md              六必填字段的案例页
+      oracle.json          oracle清单（engine_oracle_manifest面，自指哈希+生成器SHA）
+      generate_oracle.py   金标生成器（脚本SHA钉在清单里，改了不重跑读侧当场红）
+      …                    语料（场景文件、数组文件、资产与其生成脚本）
+
+`oracle.json`按`indent=2`落盘：清单的**身份**是规范字节的SHA-256
+（`manifest_self_sha256`），与排版无关，所以可以排成人能读的样子——
+金标改一个数时`git diff`只显示那一行，而规则5要审的正是这种改动。
+压成一行的话整份清单一起变，审无可审。
+
+读清单：`.venv/bin/python -c "import json;print(json.load(open('cases/<case>/oracle.json'))['oracles'][0])"`。
+
+## 四、改金标的规矩（轴7规则5）
+
+**不得为让改动通过而放宽容差、删除测试或重生成金标。**
+重生成必须走决策记录，并把决策记录路径写进清单的`regenerated_by`字段——
+加载器校验它以`docs/decisions/`开头且文件真的存在，否则拒收。
+FEBio的`acceptChanges.py`是这条闭环的出处，本仓的加强是"决策记录必须存在"。
+
+跑一遍全部生成器（改了生成器之后必须做）：
+
+    for case in segment_distance rotated_aabb broadphase_superset mesh_asset_integrity; do
+      PYTHONPATH=src .venv/bin/python cases/$case/generate_oracle.py
+    done

@@ -1,0 +1,554 @@
+{
+  "arrays": {},
+  "case_id": "case/segment_distance",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/segment_distance",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/segment_distance/generate_oracle.py",
+    "sha256": "f59cd69480154834a13603cd78e06c61f047e19f29dcd4bd07bb53bebce35091"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "2a8bcc75d118cd18952355819345e3a5beeaeab811195d9bff349c4a175a8c47",
+  "oracles": [
+    {
+      "expected": {
+        "distance_mm": 5.0
+      },
+      "id": "oracle:segment_distance/branch_point_point",
+      "inputs": {
+        "kernel_branch": "两段都退化为点（a≤1e-12 且 e≤1e-12）",
+        "kind": "segment_pair",
+        "p1_mm": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "p2_mm": [
+          3.0,
+          4.0,
+          0.0
+        ],
+        "q1_mm": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "q2_mm": [
+          3.0,
+          4.0,
+          0.0
+        ]
+      },
+      "tolerances": {
+        "distance_mm": {
+          "abs": 1e-12,
+          "reason": "闭式解与被验内核都只做加减乘与一次开方，量级10mm下双精度舍入~1e-15mm；abs=1e-12mm留三个量级余量。**不写==0**：逐位相等会把求和次序也冻结成契约，那是实现细节不是物理。rel=0是因为判据是绝对几何间隙，不随量级缩放。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "distance_mm": 13.0
+      },
+      "id": "oracle:segment_distance/branch_segment1_degenerate",
+      "inputs": {
+        "kernel_branch": "仅段1退化为点（a≤1e-12 且 e>1e-12）",
+        "kind": "segment_pair",
+        "p1_mm": [
+          0.0,
+          12.0,
+          5.0
+        ],
+        "p2_mm": [
+          -10.0,
+          0.0,
+          0.0
+        ],
+        "q1_mm": [
+          0.0,
+          12.0,
+          5.0
+        ],
+        "q2_mm": [
+          10.0,
+          0.0,
+          0.0
+        ]
+      },
+      "tolerances": {
+        "distance_mm": {
+          "abs": 1e-12,
+          "reason": "闭式解与被验内核都只做加减乘与一次开方，量级10mm下双精度舍入~1e-15mm；abs=1e-12mm留三个量级余量。**不写==0**：逐位相等会把求和次序也冻结成契约，那是实现细节不是物理。rel=0是因为判据是绝对几何间隙，不随量级缩放。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "distance_mm": 7.0
+      },
+      "id": "oracle:segment_distance/branch_segment2_degenerate",
+      "inputs": {
+        "kernel_branch": "仅段2退化为点（e≤1e-12 且 a>1e-12）",
+        "kind": "segment_pair",
+        "p1_mm": [
+          -10.0,
+          0.0,
+          0.0
+        ],
+        "p2_mm": [
+          0.0,
+          0.0,
+          7.0
+        ],
+        "q1_mm": [
+          10.0,
+          0.0,
+          0.0
+        ],
+        "q2_mm": [
+          0.0,
+          0.0,
+          7.0
+        ]
+      },
+      "tolerances": {
+        "distance_mm": {
+          "abs": 1e-12,
+          "reason": "闭式解与被验内核都只做加减乘与一次开方，量级10mm下双精度舍入~1e-15mm；abs=1e-12mm留三个量级余量。**不写==0**：逐位相等会把求和次序也冻结成契约，那是实现细节不是物理。rel=0是因为判据是绝对几何间隙，不随量级缩放。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "distance_mm": 3.0
+      },
+      "id": "oracle:segment_distance/branch_parallel",
+      "inputs": {
+        "kernel_branch": "两段平行（denominator=ae−b²≤1e-12）",
+        "kind": "segment_pair",
+        "p1_mm": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "p2_mm": [
+          0.0,
+          3.0,
+          0.0
+        ],
+        "q1_mm": [
+          10.0,
+          0.0,
+          0.0
+        ],
+        "q2_mm": [
+          10.0,
+          3.0,
+          0.0
+        ]
+      },
+      "tolerances": {
+        "distance_mm": {
+          "abs": 1e-12,
+          "reason": "闭式解与被验内核都只做加减乘与一次开方，量级10mm下双精度舍入~1e-15mm；abs=1e-12mm留三个量级余量。**不写==0**：逐位相等会把求和次序也冻结成契约，那是实现细节不是物理。rel=0是因为判据是绝对几何间隙，不随量级缩放。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "distance_mm": 5.0
+      },
+      "id": "oracle:segment_distance/branch_t_below_zero",
+      "inputs": {
+        "kernel_branch": "t<0被钳制到0（denominator>1e-12）",
+        "kind": "segment_pair",
+        "p1_mm": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "p2_mm": [
+          5.0,
+          3.0,
+          4.0
+        ],
+        "q1_mm": [
+          10.0,
+          0.0,
+          0.0
+        ],
+        "q2_mm": [
+          5.0,
+          11.0,
+          4.0
+        ]
+      },
+      "tolerances": {
+        "distance_mm": {
+          "abs": 1e-12,
+          "reason": "闭式解与被验内核都只做加减乘与一次开方，量级10mm下双精度舍入~1e-15mm；abs=1e-12mm留三个量级余量。**不写==0**：逐位相等会把求和次序也冻结成契约，那是实现细节不是物理。rel=0是因为判据是绝对几何间隙，不随量级缩放。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "distance_mm": 10.0
+      },
+      "id": "oracle:segment_distance/branch_t_above_one",
+      "inputs": {
+        "kernel_branch": "t>1被钳制到1（denominator>1e-12）",
+        "kind": "segment_pair",
+        "p1_mm": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "p2_mm": [
+          5.0,
+          -16.0,
+          6.0
+        ],
+        "q1_mm": [
+          10.0,
+          0.0,
+          0.0
+        ],
+        "q2_mm": [
+          5.0,
+          -8.0,
+          6.0
+        ]
+      },
+      "tolerances": {
+        "distance_mm": {
+          "abs": 1e-12,
+          "reason": "闭式解与被验内核都只做加减乘与一次开方，量级10mm下双精度舍入~1e-15mm；abs=1e-12mm留三个量级余量。**不写==0**：逐位相等会把求和次序也冻结成契约，那是实现细节不是物理。rel=0是因为判据是绝对几何间隙，不随量级缩放。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "distance_mm": 2.0
+      },
+      "id": "oracle:segment_distance/interior_crossing",
+      "inputs": {
+        "kernel_branch": "无退化的一般路径（s、t都不被钳制）",
+        "kind": "segment_pair",
+        "p1_mm": [
+          -5.0,
+          0.0,
+          1.0
+        ],
+        "p2_mm": [
+          0.0,
+          -5.0,
+          -1.0
+        ],
+        "q1_mm": [
+          5.0,
+          0.0,
+          1.0
+        ],
+        "q2_mm": [
+          0.0,
+          5.0,
+          -1.0
+        ]
+      },
+      "tolerances": {
+        "distance_mm": {
+          "abs": 1e-12,
+          "reason": "闭式解与被验内核都只做加减乘与一次开方，量级10mm下双精度舍入~1e-15mm；abs=1e-12mm留三个量级余量。**不写==0**：逐位相等会把求和次序也冻结成契约，那是实现细节不是物理。rel=0是因为判据是绝对几何间隙，不随量级缩放。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "confidence": "narrow_phase",
+        "event_count": 1,
+        "penetration_mm": 5.0
+      },
+      "id": "oracle:segment_distance/two_spheres_overlap",
+      "inputs": {
+        "bodies": [
+          {
+            "body_id": "body/a",
+            "rotation_xyzw": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "shape": {
+              "kind": "sphere",
+              "radius_mm": 10.0
+            },
+            "translation_mm": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          {
+            "body_id": "body/b",
+            "rotation_xyzw": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "shape": {
+              "kind": "sphere",
+              "radius_mm": 10.0
+            },
+            "translation_mm": [
+              15.0,
+              0.0,
+              0.0
+            ]
+          }
+        ],
+        "kind": "body_pair"
+      },
+      "tolerances": {
+        "confidence": {
+          "abs": 0.0,
+          "reason": "可信度是枚举字符串，逐位相等；降级冒充narrow是诚实性缺陷。",
+          "rel": 0.0
+        },
+        "event_count": {
+          "abs": 0.0,
+          "reason": "事件条数是确定性整数，零容差；多报漏报都是行为回退。",
+          "rel": 0.0
+        },
+        "penetration_mm": {
+          "abs": 1e-12,
+          "reason": "闭式解与被验内核都只做加减乘与一次开方，量级10mm下双精度舍入~1e-15mm；abs=1e-12mm留三个量级余量。**不写==0**：逐位相等会把求和次序也冻结成契约，那是实现细节不是物理。rel=0是因为判据是绝对几何间隙，不随量级缩放。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "confidence": "narrow_phase",
+        "event_count": 1,
+        "penetration_mm": 2.0
+      },
+      "id": "oracle:segment_distance/sphere_capsule",
+      "inputs": {
+        "bodies": [
+          {
+            "body_id": "body/cap",
+            "rotation_xyzw": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "shape": {
+              "kind": "capsule",
+              "point_a_mm": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "point_b_mm": [
+                20.0,
+                0.0,
+                0.0
+              ],
+              "radius_mm": 3.0
+            },
+            "translation_mm": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          {
+            "body_id": "body/sph",
+            "rotation_xyzw": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "shape": {
+              "kind": "sphere",
+              "radius_mm": 4.0
+            },
+            "translation_mm": [
+              10.0,
+              5.0,
+              0.0
+            ]
+          }
+        ],
+        "kind": "body_pair"
+      },
+      "tolerances": {
+        "confidence": {
+          "abs": 0.0,
+          "reason": "可信度是枚举字符串，逐位相等；降级冒充narrow是诚实性缺陷。",
+          "rel": 0.0
+        },
+        "event_count": {
+          "abs": 0.0,
+          "reason": "事件条数是确定性整数，零容差；多报漏报都是行为回退。",
+          "rel": 0.0
+        },
+        "penetration_mm": {
+          "abs": 1e-12,
+          "reason": "闭式解与被验内核都只做加减乘与一次开方，量级10mm下双精度舍入~1e-15mm；abs=1e-12mm留三个量级余量。**不写==0**：逐位相等会把求和次序也冻结成契约，那是实现细节不是物理。rel=0是因为判据是绝对几何间隙，不随量级缩放。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "confidence": "narrow_phase",
+        "event_count": 1,
+        "penetration_mm": 0.5
+      },
+      "id": "oracle:segment_distance/rotated_capsule",
+      "inputs": {
+        "bodies": [
+          {
+            "body_id": "body/cap",
+            "rotation_xyzw": [
+              0.0,
+              0.0,
+              0.7071067811865476,
+              0.7071067811865476
+            ],
+            "shape": {
+              "kind": "capsule",
+              "point_a_mm": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "point_b_mm": [
+                20.0,
+                0.0,
+                0.0
+              ],
+              "radius_mm": 2.0
+            },
+            "translation_mm": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          {
+            "body_id": "body/sph",
+            "rotation_xyzw": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "shape": {
+              "kind": "sphere",
+              "radius_mm": 1.0
+            },
+            "translation_mm": [
+              0.0,
+              10.0,
+              2.5
+            ]
+          }
+        ],
+        "kind": "body_pair"
+      },
+      "tolerances": {
+        "confidence": {
+          "abs": 0.0,
+          "reason": "可信度是枚举字符串，逐位相等；降级冒充narrow是诚实性缺陷。",
+          "rel": 0.0
+        },
+        "event_count": {
+          "abs": 0.0,
+          "reason": "事件条数是确定性整数，零容差；多报漏报都是行为回退。",
+          "rel": 0.0
+        },
+        "penetration_mm": {
+          "abs": 1e-12,
+          "reason": "闭式解与被验内核都只做加减乘与一次开方，量级10mm下双精度舍入~1e-15mm；abs=1e-12mm留三个量级余量。**不写==0**：逐位相等会把求和次序也冻结成契约，那是实现细节不是物理。rel=0是因为判据是绝对几何间隙，不随量级缩放。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "event_count": 0,
+        "segment_distance_mm": 11.313708498984761
+      },
+      "id": "oracle:segment_distance/broad_hit_narrow_clear",
+      "inputs": {
+        "bodies": [
+          {
+            "body_id": "body/a",
+            "rotation_xyzw": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "shape": {
+              "kind": "sphere",
+              "radius_mm": 5.0
+            },
+            "translation_mm": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          {
+            "body_id": "body/b",
+            "rotation_xyzw": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "shape": {
+              "kind": "sphere",
+              "radius_mm": 5.0
+            },
+            "translation_mm": [
+              8.0,
+              8.0,
+              0.0
+            ]
+          }
+        ],
+        "kind": "body_pair"
+      },
+      "tolerances": {
+        "event_count": {
+          "abs": 0.0,
+          "reason": "事件条数是确定性整数，零容差；多报漏报都是行为回退。",
+          "rel": 0.0
+        },
+        "segment_distance_mm": {
+          "abs": 1e-12,
+          "reason": "闭式解与被验内核都只做加减乘与一次开方，量级10mm下双精度舍入~1e-15mm；abs=1e-12mm留三个量级余量。**不写==0**：逐位相等会把求和次序也冻结成契约，那是实现细节不是物理。rel=0是因为判据是绝对几何间隙，不随量级缩放。",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
