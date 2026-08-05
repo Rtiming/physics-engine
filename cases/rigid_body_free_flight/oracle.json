@@ -1,0 +1,454 @@
+{
+  "arrays": {},
+  "case_id": "case/rigid_body_free_flight",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/rigid_body_free_flight",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/rigid_body_free_flight/generate_oracle.py",
+    "sha256": "749339d27ca0703a4af78660354705ad1d13ac92161f5d2af4761bf3228e6985"
+  },
+  "load_tier": "local_batch",
+  "manifest_self_sha256": "3f50778f6121b72b8ef3ba2cb0e779fcc9015051cc76911fac73be59ee18ea3f",
+  "oracles": [
+    {
+      "expected": {
+        "box_diagonal_kg_mm2": [
+          166.66666666666666,
+          333.3333333333333,
+          433.3333333333333
+        ],
+        "disc_diagonal_kg_mm2": [
+          408.3333333333333,
+          408.3333333333333,
+          800.0
+        ],
+        "rod_diagonal_kg_mm2": [
+          539.5833333333334,
+          539.5833333333334,
+          12.5
+        ]
+      },
+      "id": "oracle:rigidbody/inertia_from_geometry",
+      "inputs": {
+        "box_half_extents_mm": [
+          30.0,
+          20.0,
+          10.0
+        ],
+        "disc_half_width_mm": 5.0,
+        "disc_radius_mm": 40.0,
+        "kind": "principal_moments_from_analytic_primitives",
+        "mass_kg": 1.0,
+        "rod_half_width_mm": 40.0,
+        "rod_radius_mm": 5.0
+      },
+      "tolerances": {
+        "box_diagonal_kg_mm2": {
+          "abs": 0.0,
+          "reason": "教科书闭式（盒`m(b²+c²)/3`、圆柱`m(3r²+L²)/12`与`m·r²/2`）对`geometry.mass_properties`——两条独立路径，后者走的是圆角盒的Steiner展开在`r_f → 0`的退化与圆柱闭式。只受双精度舍入影响，rel 1e-15。**这一行是本案例唯一验惯量绝对量级的地方**：其余判据在无力矩下对`I → c·I`全盲（第四节第1条）。",
+          "rel": 1e-15
+        },
+        "disc_diagonal_kg_mm2": {
+          "abs": 0.0,
+          "reason": "教科书闭式（盒`m(b²+c²)/3`、圆柱`m(3r²+L²)/12`与`m·r²/2`）对`geometry.mass_properties`——两条独立路径，后者走的是圆角盒的Steiner展开在`r_f → 0`的退化与圆柱闭式。只受双精度舍入影响，rel 1e-15。**这一行是本案例唯一验惯量绝对量级的地方**：其余判据在无力矩下对`I → c·I`全盲（第四节第1条）。",
+          "rel": 1e-15
+        },
+        "rod_diagonal_kg_mm2": {
+          "abs": 0.0,
+          "reason": "教科书闭式（盒`m(b²+c²)/3`、圆柱`m(3r²+L²)/12`与`m·r²/2`）对`geometry.mass_properties`——两条独立路径，后者走的是圆角盒的Steiner展开在`r_f → 0`的退化与圆柱闭式。只受双精度舍入影响，rel 1e-15。**这一行是本案例唯一验惯量绝对量级的地方**：其余判据在无力矩下对`I → c·I`全盲（第四节第1条）。",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "all_drifts_nonzero": true,
+        "body_frame_momentum_variation_floor": 0.5,
+        "body_frame_momentum_varies": true,
+        "energy_ratios_within_band": true,
+        "formal_order": 4,
+        "momentum_ratios_within_band": true,
+        "ratio_high": 17.0,
+        "ratio_low": 15.0
+      },
+      "id": "oracle:rigidbody/conservation_order_rk4",
+      "inputs": {
+        "body": "box",
+        "dt_s_ladder": [
+          0.008,
+          0.004,
+          0.002
+        ],
+        "horizon_s": 2.0,
+        "integrator": "rk4_rigid_body",
+        "kind": "torque_free_conservation_order",
+        "omega0_rad_per_s": [
+          1.0,
+          2.0,
+          3.0
+        ]
+      },
+      "tolerances": {
+        "all_drifts_nonzero": {
+          "abs": 0.0,
+          "reason": "前置断言（spec/12第6.2节写法1的堵法）：漂移全为零时任何比值判据都无从谈起，而`0/0`会以各种方式假通过",
+          "rel": 0.0
+        },
+        "body_frame_momentum_variation_floor": {
+          "abs": 0.0,
+          "reason": "地板值，零容差比较",
+          "rel": 0.0
+        },
+        "body_frame_momentum_varies": {
+          "abs": 0.0,
+          "reason": "**反向**前置断言：体系角动量`I·ω`必须变化超过`|L|`的一半（实测0.9847）。没有它，惯性系守恒判据可能只是在陈述一个恒等式——ω不动的实现照样全绿。这是本案例最要紧的一行",
+          "rel": 0.0
+        },
+        "energy_ratios_within_band": {
+          "abs": 0.0,
+          "reason": "布尔判据：转动动能的漂移比落在同一区间内",
+          "rel": 0.0
+        },
+        "formal_order": {
+          "abs": 0.0,
+          "reason": "整数，非数值量必须零容差",
+          "rel": 0.0
+        },
+        "momentum_ratios_within_band": {
+          "abs": 0.0,
+          "reason": "布尔判据：**惯性系**角动量矢量的漂移比落在区间内。守恒量必须写在惯性系里——体系里的`I·ω`本来就不守恒",
+          "rel": 0.0
+        },
+        "ratio_high": {
+          "abs": 0.0,
+          "reason": "16是RK4漂移随步长减半的**渐近**比值，粗档没完全进渐近区（实测15.68—16.12），写死为16会让正确实现在粗档上红（与`harmonic_oscillator`的[3.9,4.1]同源）。区间[15.0, 17.0]不算松：一阶实现给2、二阶给4，离下界还差三倍以上。",
+          "rel": 0.0
+        },
+        "ratio_low": {
+          "abs": 0.0,
+          "reason": "16是RK4漂移随步长减半的**渐近**比值，粗档没完全进渐近区（实测15.68—16.12），写死为16会让正确实现在粗档上红（与`harmonic_oscillator`的[3.9,4.1]同源）。区间[15.0, 17.0]不算松：一阶实现给2、二阶给4，离下界还差三倍以上。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "all_nonzero": true,
+        "ordering": [
+          "explicit_euler_rigid_body",
+          "rk4_rigid_body"
+        ]
+      },
+      "id": "oracle:rigidbody/drift_ordering",
+      "inputs": {
+        "body": "box",
+        "dt_s": 0.0005,
+        "horizon_s": 2.0,
+        "kind": "conservation_drift_ordering",
+        "omega0_rad_per_s": [
+          1.0,
+          2.0,
+          3.0
+        ]
+      },
+      "tolerances": {
+        "all_nonzero": {
+          "abs": 0.0,
+          "reason": "前置断言，防两者全零时`0 > 0`被写成`>=`而假通过",
+          "rel": 0.0
+        },
+        "ordering": {
+          "abs": 0.0,
+          "reason": "非数值量（顺序列表）必须零容差。排序判据不受实现常数影响，换机器换编译器都成立（spec/12第6.2节写法2）",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "body_precession_rate_per_s": 3.8367346938775513,
+        "inertial_precession_rate_per_s": 7.859669882522044
+      },
+      "id": "oracle:rigidbody/axisymmetric_precession_disc",
+      "inputs": {
+        "body": "disc",
+        "dt_s": 0.002,
+        "half_width_mm": 5.0,
+        "horizon_s": 4.0,
+        "kind": "torque_free_axisymmetric_precession",
+        "omega0_rad_per_s": [
+          0.6,
+          0.0,
+          4.0
+        ],
+        "radius_mm": 40.0
+      },
+      "tolerances": {
+        "body_precession_rate_per_s": {
+          "abs": 0.0,
+          "reason": "闭式进动率（Kane 1983，经Drake `free_body`）对相位展开测得的平均角速率。实测rel：扁体2.886e-11（体系）/1.537e-11（惯性系）、长体3.104e-11/4.843e-11。rel 1e-8留约200倍余量——余量给的是`atan2`跨平台的末位差与相位展开的累加，**不是给物理错留的**：一条真的错的进动率差100%不差1e-8。**判据必须带符号**：扁体为正、长体为负，写成绝对值就分不开`ω × (I·ω)`与`(I·ω) × ω`（第六节必红2）。",
+          "rel": 1e-08
+        },
+        "inertial_precession_rate_per_s": {
+          "abs": 0.0,
+          "reason": "闭式进动率（Kane 1983，经Drake `free_body`）对相位展开测得的平均角速率。实测rel：扁体2.886e-11（体系）/1.537e-11（惯性系）、长体3.104e-11/4.843e-11。rel 1e-8留约200倍余量——余量给的是`atan2`跨平台的末位差与相位展开的累加，**不是给物理错留的**：一条真的错的进动率差100%不差1e-8。**判据必须带符号**：扁体为正、长体为负，写成绝对值就分不开`ω × (I·ω)`与`(I·ω) × ω`（第六节必红2）。",
+          "rel": 1e-08
+        }
+      }
+    },
+    {
+      "expected": {
+        "body_precession_rate_per_s": -3.9073359073359075,
+        "body_rate_is_negative": true,
+        "inertial_precession_rate_per_s": 0.6071133617943683
+      },
+      "id": "oracle:rigidbody/axisymmetric_precession_rod",
+      "inputs": {
+        "body": "rod",
+        "dt_s": 0.002,
+        "half_width_mm": 40.0,
+        "horizon_s": 4.0,
+        "kind": "torque_free_axisymmetric_precession",
+        "omega0_rad_per_s": [
+          0.6,
+          0.0,
+          4.0
+        ],
+        "radius_mm": 5.0
+      },
+      "tolerances": {
+        "body_precession_rate_per_s": {
+          "abs": 0.0,
+          "reason": "闭式进动率（Kane 1983，经Drake `free_body`）对相位展开测得的平均角速率。实测rel：扁体2.886e-11（体系）/1.537e-11（惯性系）、长体3.104e-11/4.843e-11。rel 1e-8留约200倍余量——余量给的是`atan2`跨平台的末位差与相位展开的累加，**不是给物理错留的**：一条真的错的进动率差100%不差1e-8。**判据必须带符号**：扁体为正、长体为负，写成绝对值就分不开`ω × (I·ω)`与`(I·ω) × ω`（第六节必红2）。",
+          "rel": 1e-08
+        },
+        "body_rate_is_negative": {
+          "abs": 0.0,
+          "reason": "长圆柱`Ia < It`故进动率为负，扁圆柱为正——两个符号都跑，写成`abs()`的判据当场分不开叉乘次序",
+          "rel": 0.0
+        },
+        "inertial_precession_rate_per_s": {
+          "abs": 0.0,
+          "reason": "闭式进动率（Kane 1983，经Drake `free_body`）对相位展开测得的平均角速率。实测rel：扁体2.886e-11（体系）/1.537e-11（惯性系）、长体3.104e-11/4.843e-11。rel 1e-8留约200倍余量——余量给的是`atan2`跨平台的末位差与相位展开的累加，**不是给物理错留的**：一条真的错的进动率差100%不差1e-8。**判据必须带符号**：扁体为正、长体为负，写成绝对值就分不开`ω × (I·ω)`与`(I·ω) × ω`（第六节必红2）。",
+          "rel": 1e-08
+        }
+      }
+    },
+    {
+      "expected": {
+        "growth_rate_is_positive": true,
+        "growth_rate_per_s": 2.401922307076307
+      },
+      "id": "oracle:rigidbody/dzhanibekov_growth_rate",
+      "inputs": {
+        "body": "box",
+        "dt_s": 0.001,
+        "horizon_s": 3.0,
+        "kind": "intermediate_axis_growth_rate",
+        "perturbation_rad_per_s": 1e-06,
+        "spin_axis": 1,
+        "spin_rad_per_s": 5.0,
+        "window_s": [
+          1.5,
+          3.0
+        ]
+      },
+      "tolerances": {
+        "growth_rate_is_positive": {
+          "abs": 0.0,
+          "reason": "**符号就是中间轴定理本身**：正=不稳定。陀螺项漏掉时增长率恰为0，这条与上一条一起把它挡下",
+          "rel": 0.0
+        },
+        "growth_rate_per_s": {
+          "abs": 0.0,
+          "reason": "线性化增长率闭式对窗口[1.5, 3.0]s内的对数斜率。实测偏差4.51e-05且**换步长到第13位都不变**（dt=1e-3与5e-4给2.401813966348615/…559），因此这4.5e-5是有限振幅的物理修正而不是积分误差——扰动到窗口末端已长到初值的约2.6e2倍。rel 1e-3给它约22倍余量；而漏掉陀螺项给0、绕稳定轴给负数，都在1e-3之外好几个数量级。",
+          "rel": 0.001
+        }
+      }
+    },
+    {
+      "expected": {
+        "max_axis_amplification": 1.1547005383792515,
+        "min_axis_amplification": 1.0
+      },
+      "id": "oracle:rigidbody/dzhanibekov_stable_axes",
+      "inputs": {
+        "body": "box",
+        "dt_s": 0.001,
+        "horizon_s": 3.0,
+        "kind": "stable_axis_amplification",
+        "perturbation_rad_per_s": 1e-06,
+        "spin_rad_per_s": 5.0
+      },
+      "tolerances": {
+        "max_axis_amplification": {
+          "abs": 0.0,
+          "reason": "同一线性化的振幅上界闭式。实测rel 1.596e-07（最小轴）与9.315e-08（最大轴）。**这个残差不是积分误差，是取max的采样误差**：峰值落在两个采样点之间，误差按`(ν·dt)²`走（dt减半到5e-4时降到8.5e-9/3.8e-9）。rel 1e-5因此留约60倍余量，且不削弱判据——中间轴同一口径下放大554倍，与1.15差两个半数量级。",
+          "rel": 1e-05
+        },
+        "min_axis_amplification": {
+          "abs": 0.0,
+          "reason": "同一线性化的振幅上界闭式。实测rel 1.596e-07（最小轴）与9.315e-08（最大轴）。**这个残差不是积分误差，是取max的采样误差**：峰值落在两个采样点之间，误差按`(ν·dt)²`走（dt减半到5e-4时降到8.5e-9/3.8e-9）。rel 1e-5因此留约60倍余量，且不削弱判据——中间轴同一口径下放大554倍，与1.15差两个半数量级。",
+          "rel": 1e-05
+        }
+      }
+    },
+    {
+      "expected": {
+        "amplification_ordering": [
+          "intermediate",
+          "max",
+          "min"
+        ],
+        "flips_about_intermediate_axis": 2,
+        "flips_about_max_axis": 0,
+        "flips_about_min_axis": 0
+      },
+      "id": "oracle:rigidbody/dzhanibekov_flips",
+      "inputs": {
+        "body": "box",
+        "dt_s": 0.002,
+        "horizon_s": 12.0,
+        "kind": "intermediate_axis_flip_count",
+        "perturbation_rad_per_s": 0.01,
+        "spin_rad_per_s": 5.0
+      },
+      "tolerances": {
+        "amplification_ordering": {
+          "abs": 0.0,
+          "reason": "非数值量必须零容差。中间轴的扰动放大必须严格大于最大轴、最大轴严格大于最小轴——排序形式不受实现常数影响",
+          "rel": 0.0
+        },
+        "flips_about_intermediate_axis": {
+          "abs": 0.0,
+          "reason": "翻转次数是**确定性整数**（自转分量的变号次数），零容差。把Dzhanibekov这条定性判据钉成可比的整数，正是它能进门的原因（决策0018：进门的是确定性量）",
+          "rel": 0.0
+        },
+        "flips_about_max_axis": {
+          "abs": 0.0,
+          "reason": "翻转次数是**确定性整数**（自转分量的变号次数），零容差。把Dzhanibekov这条定性判据钉成可比的整数，正是它能进门的原因（决策0018：进门的是确定性量）",
+          "rel": 0.0
+        },
+        "flips_about_min_axis": {
+          "abs": 0.0,
+          "reason": "翻转次数是**确定性整数**（自转分量的变号次数），零容差。把Dzhanibekov这条定性判据钉成可比的整数，正是它能进门的原因（决策0018：进门的是确定性量）",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "omega_x_rad_per_s": 0.0,
+        "omega_y_rad_per_s": 0.0,
+        "omega_z_rad_per_s": 5.769230769230769
+      },
+      "id": "oracle:rigidbody/constant_torque_ramp",
+      "inputs": {
+        "body": "box",
+        "dt_s": 0.001,
+        "horizon_s": 1.0,
+        "kind": "constant_torque_about_a_principal_axis",
+        "torque_axis": 2,
+        "torque_nmm": 2.5
+      },
+      "tolerances": {
+        "omega_x_rad_per_s": {
+          "abs": 1e-15,
+          "reason": "沿主轴的力矩不产生横向角速度；abs判据因为期望恰为0",
+          "rel": 0.0
+        },
+        "omega_y_rad_per_s": {
+          "abs": 1e-15,
+          "reason": "同上",
+          "rel": 0.0
+        },
+        "omega_z_rad_per_s": {
+          "abs": 0.0,
+          "reason": "`ω = τ·t/I`对沿主轴的常力矩是**精确**的（`ω × I·ω = 0`），RK4对常导数也精确，剩下的只是浮点噪声（实测rel 1.4e-14）。**本条是本案例唯一钉住惯量绝对量级的判据**：无力矩的四层对`I → c·I`全盲，1000倍的mm²/m²错在那里查不出来",
+          "rel": 1e-12
+        }
+      }
+    },
+    {
+      "expected": {
+        "position_y_mm": -3903.325,
+        "spin_does_not_move_the_centre_of_mass": true
+      },
+      "id": "oracle:rigidbody/free_flight_translation",
+      "inputs": {
+        "body": "box",
+        "dt_s": 0.001,
+        "gravity_mm_per_s2": -9806.65,
+        "horizon_s": 1.0,
+        "kind": "free_body_translation_rotation_decoupling",
+        "launch_speed_mm_per_s": 1000.0,
+        "spinning_omega_rad_per_s": [
+          1.0,
+          2.0,
+          3.0
+        ]
+      },
+      "tolerances": {
+        "position_y_mm": {
+          "abs": 0.0,
+          "reason": "抛物线闭式`x0 + v0T + aT²/2`；RK4对常加速度精确，剩的是浮点噪声（实测rel 1.3e-14）。与`cases/ballistic_free_flight`同一条物理、同一个数——13自由度的打包次序错了这条会立刻红",
+          "rel": 1e-12
+        },
+        "spin_does_not_move_the_centre_of_mass": {
+          "abs": 0.0,
+          "reason": "自由刚体绕质心的转动与质心平动**严格解耦**，两次运行的质心轨迹要求**逐位相同**（不是近似相同）。它挡的是'转动那一半漏进了平动那一半'这类串块错",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "deviation_nonzero": true,
+        "deviation_within_ceiling": true,
+        "max_norm_deviation_ceiling": 1e-11,
+        "renormalisation_count_equals_steps": true
+      },
+      "id": "oracle:rigidbody/quaternion_norm_drift",
+      "inputs": {
+        "body": "box",
+        "dt_s_ladder": [
+          0.008,
+          0.004,
+          0.002
+        ],
+        "horizon_s": 2.0,
+        "kind": "quaternion_norm_before_renormalisation",
+        "omega0_rad_per_s": [
+          1.0,
+          2.0,
+          3.0
+        ]
+      },
+      "tolerances": {
+        "deviation_nonzero": {
+          "abs": 0.0,
+          "reason": "前置断言：偏离恒为零说明四元数根本没被推进（比如`q̇`写成了0），此时上限判据会以最漂亮的方式假通过",
+          "rel": 0.0
+        },
+        "deviation_within_ceiling": {
+          "abs": 0.0,
+          "reason": "量的是**归一化之前**的`||q| − 1|`。归一化之后它恒等于1，断言那一侧是一条永远通过的断言（spec/12第6.2节点名的假通过）。实测最大2.288e-12（最粗档），上限1e-11留约4倍余量，并比模块失败关闭阈值1e-6低五个数量级",
+          "rel": 0.0
+        },
+        "max_norm_deviation_ceiling": {
+          "abs": 0.0,
+          "reason": "上限值，零容差比较",
+          "rel": 0.0
+        },
+        "renormalisation_count_equals_steps": {
+          "abs": 0.0,
+          "reason": "确定性整数：归一化次数必须等于步数。少一次就是某条路径跳过了投回单位球，而那条路径上的姿态是错的",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
