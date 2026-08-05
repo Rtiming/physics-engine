@@ -53,7 +53,9 @@ from physics_engine.energies import (
     AxialStretch,
     EnergyContext,
     EnergyRegistry,
+    LinearBending,
     UniformGravity,
+    clamped_chain_bending_stencils,
 )
 from physics_engine.engine_facets import PERF_BASELINE_FACET, PERF_BASELINE_VERSION
 from physics_engine.integrate import (
@@ -131,13 +133,19 @@ def _time_in_process(work: Callable[[], object], repeat: int) -> dict:
     }
 
 
-def build_chain(nodes: int) -> tuple[EnergyRegistry, State, EnergyContext]:
-    """一根``nodes``节点的直链：重力 + 逐段轴向拉伸。
+def build_chain(
+    nodes: int, *, with_bending: bool = False
+) -> tuple[EnergyRegistry, State, EnergyContext]:
+    """一根``nodes``节点的直链：重力 + 逐段轴向拉伸（可选 + 线性弯曲）。
 
     **为什么是链而不是随便一堆点**：轴向拉伸是逐单元的，链让边数恰好是``N−1``，
     于是"每节点成本"这个量有定义，可以直接对上spec/12第8.1节那条
     "每节点每次装配约60微秒"。初始位置带0.25mm的预拉伸与横向抖动——
     静止长度上伸长量为零会让梯度恰好为零，那测的就不是一般情形的分支了。
+
+    ``with_bending``给的是**求解器实际会遇到的那个注册表**：`solve_equilibrium`
+    每次牛顿迭代调一次``total(need_gradient=True, need_hessian=True)``，
+    三项一起装配。两项的画像不代表那条路的成本，所以两个都测。
     """
 
     layout = StateLayout(
@@ -162,8 +170,12 @@ def build_chain(nodes: int) -> tuple[EnergyRegistry, State, EnergyContext]:
         gravity_mm_s2=(0.0, -9806.65, 0.0),
     )
     edges = tuple((index, index + 1, 10.0, 2000.0) for index in range(nodes - 1))
-    registry = EnergyRegistry(terms=(UniformGravity(), AxialStretch(edges=edges)))
-    return registry, state, context
+    terms = [UniformGravity(), AxialStretch(edges=edges)]
+    if with_bending:
+        terms.append(
+            LinearBending(stencils=clamped_chain_bending_stencils(nodes, 10.0, 2.0e4))
+        )
+    return EnergyRegistry(terms=tuple(terms)), state, context
 
 
 #: 三档的名字与``total``的关键字。次序即报告次序。
@@ -234,16 +246,23 @@ FIT_WINDOWS: tuple[tuple[str, Callable[[int], bool]], ...] = (
 
 
 def _fit_scaling(assembly: dict[str, list[dict]]) -> dict[str, dict]:
+    """两套拟合：按中位数与按最小值。
+
+    **按最小值那套是主的。** 理由是本轮实测的：一次干扰只要打中最小的那个规模，
+    中位数拟合出来的``p``就会整体偏掉（实测见过0.72与1.02两个值来自同一份代码）。
+    最小值是各规模上"无干扰成本"的最好估计，而幂律要拟合的正是无干扰成本；
+    中位数那套留着，因为两套差得远本身就是"这次测量不干净"的信号。
+    """
+
     scaling: dict[str, dict] = {}
     for tier, records in assembly.items():
-        fits: dict[str, dict | None] = {}
+        fits: dict[str, dict] = {}
         for window_name, predicate in FIT_WINDOWS:
-            points = [
-                (record["nodes"], record["median_s"])
-                for record in records
-                if predicate(record["nodes"])
-            ]
-            fits[window_name] = _fit_power_law(points)
+            chosen = [record for record in records if predicate(record["nodes"])]
+            fits[window_name] = {
+                "by_min": _fit_power_law([(r["nodes"], r["min_s"]) for r in chosen]),
+                "by_median": _fit_power_law([(r["nodes"], r["median_s"]) for r in chosen]),
+            }
         scaling[tier] = fits
     return scaling
 
@@ -334,10 +353,33 @@ def _hotspot_rows(profiler: cProfile.Profile) -> tuple[list[dict], float]:
     return rows, total_s
 
 
-def _profile_assembly(nodes: int, kwargs: dict, repeat: int, top: int) -> dict:
+def _measure_solver_path(repeat: int) -> dict:
+    """求解器每次牛顿迭代那一次装配：三项、``need_gradient``与``need_hessian``同时要。
+
+    `solve_equilibrium`就是这么调的（`solve.py:112`）。它是本仓今天**最贵的一次
+    公开调用**，所以单列一组——两项的画像不代表它。
+    """
+
+    registry, state, context = build_chain(PROFILE_NODES, with_bending=True)
+    kwargs = {"need_gradient": True, "need_hessian": True}
+
+    def work():
+        return registry.total(state, context, **kwargs)
+
+    record = _time_in_process(work, repeat)
+    record["nodes"] = PROFILE_NODES
+    record["dof"] = len(state.vector)
+    record["terms"] = list(registry.order)
+    record["caller"] = "solve_equilibrium每次牛顿迭代一次"
+    return record
+
+
+def _profile_assembly(
+    nodes: int, kwargs: dict, repeat: int, top: int, *, with_bending: bool = False
+) -> dict:
     """cProfile跑最大规模装配，取累计时间前``top``个。"""
 
-    registry, state, context = build_chain(nodes)
+    registry, state, context = build_chain(nodes, with_bending=with_bending)
     registry.total(state, context, **kwargs)  # warm-up
 
     profiler = cProfile.Profile()
@@ -351,6 +393,7 @@ def _profile_assembly(nodes: int, kwargs: dict, repeat: int, top: int) -> dict:
         "nodes": nodes,
         "dof": nodes * 3,
         "repeat": repeat,
+        "terms": list(registry.order),
         "profiled_total_s": total_s,
         "note": PROFILE_NOTE,
         "top": rows[:top],
@@ -416,6 +459,7 @@ def measure_physics(repeat: int, *, with_profile: bool) -> dict:
         "energy_assembly": assembly,
         "scaling": _fit_scaling(assembly),
         "integration": _measure_integration(repeat),
+        "solver_path_assembly": _measure_solver_path(repeat),
     }
     if with_profile:
         report["hotspots"] = {
@@ -424,6 +468,10 @@ def measure_physics(repeat: int, *, with_profile: bool) -> dict:
             ),
             "assembly_with_hessian": _profile_assembly(
                 PROFILE_NODES, {"need_hessian": True}, 1, PROFILE_TOP
+            ),
+            "solver_path_assembly": _profile_assembly(
+                PROFILE_NODES, {"need_gradient": True, "need_hessian": True}, 1,
+                PROFILE_TOP, with_bending=True,
             ),
             "integration_physical": _profile_integration(
                 PROFILE_NODES, PROFILE_INTEGRATION_STEPS, PROFILE_TOP
@@ -473,14 +521,20 @@ def _print_physics(physics: dict) -> None:
             for r in records
         )
         print(f"    {tier:14s} {cells}")
-    print("  标度指数 p（t ∝ N^p）")
+    print("  标度指数 p（t ∝ N^p）——主口径按最小值，括号里是按中位数")
     for tier, windows in physics["scaling"].items():
         cells = " ".join(
-            f"{name}:p={fit['p']:.3f}(R²={fit['r_squared']:.3f})"
-            for name, fit in windows.items()
-            if fit is not None and fit["r_squared"] is not None
+            f"{name}:p={pair['by_min']['p']:.3f}"
+            f"(R²={pair['by_min']['r_squared']:.3f}|中位{pair['by_median']['p']:.3f})"
+            for name, pair in windows.items()
+            if pair["by_min"] is not None and pair["by_min"]["r_squared"] is not None
         )
         print(f"    {tier:14s} {cells}")
+    solver = physics["solver_path_assembly"]
+    print(
+        f"  求解器那一次装配（{'+'.join(solver['terms'])}，N={solver['nodes']}，梯度＋Hessian）"
+        f" median={solver['median_s'] * 1e3:.1f}ms min={solver['min_s'] * 1e3:.1f}ms"
+    )
     print("  积分推进 pure_python/numpy 耗时比")
     for record in physics["integration"]:
         pure = record["backends"]["pure_python"]["median_s"]
