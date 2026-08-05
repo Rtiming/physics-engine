@@ -33,16 +33,37 @@ class StateError(ValueError):
 
 @dataclass(frozen=True)
 class StateField:
-    """一个自由度块：名字带单位后缀（轴2），宽度是它占多少个标量。"""
+    """一个自由度块：名字带单位后缀（轴2），宽度是它占多少个标量。
+
+    **无量纲块必须显式声明**（`is_dimensionless=True`）。这条与轴2规则5同源：
+    `identity.assert_quantity_fields_have_units`早就把"无量纲"当成一个需要**列出来**
+    的类别，而不是"没写单位就当没有"——留空装有正是那条规则禁止的形状。
+    在`is_dimensionless`之前本类没有这个口子，于是真正无量纲的自由度
+    （单位四元数的四个分量，决策0043）只能在名字上挂一个假单位才进得来。
+    因此这里两个方向都堵：**没单位又没声明无量纲**拒收，
+    **声明了无量纲却带着单位后缀**同样拒收。
+
+    该标志**不进`StateLayout.to_document()`**，理由是打包契约的内容地址
+    （`fingerprint()`）描述的是"次序与宽度"，量纲不改变哪个数落在哪一格；
+    把它算进去会让既有布局的指纹全部变一遍，破0001三前提第三条。
+    """
 
     name: str
     width: int
     is_history: bool = False
+    is_dimensionless: bool = False
 
     def __post_init__(self) -> None:
-        if not has_unit_suffix(self.name):
+        carries_unit = has_unit_suffix(self.name)
+        if self.is_dimensionless and carries_unit:
             raise StateError(
-                f"state field must carry a unit suffix (axis 2): {self.name!r}"
+                f"state field declares itself dimensionless but carries a unit "
+                f"suffix (axis 2): {self.name!r}"
+            )
+        if not self.is_dimensionless and not carries_unit:
+            raise StateError(
+                f"state field must carry a unit suffix (axis 2) or declare "
+                f"is_dimensionless=True: {self.name!r}"
             )
         if isinstance(self.width, bool) or not isinstance(self.width, int) or self.width < 1:
             raise StateError(f"state field width must be a positive integer: {self.name!r}")

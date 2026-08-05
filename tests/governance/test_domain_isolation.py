@@ -68,7 +68,11 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
     #: 今天的`sensors`就是力学传感器，因为它唯一能校验的状态布局是力学的。
     #: 触发条件：第二个域长出自己的状态容器时，`sensors`要么升成域中立
     #: （连带`state`升基座，走决策），要么按域分裂。
-    "mechanics": ("energies", "integrate", "sensors", "solve", "state"),
+    #: `rigidbody`归力学（2026-08-05，决策0041第三节预登记、决策0043落实）：
+    #: 它import `state`（力学）、`integrate`（力学）、`energies`（力学，取`MM_PER_M`）
+    #: 与`geometry`/`shapes`（基座modelgen）——**没有一条边越到别的域**。
+    #: 判据仍是0035那条：import决定环，不是愿望决定环。
+    "mechanics": ("energies", "integrate", "rigidbody", "sensors", "solve", "state"),
     "optics": ("optics",),
     #: 第三个物理域（决策0041第三节预登记、决策0042落地）。按spec/15第七节
     #: 冻结条件2，第三个域进来时登记表**只加一行就够**——这里就是那一行，
