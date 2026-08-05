@@ -70,6 +70,12 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
     #: （连带`state`升基座，走决策），要么按域分裂。
     "mechanics": ("energies", "integrate", "sensors", "solve", "state"),
     "optics": ("optics",),
+    #: 第三个物理域（决策0041第三节预登记、决策0042落地）。按spec/15第七节
+    #: 冻结条件2，第三个域进来时登记表**只加一行就够**——这里就是那一行，
+    #: 门①②③⑤一个字都没改。research/08第七节预判"电磁大概率会触发要改门"，
+    #: **实测没有**：它要改的是spec/12的状态形制与spec/14的材料长度制，
+    #: 而互感这条路两样都不碰（不进`State`、不读材料记录）。
+    "electromagnetics": ("electromagnetics",),
 }
 
 #: 基座登记：spec/01四圈里除物理域圈之外的部分，按其在spec/01第一节的格命名。
