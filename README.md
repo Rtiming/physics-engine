@@ -40,6 +40,6 @@ rtime的**物理引擎**：多域物理（力学、光学，将来热/电磁）+
 ## 工程约定
 
 跨设备范式按rtime-project：git同步（远程：orangepi裸仓库
-`ts-orangepi:/mnt/nvme-store/git-hub/physics-engine.git`，开源时另加GitHub）、
+`ts-orangepi:physics-engine.git（/home/orangepi/，与fts-digital-twin.git、case2-digital-twin.git同处）`，开源时另加GitHub）、
 路径可移植（`tools/rtime-project-check.py --strict`必须全绿）、
 行尾LF归一、提交署名`[ai:名@设备]`。文档中文。
