@@ -32,6 +32,7 @@
 | [`mutual_inductance_coaxial`](mutual_inductance_coaxial/case.md) | 同轴圆环互感Maxwell闭式`M = μ0·√(r1r2)·[(2/k−k)K−(2/k)E]`对Neumann双回路积分，rel 1e-12（**7组构型，含d=0与k=0.002的极远场**）；椭圆积分对Carlson（**模k与参数m两种约定各一对函数并互钉**）；互易零容差；远场退化到偶极子**收敛阶实测1.9806→1.9999**；匝数`N1·N2`逐位精确；mm↔m往返零容差 | B | interactive | 6条 | `tests/cases/test_mutual_inductance_coaxial.py` |
 | [`rigid_body_free_flight`](rigid_body_free_flight/case.md) | 四层：无力矩下**惯性系**角动量与转动动能漂移随步长降16倍（区间`[15,17]`，实测15.68—16.12）；轴对称进动率`λ=ω3(Ia−It)/It`**带符号**（扁体正长体负，rel 1e-8）；中间轴增长率`σ=Ω√((I3−I2)(I2−I1)/(I1I3))`与稳定轴振幅上界闭式、翻转数2/0/0；四元数范数**归一化前**偏离≤1e-11。**七门×五注错的必红矩阵，含一条主动找出的盲区（无力矩判据对`I→c·I`全盲）** | B | local_batch | 11条 | `tests/cases/test_rigid_body_free_flight.py` |
 | [`large_deflection_cantilever`](large_deflection_cantilever/case.md) | 大挠度悬臂端点位置对Bisshopp-Drucker 1945椭圆积分闭式，二阶收敛实测比3.9612/4.0512/4.0600；几何精确项比小挠度理论准**1519倍**；固支Voronoi退回`h`必掉到一阶（正向必须红） | B | local_batch | 1条 | `tests/cases/test_large_deflection_cantilever.py` |
+| [`euler_buckling`](euler_buckling/case.md) | 临界载荷对`Fc = π²EI/(bL)²`，**b=1/2/0.5三种边界条件由特征方程求根而非抄表**；对铰接刚性链的**精确特征值**命中到2e-6（比连续解紧100倍）；二阶收敛3.9916/4.0033/4.0226；保长扰动的能量在0.7Fc升、1.3Fc降（**唯一验`energy()`符号的门**）；正弦半波在四个试验形状里给出最低临界载荷，间隙5.9e-7 | C | local_batch | 1条 | `tests/cases/test_euler_buckling.py` |
 
 **在建**：`peer_fcl_distance`（同行库对拍：球/胶囊距离对FCL，plans/02第四节
 第一批第2条）由同行对比轨道交付，落地后在上表补一行。
@@ -90,9 +91,10 @@ FEBio的`acceptChanges.py`是这条闭环的出处，本仓的加强是"决策�
 MuJoCo/Bullet/Chrono/Drake/PyElastica/SOFA/FEBio 等十余家共同承认的标准案例。
 **用别人的题当分母，比自己出题自己打分诚实。**
 
-**今天13条过6条**：`cantilever_self_weight`、`large_deflection_cantilever`、
-`scalar_diffraction_airy`、`fts_instrument_line_shape`（含Norton-Beer两条）。
-缺的七条与各自缺的能力见决策0040第二、三节。
+**今天13条过7条**：`cantilever_self_weight`、`large_deflection_cantilever`、
+**`euler_buckling`（第3条，决策0046打钩）**、`scalar_diffraction_airy`、
+`fts_instrument_line_shape`（含Norton-Beer两条）。
+缺的六条与各自缺的能力见决策0040第二、三节。
 
 **上表其余案例不计入分母**——它们验的是"我们自己的实现有没有内部错误"
 （协议门、逐字节门、失败关闭），而C档验的是"这个引擎算不算得对同行公认的物理"。

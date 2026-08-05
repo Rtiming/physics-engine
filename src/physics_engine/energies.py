@@ -174,6 +174,119 @@ class UniformGravity:
 
 
 @dataclass(frozen=True)
+class PointLoad:
+    """指定节点上的固定外力势能：``U = −Σ F_i · x_i``（单位N·mm）。
+
+    **符号是这个项的全部内容**：外力做的功是**负**势能。载荷把节点往``+F``方向
+    推，节点顺着走时系统势能下降——写成``+F·x``就得到一个把节点往力的反方向推的
+    "外力"，而且**求解器照样会收敛**，只是收敛到一个物理上相反的解。
+
+    ``gradient = −F``（常量）、``hessian`` **恒为零**（能量对位置线性）。
+
+    **零Hessian的陷阱**：本项对切线刚度没有任何贡献。一个只含``PointLoad``的
+    注册表给出全零Hessian，`solve_equilibrium`在那里**必须失败关闭**而不是返回
+    垃圾解——`_solve_dense`/`_solve_banded`的奇异判据守着这一条，
+    `tests/test_energies.py`有正向断言。这不是理论顾虑：屈曲案例里恰恰要
+    ``PointLoad``与几何刚度配合，而几何刚度全部来自`AxialStretch`那个
+    ``(k·ε/L)·(I − d⊗d)``项——**压缩时它是负的**，那才是屈曲的来源。
+
+    ### 单位：这里**没有**``MM_PER_M``，而`UniformGravity`那里有
+
+    力是N、位置是mm，``N × mm = N·mm``**直接就是本仓的能量单位**，不需要换算。
+    重力项要除以1000是因为它拿的是kg与mm/s²：``kg·mm²/s²``不是N·mm。
+    两个项一个除一个不除，看起来不对称，实际上是同一条口径的两种情形——
+    **量纲是算出来的，不是照抄相邻代码抄出来的**。本仓已经因单位吃过两次亏
+    （0024的静默1000倍、`two_body_spring`那次两个错误互相抵消），
+    所以这里配了两道门：量纲门（1 N力移动1 mm恰好给1 N·mm）与
+    自由体门（单质点在``F``下的加速度恰为``F/m``，且``a·m``与质量无关）。
+    """
+
+    name: str = "point_load"
+    #: 载荷：(节点索引, (Fx, Fy, Fz) 单位N)。同一节点**不许出现两次**——
+    #: 两条同节点载荷该由调用方自己合并，库不替它猜求和次序（浮点加法不结合）。
+    loads: tuple[tuple[int, tuple[float, float, float]], ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.loads:
+            raise EnergyError("point_load needs at least one load")
+        seen: set[int] = set()
+        for node, force in self.loads:
+            if not isinstance(node, int) or node < 0:
+                raise EnergyError(f"point load node index must be a nonnegative int: {node!r}")
+            if node in seen:
+                raise EnergyError(
+                    f"node {node} carries two point loads — 请调用方自己合并，"
+                    "库不替它猜求和次序"
+                )
+            seen.add(node)
+            if len(force) != 3 or not all(math.isfinite(value) for value in force):
+                raise EnergyError(f"point load force must be a finite 3-vector: {force!r}")
+
+    def _base(self, state: State, node: int) -> int:
+        base = 3 * node
+        if base + 3 > len(state.vector):
+            raise EnergyError(
+                f"point load names node {node} but the state only has "
+                f"{len(state.vector) // 3} nodes"
+            )
+        return base
+
+    def energy(self, state: State, context: EnergyContext) -> float:
+        total = 0.0
+        for node, force in self.loads:
+            base = self._base(state, node)
+            total -= (
+                force[0] * state.vector[base]
+                + force[1] * state.vector[base + 1]
+                + force[2] * state.vector[base + 2]
+            )
+        return total
+
+    def gradient(self, state: State, context: EnergyContext) -> Vector:
+        result = _zeros(len(state.vector))
+        for node, force in self.loads:
+            base = self._base(state, node)
+            for axis in range(3):
+                result[base + axis] -= force[axis]
+        return tuple(result)
+
+    def hessian(self, state: State, context: EnergyContext) -> Matrix:
+        n = len(state.vector)
+        return tuple(tuple(row) for row in _zero_matrix(n))
+
+    def hessian_entries(self, state, context):
+        """恒为零——**一个非零项都没有**，与`UniformGravity`同理。"""
+
+        return ()
+
+    def quantities(self, state, context, *, need_gradient, need_hessian):
+        """融合：一次遍历同时出能量与梯度。
+
+        **能量的求值表达式与`energy()`逐字一致**（同样的括号、同样的次序），
+        所以逐字节门不靠巧合——spec/12第3.1节的承重条款。
+        """
+
+        vector = state.vector
+        total = 0.0
+        gradient = _zeros(len(vector)) if need_gradient else None
+        for node, force in self.loads:
+            base = self._base(state, node)
+            total -= (
+                force[0] * vector[base]
+                + force[1] * vector[base + 1]
+                + force[2] * vector[base + 2]
+            )
+            if gradient is not None:
+                for axis in range(3):
+                    gradient[base + axis] -= force[axis]
+        return (
+            total,
+            tuple(gradient) if gradient is not None else None,
+            self.hessian(state, context) if need_hessian else None,
+        )
+
+
+@dataclass(frozen=True)
 class AxialStretch:
     """逐单元轴向拉伸能：``U = Σ ½·(EA/l0_i)·(|x_j − x_i| − l0_i)²``。
 
@@ -882,6 +995,7 @@ __all__ = [
     "EnergyRegistry",
     "EnergyTerm",
     "Matrix",
+    "PointLoad",
     "UniformGravity",
     "Vector",
     "clamped_chain_bending_stencils",

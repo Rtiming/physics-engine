@@ -47,7 +47,11 @@ sys.path.insert(0, str(ROOT / "src"))
 from physics_engine.oracles import file_sha256, write_manifest  # noqa: E402
 
 ALGORITHM_ID = "algorithm:oracle/large_deflection_cantilever"
-ALGORITHM_VERSION = "1.0.0"
+#: 1.1.0：闭式解一字未动（`elastica_tip`与三条自校验逐字节相同），
+#: 变的是清单申报的`inputs`——`PointLoad`落地后端载荷不再靠"集中质量+重力"凑，
+#: `gravity_mm_s2`与`parasitic_mass_kg`两个字段随之消失。**算法版本记的是清单形制**，
+#: 数学没变所以不是2.0.0；但字段变了所以不是1.0.0。
+ALGORITHM_VERSION = "1.1.0"
 
 LENGTH_MM = 100.0
 BENDING_STIFFNESS_NMM2 = 100.0
@@ -59,13 +63,6 @@ AXIAL_STIFFNESS_N = 1.0e4
 #: 无量纲载荷 β = P·L²/EI。取3.0是**故意远离小挠度**：
 #: 线性理论给y/L = β/3 = 1.0，闭式给0.6033，差49.1%（见下面的判据）。
 LOAD_PARAMETER = 3.0
-GRAVITY_MM_S2 = 9806.65
-#: 寄生质量。引擎今天只有`UniformGravity`一个外载项，端部集中力只能用
-#: 集中质量表示，而`EnergyContext`要求所有节点质量为正——非端点节点取1e-15 kg。
-#: 其合力 80×1e-15×9806.65/1000 = 7.8e-13 N，占端载荷0.03 N的2.6e-11。
-#: 实测把它在1e-12/1e-15/1e-18之间换，n=80的误差只变到第5位有效数字。
-#: **这是一处声明并有门守着的近似，不是隐藏的近似**（缺口登记见案例页第四节）。
-PARASITIC_MASS_KG = 1.0e-15
 REFINEMENTS = (10, 20, 40, 80)
 #: 载荷步数。求解器**自己没有载荷步生长**（decisions/0027第四节），
 #: 分步是**案例显式做的**：从直链一步加到β=3牛顿不收敛（线搜索在几何非线性上
@@ -218,8 +215,6 @@ def main() -> int:
             "axial_stiffness_n": AXIAL_STIFFNESS_N,
             "load_parameter": LOAD_PARAMETER,
             "tip_force_n": LOAD_PARAMETER * BENDING_STIFFNESS_NMM2 / LENGTH_MM**2,
-            "gravity_mm_s2": GRAVITY_MM_S2,
-            "parasitic_mass_kg": PARASITIC_MASS_KG,
             "refinements": list(REFINEMENTS),
             "load_steps": LOAD_STEPS,
             "residual_tol_n": RESIDUAL_TOL_N,
@@ -285,7 +280,12 @@ def main() -> int:
             "path_relative": "cases/large_deflection_cantilever/generate_oracle.py",
             "sha256": file_sha256(HERE / "generate_oracle.py"),
         },
-        "oracles": oracles, "arrays": {}, "regenerated_by": None,
+        "oracles": oracles, "arrays": {},
+        #: 规则5：本清单在`PointLoad`落地时重生成过一次。**expected一个数都没变**
+        #: （闭式解与本仓的实现无关），变的是`inputs`——去掉了`gravity_mm_s2`与
+        #: `parasitic_mass_kg`两个字段，因为端载荷不再靠"集中质量+重力"凑。
+        #: 引擎侧的数值变化见decisions/0046第四节（走spec/13义务2第二档对拍）。
+        "regenerated_by": "docs/decisions/0046_PointLoad与Euler屈曲_20260805.md",
     }
     written = write_manifest(HERE / "oracle.json", document, root=ROOT)
     print(f"wrote {len(oracles)} oracles, {len(written)} bytes")

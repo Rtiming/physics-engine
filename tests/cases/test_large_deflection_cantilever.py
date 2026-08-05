@@ -19,7 +19,7 @@ from physics_engine.energies import (
     DiscreteElasticBending,
     EnergyContext,
     EnergyRegistry,
-    UniformGravity,
+    PointLoad,
     clamped_chain_bending_vertices,
 )
 from physics_engine.oracles import load_manifest
@@ -77,6 +77,13 @@ def _solve_uncached(segments: int, *, clamp_correction: bool = True):
 
     载荷分步是**案例显式做的**，不是求解器偷偷做的（求解器申报过它没有载荷步
     生长，decisions/0027第四节）。从直链一步加到β=3牛顿不收敛。
+
+    **端载荷由`PointLoad`直接施加**（decisions/0046）。此前它是用端部集中质量
+    加重力凑出来的，非端点节点因此要带1e-15 kg的寄生质量——那个hack
+    随`PointLoad`落地一并清除，`UniformGravity`退出本案例。
+    质量因此不参与本案例的任何能量项，`EnergyContext`要求为正故取1.0 kg。
+    **载荷分步现在改在能量项里做**：`PointLoad`是frozen的，所以每一步重建注册表；
+    此前是靠改上下文里的集中质量做的，那本身就是那个hack的一部分。
     """
 
     inputs = ENTRY.inputs
@@ -92,14 +99,11 @@ def _solve_uncached(segments: int, *, clamp_correction: bool = True):
             (left, middle, right, stiffness, step_mm)
             for left, middle, right, stiffness, _ in vertices
         )
-    registry = EnergyRegistry(terms=(
-        UniformGravity(),
-        AxialStretch(edges=tuple(
-            (index, index + 1, step_mm, inputs["axial_stiffness_n"])
-            for index in range(segments)
-        )),
-        DiscreteElasticBending(vertices=vertices),
+    stretch = AxialStretch(edges=tuple(
+        (index, index + 1, step_mm, inputs["axial_stiffness_n"])
+        for index in range(segments)
     ))
+    bending = DiscreteElasticBending(vertices=vertices)
     layout = _layout(nodes)
     vector = tuple(
         value for index in range(nodes) for value in (index * step_mm, 0.0, 0.0)
@@ -107,17 +111,19 @@ def _solve_uncached(segments: int, *, clamp_correction: bool = True):
     fixed = frozenset(
         {0, 1, 2, 3, 4, 5} | {3 * index + 2 for index in range(nodes)}
     )
-    tip_kg = inputs["tip_force_n"] * 1000.0 / inputs["gravity_mm_s2"]
+    context = EnergyContext(
+        context_id="context/large_deflection_cantilever",
+        node_masses_kg=(1.0,) * nodes,
+    )
     load_steps = inputs["load_steps"]
     results = []
     for step in range(1, load_steps + 1):
-        masses = [inputs["parasitic_mass_kg"]] * nodes
-        masses[-1] = tip_kg * step / load_steps
-        context = EnergyContext(
-            context_id="context/large_deflection_cantilever",
-            node_masses_kg=tuple(masses),
-            gravity_mm_s2=(0.0, -inputs["gravity_mm_s2"], 0.0),
-        )
+        force = -inputs["tip_force_n"] * step / load_steps
+        registry = EnergyRegistry(terms=(
+            PointLoad(loads=((nodes - 1, (0.0, force, 0.0)),)),
+            stretch,
+            bending,
+        ))
         result = solve_equilibrium(
             registry, context, layout, vector, fixed_indices=fixed,
             residual_tol_n=inputs["residual_tol_n"],

@@ -1,0 +1,172 @@
+{
+  "arrays": {},
+  "case_id": "case/euler_buckling",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/euler_buckling",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/euler_buckling/generate_oracle.py",
+    "sha256": "2a261a8ccb02cf3c14f3201e5f804ce7d1bab26be0dccc649d986f2817b96b1a"
+  },
+  "load_tier": "local_batch",
+  "manifest_self_sha256": "fcd0237103a559178115088056a76d64545a724daeb6efd8a2f44e5aa1a69c5e",
+  "oracles": [
+    {
+      "expected": {
+        "clamp_correction_error_advantage_min": 50.0,
+        "clamp_uncorrected_ratio_high": 2.1,
+        "clamp_uncorrected_ratio_low": 1.9,
+        "converged_and_stable_below_critical": true,
+        "converged_but_unstable_above_critical": true,
+        "convergence_ratio_high": 4.1,
+        "convergence_ratio_low": 3.9,
+        "critical_load_fixed_fixed_n": 0.39478417604357435,
+        "critical_load_fixed_free_n": 0.024674011002723397,
+        "critical_load_pinned_pinned_n": 0.09869604401089359,
+        "discrete_critical_loads_pinned_pinned": [
+          0.09788696740969285,
+          0.09849327523889818,
+          0.09864532053990477,
+          0.09868336118746433
+        ],
+        "effective_length_factor_fixed_fixed": 0.5,
+        "effective_length_factor_fixed_free": 2.0,
+        "effective_length_factor_pinned_pinned": 1.0,
+        "first_mode_rayleigh_gap_max": 5e-06,
+        "prebuckling_relative_shortening": 9.86960440108936e-07,
+        "second_mode_ratio": 3.9753766811902755,
+        "subcritical_energy_rises": true,
+        "supercritical_energy_falls": true,
+        "trial_shape_excess_min": 0.15
+      },
+      "id": "oracle:euler_buckling/critical_load_and_mode",
+      "inputs": {
+        "axial_stiffness_n": 100000.0,
+        "bending_stiffness_nmm2": 100.0,
+        "bisection_iterations": 40,
+        "bracket_high_factor": 6.0,
+        "bracket_low_factor": 0.1,
+        "clamp_voronoi_factor": 1.5,
+        "kind": "axially_loaded_column_stability",
+        "length_mm": 100.0,
+        "mode_refinement": 20,
+        "newton_iterations_bound": 5,
+        "perturbation_amplitude_rad": 0.003,
+        "refinements": [
+          10,
+          20,
+          40,
+          80
+        ],
+        "residual_tol_n": 1e-08,
+        "subcritical_load_factor": 0.7,
+        "supercritical_load_factor": 1.3,
+        "value_refinement": 80
+      },
+      "tolerances": {
+        "clamp_correction_error_advantage_min": {
+          "abs": 0.0,
+          "reason": "固支顶点Voronoi取3h/2对取h的误差优势倍数下界。实测一端固支一端自由三档：126×/143×/232×。取50是留2.5倍余量的**下界**，不是实测值——写实测值等于让门迁就当前实现",
+          "rel": 0.0
+        },
+        "clamp_uncorrected_ratio_high": {
+          "abs": 0.0,
+          "reason": "退回h时**必须是干净一阶**：实测2.0539/2.0271/2.0140。[1.9, 2.1]把它与3h/2那一档（2.33/3.30/3.70，正在趋近4）分开。这是正向的必须红——后人改那个系数时看得见为什么",
+          "rel": 0.0
+        },
+        "clamp_uncorrected_ratio_low": {
+          "abs": 0.0,
+          "reason": "退回h时的收敛比区间下界，零容差",
+          "rel": 0.0
+        },
+        "converged_and_stable_below_critical": {
+          "abs": 0.0,
+          "reason": "布尔：0.7Fc处直链既是收敛解、切线刚度又正定",
+          "rel": 0.0
+        },
+        "converged_but_unstable_above_critical": {
+          "abs": 0.0,
+          "reason": "布尔：1.3Fc处直链**仍然是收敛解**（牛顿一步、残差达标、解逐位仍是直的），而切线刚度**不正定**。``converged=True``不是稳定性——这条门把那句话钉死",
+          "rel": 0.0
+        },
+        "convergence_ratio_high": {
+          "abs": 0.0,
+          "reason": "区间上界。**不写死为4**（spec/12第4.3节：比阶不比单点）。两端铰支实测三档3.9916/4.0033/4.0226。上界4.1而不是更松，是因为轴向可伸长性给一个**不随n下降**的常数偏置(+9.87e-7)，它在最细档占离散误差的0.8%，会把比值往上推——EA再大一个数量级就会顶穿这条上界（那时轴向残差地板也顶穿残差容差）。这两件事是同一个权衡的两端",
+          "rel": 0.0
+        },
+        "convergence_ratio_low": {
+          "abs": 0.0,
+          "reason": "区间下界，零容差比较（非数值判据）",
+          "rel": 0.0
+        },
+        "critical_load_fixed_fixed_n": {
+          "abs": 0.0,
+          "reason": "同上。n=80实测−4.331911e-04。三条里最大，因为两端各有一个固支顶点、两处修正的余项叠加，且Fc本身是两端铰支的4倍（弯曲更剧烈、离散更吃力）。取8e-4留1.85倍余量",
+          "rel": 0.0008
+        },
+        "critical_load_fixed_free_n": {
+          "abs": 0.0,
+          "reason": "同上。n=80实测−2.947022e-05。这一档的离散误差比两端铰支小4.3倍，**因为固支顶点的3h/2修正把首阶项消掉了**（不修正时是+1.2588e-02，大427倍）。取6e-5留2.04倍余量",
+          "rel": 6e-05
+        },
+        "critical_load_pinned_pinned_n": {
+          "abs": 0.0,
+          "reason": "容差就是**离散误差**：n=80实测−1.275174e-04（比n=40的−5.129502e-04小4.02倍，干净二阶）。取2e-4留1.57倍余量。**不是数值精度**——二分把区间压到5.4e-12·Fc，Cholesky判正定的数值地板约2e-10相对，两者都比离散误差小六个数量级",
+          "rel": 0.0002
+        },
+        "discrete_critical_loads_pinned_pinned": {
+          "abs": 0.0,
+          "reason": "**这条是紧的那一条**：金标是离散链的精确特征值，所以离散误差在这里不出现。剩下的只有轴向可伸长性——预压缩使每段缩短``Fc/EA``，把离散临界载荷抬高恰好``+Fc/EA = 9.87e-7``。实测四档的相对偏差9.7885e-07/9.8487e-07/9.8654e-07/9.8665e-07，**扣掉``Fc/EA``后残差 ≤ 1.9e-10**。取2e-6是容纳那个物理偏置并留2倍余量；**它不是放宽，它是一条比连续解紧100倍的门**",
+          "rel": 2e-06
+        },
+        "effective_length_factor_fixed_fixed": {
+          "abs": 0.0,
+          "reason": "同上：8e-4的一半",
+          "rel": 0.0004
+        },
+        "effective_length_factor_fixed_free": {
+          "abs": 0.0,
+          "reason": "同上：6e-5的一半",
+          "rel": 3e-05
+        },
+        "effective_length_factor_pinned_pinned": {
+          "abs": 0.0,
+          "reason": "b由实测Fc反解：``b = π·sqrt(EI/Fc)/L``，故``b``的相对误差**恰为Fc的一半**（−1/2次幂）。1.275e-4的一半是6.4e-5，取1e-4留1.57倍余量——与Fc那条同源、同余量，不是另立一个数",
+          "rel": 0.0001
+        },
+        "first_mode_rayleigh_gap_max": {
+          "abs": 0.0,
+          "reason": "正弦半波试验形的Rayleigh临界载荷对实测离散Fc的相对超出量上界。**变分原理保证它非负**（任何试验形都给上界），而它有多小就是「一阶模态是不是正弦半波」的度量。实测A=0.003时5.9e-7（A=0.01时7.0e-6，差约11倍=幅值平方比，证实余项是O(A²)）。取5e-6留8.5倍余量",
+          "rel": 0.0
+        },
+        "prebuckling_relative_shortening": {
+          "abs": 0.0,
+          "reason": "``(EA/h)(l−h) + F = 0 → l = h(1 − F/EA)``，逐段精确，所以总缩短率恰为``F/EA``。误差只来自牛顿停在残差1e-8 N处：对应位移1e-8/(EA/h)=5e-13 mm，相对5e-15。取1e-9留六个数量级。**这条门守的是`PointLoad`梯度的方向与大小**——符号写反会变成伸长，量级写错会差在第一位",
+          "rel": 1e-09
+        },
+        "second_mode_ratio": {
+          "abs": 0.0,
+          "reason": "全波试验形给出的临界载荷与一阶之比。连续极限是4=2²；**金标取的是离散链的精确比**``sin²(2π/2n)/sin²(π/2n)``（n=20时3.9753766812），因为被测的是离散模型不是连续模型。实测3.9753910，偏差3.6e-6，其中O(A²)的Rayleigh余项占主要部分。取5e-5留14倍余量",
+          "rel": 5e-05
+        },
+        "subcritical_energy_rises": {
+          "abs": 0.0,
+          "reason": "布尔：0.7Fc处**不可伸长**横向扰动的能量差必须为正。零容差因为它是符号判据。实测+6.616380e-06 N·mm（两端铰支）与+1.671423e-06（一端固支一端自由）",
+          "rel": 0.0
+        },
+        "supercritical_energy_falls": {
+          "abs": 0.0,
+          "reason": "布尔：1.3Fc处同一扰动的能量差必须为负。实测−6.707552e-06与−1.493016e-06。**这一对是本案例唯一验``energy()``表达式的门**：扰动保长，轴向能量不变，失稳全部来自`PointLoad`做的功——``E = −F·x``的符号写反，这一条立刻红，而临界载荷那几条照绿",
+          "rel": 0.0
+        },
+        "trial_shape_excess_min": {
+          "abs": 0.0,
+          "reason": "**非正弦半波**的试验形必须给出至少高15%的临界载荷。实测抛物线+16.03%、尖顶折线+712%、全波+298%。取0.15是抛物线那一档留0.7%余量的下界——它是最接近的那个竞争形状，门的分辨力由它决定，所以不能取更大",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

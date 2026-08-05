@@ -5,12 +5,12 @@
   "facet_version": "0.1",
   "generator": {
     "algorithm_id": "algorithm:oracle/large_deflection_cantilever",
-    "algorithm_version": "1.0.0",
+    "algorithm_version": "1.1.0",
     "path_relative": "cases/large_deflection_cantilever/generate_oracle.py",
-    "sha256": "9e76bbbb107beb96cb70f4428981562a17b51de407096141b7d523c3884de88c"
+    "sha256": "6267557fc249a6820072d163d73ad0d883598d0def225de97584f82fd7afbf7f"
   },
   "load_tier": "local_batch",
-  "manifest_self_sha256": "15f7eea7c821624c25fdbb43e6002764ed3a90111f6e4c1be919388158fbfd03",
+  "manifest_self_sha256": "fd6dfb13d0189db1c6e9954351f8589954719e02d507a7275c8bdba55f2e2cf3",
   "oracles": [
     {
       "expected": {
@@ -29,13 +29,11 @@
       "inputs": {
         "axial_stiffness_n": 10000.0,
         "bending_stiffness_nmm2": 100.0,
-        "gravity_mm_s2": 9806.65,
         "kind": "transverse_tip_load_elastica",
         "length_mm": 100.0,
         "load_parameter": 3.0,
         "load_steps": 4,
         "newton_iterations_bound": 60,
-        "parasitic_mass_kg": 1e-15,
         "refinements": [
           10,
           20,
@@ -99,5 +97,5 @@
       }
     }
   ],
-  "regenerated_by": null
+  "regenerated_by": "docs/decisions/0046_PointLoad与Euler屈曲_20260805.md"
 }
