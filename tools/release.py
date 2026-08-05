@@ -44,9 +44,9 @@ def main() -> int:
         raise SystemExit("工作区不干净：发版前先提交（wheel必须能对回一个commit）")
 
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    version = re.search(r'^version = "([^"]+)"$', pyproject, re.M).group(1)
+    version = re.search(r'^version = "([^"]+)"$', pyproject, re.MULTILINE).group(1)
     init_text = (ROOT / "src/physics_engine/__init__.py").read_text(encoding="utf-8")
-    init_version = re.search(r'^__version__ = "([^"]+)"$', init_text, re.M).group(1)
+    init_version = re.search(r'^__version__ = "([^"]+)"$', init_text, re.MULTILINE).group(1)
     if version != init_version:
         raise SystemExit(f"版本不一致：pyproject {version} vs __init__ {init_version}")
 

@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import subprocess
 import sys
 import time
@@ -25,8 +24,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from physics_engine.canonical import FTS_PROFILE, canonical_file_bytes  # noqa: E402
-from physics_engine.engine_facets import (  # noqa: E402
+from physics_engine.canonical import FTS_PROFILE, canonical_file_bytes
+from physics_engine.engine_facets import (
     ACCEPTANCE_RECEIPT_FACET,
     ACCEPTANCE_RECEIPT_VERSION,
 )
@@ -37,8 +36,14 @@ BUDGETS: dict[str, float] = {"quick": 30.0, "full": 120.0}
 #: 各档的命令集。套件尚小，quick与full同集；套件长大后quick必须保持
 #: full的子集（governance测试守着这层关系）。
 COMMANDS: dict[str, tuple[tuple[str, ...], ...]] = {
-    "quick": ((".venv/bin/python", "-m", "pytest", "tests", "-q"),),
-    "full": ((".venv/bin/python", "-m", "pytest", "tests", "-q"),),
+    "quick": (
+        (".venv/bin/python", "-m", "ruff", "check", "src", "tests", "tools"),
+        (".venv/bin/python", "-m", "pytest", "tests", "-q"),
+    ),
+    "full": (
+        (".venv/bin/python", "-m", "ruff", "check", "src", "tests", "tools"),
+        (".venv/bin/python", "-m", "pytest", "tests", "-q"),
+    ),
 }
 
 TIMEOUT_RETURNCODE = 124

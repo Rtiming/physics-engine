@@ -211,9 +211,9 @@ __all__ = [
     "SCENE_CANONICAL_PROFILE",
     "SCENE_FACET",
     "SCENE_FACET_VERSION",
+    "SHAPE_KINDS",
     "Scene",
     "SceneError",
-    "SHAPE_KINDS",
     "load_scene",
     "register_shape_kind",
 ]

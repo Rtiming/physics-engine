@@ -36,7 +36,7 @@ def _dot(a: Vector3, b: Vector3) -> float:
 
 
 def _clamp(value: float) -> float:
-    return 0.0 if value < 0.0 else (1.0 if value > 1.0 else value)
+    return 0.0 if value < 0.0 else (min(value, 1.0))
 
 
 def segment_segment_distance_mm(

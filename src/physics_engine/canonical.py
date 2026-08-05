@@ -112,10 +112,10 @@ def strict_loads(data: bytes | str) -> Any:
 
 
 __all__ = [
-    "CanonicalError",
-    "CanonicalProfile",
     "FTS_PROFILE",
     "WDS_PROFILE",
+    "CanonicalError",
+    "CanonicalProfile",
     "canonical_bytes",
     "canonical_file_bytes",
     "canonical_sha256",

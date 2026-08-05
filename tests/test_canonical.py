@@ -5,10 +5,10 @@ import math
 import pytest
 
 from physics_engine.canonical import (
-    CanonicalError,
-    CanonicalProfile,
     FTS_PROFILE,
     WDS_PROFILE,
+    CanonicalError,
+    CanonicalProfile,
     canonical_bytes,
     canonical_file_bytes,
     canonical_sha256,
@@ -25,7 +25,7 @@ def test_canonical_bytes_are_sorted_compact_and_deterministic():
 def test_ascii_policy_is_the_declared_difference():
     doc = {"名": "值"}
     assert "\\u" in canonical_bytes(doc, FTS_PROFILE).decode("ascii")
-    assert canonical_bytes(doc, WDS_PROFILE) == '{"名":"值"}'.encode("utf-8")
+    assert canonical_bytes(doc, WDS_PROFILE) == '{"名":"值"}'.encode()
 
 
 def test_file_bytes_carry_the_declared_trailing_newline():

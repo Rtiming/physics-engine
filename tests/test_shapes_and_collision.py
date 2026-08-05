@@ -15,7 +15,6 @@ from physics_engine.shapes import (
     ShapeError,
     SimBody,
     Sphere,
-    VisualShape,
 )
 
 _LINK3_SHA = "50556eb4e7df6dc27fb2361710fa3419a938ccd8ef6f84ea822d937ab2eb973d"

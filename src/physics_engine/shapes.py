@@ -16,8 +16,8 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from typing import Literal, Union
+from dataclasses import dataclass
+from typing import Literal
 
 
 class ShapeError(ValueError):
@@ -146,7 +146,7 @@ class GeneratedShape:
     algorithm_id: str
     algorithm_version: str
     parameters: tuple[tuple[str, float], ...]
-    shape: Union[Sphere, Capsule, RoundedBox, FiniteCylinder]
+    shape: Sphere | Capsule | RoundedBox | FiniteCylinder
 
     def __post_init__(self) -> None:
         if not self.algorithm_id.startswith("algorithm:"):
@@ -158,7 +158,7 @@ class GeneratedShape:
         return self.shape.local_aabb_mm()
 
 
-Shape = Union[Sphere, Capsule, RoundedBox, FiniteCylinder, MeshAsset, GeneratedShape]
+Shape = Sphere | Capsule | RoundedBox | FiniteCylinder | MeshAsset | GeneratedShape
 
 
 @dataclass(frozen=True)

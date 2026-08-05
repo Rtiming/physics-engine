@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """rtime-project-check — 跨设备代码项目的严格可移植性校验器。
 
 纯标准库、零依赖,本身就跨平台(win/mac/linux 一致运行),用作 pre-commit 钩子或 CI 闸门。
@@ -74,7 +73,7 @@ ABS_PATTERNS = [
 
 
 class Finding:
-    __slots__ = ("level", "kind", "loc", "detail")
+    __slots__ = ("detail", "kind", "level", "loc")
 
     def __init__(self, level: str, kind: str, loc: str, detail: str):
         self.level = level

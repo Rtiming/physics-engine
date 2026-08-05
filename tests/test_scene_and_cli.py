@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from physics_engine import cli
-from physics_engine.run_package import read_verified_package
 from physics_engine.canonical import strict_loads
+from physics_engine.run_package import read_verified_package
 from physics_engine.scene import SceneError, load_scene
 
 EXAMPLE = Path(__file__).resolve().parents[1] / "examples/collision_preview_cell.scene.json"

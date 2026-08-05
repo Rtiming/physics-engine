@@ -1,40 +1,58 @@
-# physics-engine — AI 协作规则
+# physics-engine — AI协作规则
 
-> 本项目遵循 rtime-project 跨设备范式。任何 AI 助手开工前先读本文件。
+> 本仓遵循rtime-project跨设备范式。任何AI助手开工前先读本文件，
+> 再读`README.md`与`docs/plans/01`置顶的**当前首要目标**。
+> **引擎的开发就直接在本文件夹进行**（2026-08-05用户确认的工作模式）。
 
 ## 项目定位
 
-- 一句话: winding-deviation-sim与fts-digital-twin的共同引擎仓，规范先行、代码后置
-- 开发设备: Windows + macOS(平级);运行/部署: 本地库，无服务部署
-- git 远程: ts-orangepi:physics-engine.git（/home/orangepi/，与fts-digital-twin.git、case2-digital-twin.git同处）（开源时另加 github.com/Rtiming/physics-engine） <!-- rtime-project: allow-abs -->
+- 一句话：rtime的物理引擎——规范先行、代码后置的多域仿真内核；
+  消费方winding-deviation-sim（力学）、fts-digital-twin（光学）。
+- 开发设备：Windows+macOS平级，直接在本仓工作；**重计算上master，不占本机Mac**。
+- git远程：`ts-orangepi:physics-engine.git`（舰队主远程，/home/orangepi/，与fts-digital-twin.git同处）+ `github.com/Rtiming/physics-engine`（公开镜像，MIT）。发版脚本自动双推。 <!-- rtime-project: allow-abs -->
 
-## 路径策略(硬性)
+## 开工三读（顺序）
 
-- 禁止新增写死的用户主目录/盘符绝对路径(`C:\Users\...`、`/Users/...`、`/home/...`、`/mnt/...`)。 <!-- rtime-project: allow-abs -->
-- 路径从仓库根/当前文件计算: Python `pathlib.Path(__file__)`,Node `path`/`import.meta.dirname`,文档用相对路径。
-- 真正的外部工程路径(如 Motion Perfect / WorkVisual)才保留绝对路径,并在 `.rtime-project-allow` 或行内 `rtime-project: allow-abs` 豁免。
+1. `docs/plans/01_总执行计划与审核清单`——置顶首要目标+五波状态；
+2. `docs/plans/00_引擎开发路线`——M-E里程碑到哪了；
+3. 动哪个模块读哪份spec（`docs/spec/`地图在README）。
 
-## 同步与 git
+## 开发循环（快慢分层，服务"开发提速"首要目标）
 
-- 代码只走 git(push/pull/fetch 或 .bundle),不靠文件夹同步搬 `.git`。
-- 不经用户明确指示,不 `git push` 远程。
-- 缓存、虚拟环境、`node_modules`、构建产物、AI 缓存、按机器跑出的产物不进版本控制,也不同步。
+- **内循环（秒级）**：`.venv/bin/python -m pytest tests/test_你在动的.py -q`；
+- **批末**：`.venv/bin/python tools/accept.py full`（30/120双档、功能/计时/仓库稳定三轴正交——超时/漂移/零执行绝不pass）；
+- **发版**：`.venv/bin/python tools/release.py`——干净仓+accept绿+CHANGELOG条目才发，**版本不可覆盖**，wheel入`~/wheelhouse`并自动镜像GitHub；
+- 环境重建：`python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'`。
 
-## 行尾与编码
+## 代码三前提（decisions/0001，进仓硬门）
 
-- 仓库已配 `.gitattributes`(`* text=auto eol=lf`)与 `.editorconfig`(UTF-8/LF)。新增文件遵循之,Windows 脚本除外(CRLF)。
+1. 对应规范轴已冻结（spec/02—08）或所属草案面已登记；
+2. 有真实消费方在用（不为想象中的第三个消费方预支通用性）；
+3. 消费方采纳后既有产物指纹逐字节不变。
 
-## 多 AI 协作
+## 本仓纪律（引擎专属）
 
-- AI 缓存(`.codex`/`.claude`/`.playwright-mcp`)在仓库内但 git/sync 均排除。
-- 子代理只作建议,主代理拍板。
-- 结构性大改动在 `<docs 或 00_project_docs>` 留审计痕迹。
-- 提交署名 `[ai:名@设备]`。
+- **零运行时依赖是承诺**：`dependencies = []`；新增运行时依赖须决策记录，dev依赖随意。
+- **面清册义务**：任何跨边界字节形制先进`engine_facets.py`登记（draft出生），governance测试守回执面兼容。
+- **每个门要红过**：新校验必须附"必须红"用例；判据本身也要被验（tests/governance/是样板）。
+- **诚实可信度**：collision的confidence、shapes的凸性声明、后端确定性分级（spec/13）——不知道就说不知道，禁止冒充。
+- **API两档**：稳定倾向档（facets/canonical/identity/provenance/run_package）破坏性改动须决策记录+弃用一版缓冲；实验档（shapes/collision/scene）minor内可破坏但CHANGELOG必写。
+- 决策记录编号连续（docs/decisions/00NN）；文档中文，中英文之间不加空格，图注"图X-Y 描述"式。
 
-## 改完自检
+## 性能条款（spec/13摘要）
 
-- 跑 `python tools/rtime-project-check.py . --strict`,清掉所有 [E]:硬编码路径、断链、超长 Windows 路径;并确认行尾归一、无意外脏 git。
+优化先profile；声称结果不变附逐字节对拍；改数值路径附容差对拍；
+fp64→fp32=换物理不是优化；GPU三门槛不过不动手；本机Mac无GPU求解器路线
+（Metal无fp64，已测）。
 
-## 设备安全(若涉及外部系统时填写)
+## 路径策略与同步（范式硬性）
 
-- <对生产服务器/外部系统的写操作需用户明确授权;优先只读诊断、离线验证>
+- 禁止新增写死的用户主目录/盘符绝对路径（`C:\Users\...`、`/Users/...`、`/home/...`、`/mnt/...`）；路径从仓库根/当前文件计算；跨仓引用用相对说明。 <!-- rtime-project: allow-abs -->
+- 改完自检：`python3 tools/rtime-project-check.py . --strict`必须0错误。
+- 代码只走git（不靠文件夹同步搬`.git`）；`.venv`/`work/`/`dist/`不进版本控制不同步。
+- 不经用户明确指示不`git push`（发版脚本内的推送视为发版授权的一部分）。
+
+## 多AI协作
+
+- AI缓存（`.codex`/`.claude`）在仓库内但git/sync均排除；子代理只作建议，主代理拍板。
+- 提交署名`[ai:名@设备]`；结构性大改动在`docs/decisions/`留审计痕迹。

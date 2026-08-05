@@ -7,9 +7,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
 
-import accept  # noqa: E402
+import accept
 
-from physics_engine.engine_facets import (  # noqa: E402
+from physics_engine.engine_facets import (
     ACCEPTANCE_RECEIPT_FACET,
     ACCEPTANCE_RECEIPT_VERSION,
     ENGINE_REGISTRY,
