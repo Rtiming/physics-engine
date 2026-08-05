@@ -122,13 +122,29 @@ def _require_namespace(value: object, namespace: str, name: str) -> str:
 
 
 def unit_suffix_of(field_name: str) -> str | None:
-    """字段名的单位后缀（取最长匹配）；没有已知后缀返回``None``。"""
+    """字段名的单位后缀（取最长匹配）；没有已知后缀返回``None``。
+
+    **分母陷阱（2026-08-05修，research/07审计发现）**：单纯的最长匹配会把
+    ``current_density_a_per_m2``的后缀判成``m2``——那是个**面积**单位，
+    可它在这个名字里站在**分母**上。于是换算走了面积的``×1e6``，
+    而``A/m² → A/mm²``的正确因子是``×1e-6``：**方向反了，差1e12，且不报错**。
+
+    修法不是去补一张更大的换算表（那要为每个复合量纲猜因子，正是spec/14
+    第五节禁止的），而是**让最长匹配不许跨过``per_``**：名字里出现``_per_{u}``时，
+    后缀就是``per_{u}``整体。``per_{u}``没登记，换算表查不到，
+    于是`converted_to`里那条早就写好的"复合量纲无登记换算即拒"当场触发——
+    **那条错误消息在此之前一次都没触发过**。
+    """
 
     lowered = field_name.lower()
     best: str | None = None
     for unit in _ALL_UNITS:
         if lowered.endswith(f"_{unit}") and (best is None or len(unit) > len(best)):
             best = unit
+    if best is not None and not best.startswith("per_"):
+        # 匹配到的裸单位是不是站在`per_`后面？是就把整段当后缀，交给换算表拒收。
+        if lowered.endswith(f"_per_{best}"):
+            return f"per_{best}"
     return best
 
 

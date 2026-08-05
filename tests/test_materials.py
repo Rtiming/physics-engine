@@ -330,3 +330,38 @@ def test_evidence_is_reachable_per_field():
     assert _record().evidence_for("EI_easy_N_mm2").grade == "derived"
     with pytest.raises(MaterialError, match="carries no property"):
         _record().evidence_for("nope_mm")
+
+
+# ── 分母陷阱：最长后缀匹配不许跨过 `per_`（research/07审计发现，2026-08-05） ──
+
+
+def test_a_bare_unit_standing_in_a_denominator_is_not_matched_as_a_numerator():
+    """`current_density_a_per_m2`的后缀必须是`per_m2`不是`m2`。
+
+    判成`m2`会走**面积**换算`×1e6`，而`A/m² → A/mm²`的正确因子是`×1e-6`——
+    **方向反了，差1e12，且不报错**。这不是假想：修复前实测就是这个结果。
+    """
+
+    from physics_engine.materials import unit_suffix_of
+
+    assert unit_suffix_of("current_density_a_per_m2") == "per_m2"
+    assert unit_suffix_of("magnetisation_a_per_m") == "per_m"
+    # 分子上的同名单位不受影响
+    assert unit_suffix_of("area_mm2") == "mm2"
+    assert unit_suffix_of("thickness_m") == "m"
+
+
+def test_an_unregistered_compound_dimension_refuses_conversion_instead_of_guessing():
+    """spec/14第五节：复合量纲无登记换算即拒——**不猜因子**。
+
+    这条错误消息在分母陷阱修好之前**一次都没触发过**：
+    `per_m2`没登记，但最长匹配把它判成了已登记的`m2`，于是静默走了错方向。
+    """
+
+    from physics_engine.materials import _LENGTH_CONVERSIONS, unit_suffix_of
+
+    suffix = unit_suffix_of("current_density_a_per_m2")
+    assert (suffix, "mm") not in _LENGTH_CONVERSIONS, (
+        "per_m2 一旦被登记进换算表，这条门就失去意义——"
+        "登记它之前必须先决定 A/m² 到 A/mm² 的因子是什么，而那是消费方的裁决"
+    )
