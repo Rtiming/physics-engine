@@ -67,7 +67,7 @@ from physics_engine.run_package import (
     read_verified_package,
 )
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "BASE_UNIT_SUFFIXES",

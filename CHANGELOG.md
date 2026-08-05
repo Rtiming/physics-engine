@@ -4,6 +4,17 @@
 minor可破坏兼容，patch只含兼容修复，**不回port**——修复只进新版本）。
 发版脚本强制：版本必须先在本页有条目才准发。
 
+## 0.4.0 — 2026-08-05
+
+新增：
+
+- **narrow phase第一片（球/胶囊族）**：线段-线段闭式最近距离；同族对给
+  `confidence="narrow_phase"`与精确`penetration_mm`；**broad命中但narrow
+  判分离的对不再报事件**（假阳性消除）。圆柱/盒/网格对诚实保留
+  `broad_phase`（下一片再做，不冒充）
+- `PosedBody.transform_point_mm`/`rotate_local_mm`位姿变换
+- `segment_segment_distance_mm`进公开面
+
 ## 0.3.0 — 2026-08-04
 
 新增：

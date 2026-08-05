@@ -210,6 +210,25 @@ class PosedBody:
         if not math.isclose(norm, 1.0, rel_tol=0.0, abs_tol=1.0e-9):
             raise ShapeError("rotation_xyzw must be a unit quaternion")
 
+    def rotate_local_mm(self, point: Vector3) -> Vector3:
+        """局部向量→世界向量（只转不平移）。"""
+
+        x, y, z, w = self.rotation_xyzw
+        rows = (
+            (1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)),
+            (2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)),
+            (2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)),
+        )
+        return tuple(
+            sum(row[i] * point[i] for i in range(3)) for row in rows
+        )  # type: ignore[return-value]
+
+    def transform_point_mm(self, point: Vector3) -> Vector3:
+        rotated = self.rotate_local_mm(point)
+        return tuple(
+            rotated[axis] + self.translation_mm[axis] for axis in range(3)
+        )  # type: ignore[return-value]
+
     def world_aabb_mm(self) -> Aabb:
         """旋转后取八角点包盒——保守，供broad phase。"""
 
