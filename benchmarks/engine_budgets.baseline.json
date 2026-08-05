@@ -6,22 +6,70 @@
   "decision": "docs/decisions/0018_性能门与预算基线_20260805.md",
   "note": "墙钟预算只由tools/bench.py测量并供人看；进门的只有deterministic_gates里的确定性量。理由见decisions/0018与research/05第四节。",
   "wall_clock_budgets": {
-    "import_physics_engine": {"budget_s": 0.11, "measured_median_s": 0.03, "load_tier": "interactive"},
-    "pe_scene_validate": {"budget_s": 0.22, "measured_median_s": 0.1, "load_tier": "interactive"},
-    "pe_scene_check_collisions": {"budget_s": 0.22, "measured_median_s": 0.05, "load_tier": "interactive"},
-    "accept_quick": {"budget_s": 30.0, "measured_median_s": 0.3, "load_tier": "local_batch"},
-    "accept_full": {"budget_s": 120.0, "measured_median_s": 0.5, "load_tier": "local_batch"}
+    "import_physics_engine": {
+      "budget_s": 0.11,
+      "measured_median_s": 0.03,
+      "load_tier": "interactive"
+    },
+    "pe_scene_validate": {
+      "budget_s": 0.22,
+      "measured_median_s": 0.1,
+      "load_tier": "interactive"
+    },
+    "pe_scene_check_collisions": {
+      "budget_s": 0.22,
+      "measured_median_s": 0.05,
+      "load_tier": "interactive"
+    },
+    "accept_quick": {
+      "budget_s": 30.0,
+      "measured_median_s": 0.3,
+      "load_tier": "local_batch"
+    },
+    "accept_full": {
+      "budget_s": 120.0,
+      "measured_median_s": 0.5,
+      "load_tier": "local_batch"
+    }
   },
   "deterministic_gates": {
-    "source_bytes": {"measured": 89003, "ceiling": 147456, "rationale": "source_bytes是wheel体积的确定性代理——wheel需要构建，源码字节不需要，且跨平台逐位稳定。上限**不是**“引擎必须保持小”的承诺（0015已裁决要把WDS的物理搬进来，源码注定大幅增长），而是“增长必须是一次被记录的决定”。抬上限是允许的，但必须在ceiling_history里留一行，且门校验现行上限等于历史末行——想悄悄抬过不去。"},
-    "eager_import_modules": {"measured": 97, "ceiling": 130, "rationale": "import physics_engine新增97个模块（含标准库传递依赖）。这是import冷启动预算的结构代理：新模块进顶层eager import会同时抬高它和墙钟。上限留约1.34倍余量。"},
-    "runtime_dependencies": {"measured": 0, "ceiling": 0, "rationale": "decisions/0014的零设施承诺；decisions/0016把NumPy放进可选加速档而非运行时依赖。这一条上限为0且永远为0——破它是破坏性变更。"}
+    "source_bytes": {
+      "measured": 104853,
+      "ceiling": 147456,
+      "rationale": "source_bytes是wheel体积的确定性代理——wheel需要构建，源码字节不需要，且跨平台逐位稳定。上限**不是**“引擎必须保持小”的承诺（0015已裁决要把WDS的物理搬进来，源码注定大幅增长），而是“增长必须是一次被记录的决定”。抬上限是允许的，但必须在ceiling_history里留一行，且门校验现行上限等于历史末行——想悄悄抬过不去。"
+    },
+    "eager_import_modules": {
+      "measured": 97,
+      "ceiling": 130,
+      "rationale": "import physics_engine新增97个模块（含标准库传递依赖）。这是import冷启动预算的结构代理：新模块进顶层eager import会同时抬高它和墙钟。上限留约1.34倍余量。"
+    },
+    "runtime_dependencies": {
+      "measured": 0,
+      "ceiling": 0,
+      "rationale": "decisions/0014的零设施承诺；decisions/0016把NumPy放进可选加速档而非运行时依赖。这一条上限为0且永远为0——破它是破坏性变更。"
+    }
   },
   "source_bytes_ceiling_history": [
-    {"raised_on": "2026-08-05", "ceiling": 98304, "measured_then": 65680, "decision": "docs/decisions/0018_性能门与预算基线_20260805.md", "reason": "首次设立。实测65680字节，上限96KiB约1.5倍余量。"},
-    {"raised_on": "2026-08-05", "ceiling": 147456, "measured_then": 89003, "decision": "docs/decisions/0018_性能门与预算基线_20260805.md", "reason": "T6的materials.py入仓（+23323字节），占用达90.5%、余量仅9301字节，下一个同量级模块必破门。抬到144KiB约1.65倍余量。这是0018自己写的那条路的后一半——“要么优化，要么走决策记录改预算表”；把校验往薄里写换余量是不接受的选项。"}
+    {
+      "raised_on": "2026-08-05",
+      "ceiling": 98304,
+      "measured_then": 65680,
+      "decision": "docs/decisions/0018_性能门与预算基线_20260805.md",
+      "reason": "首次设立。实测65680字节，上限96KiB约1.5倍余量。"
+    },
+    {
+      "raised_on": "2026-08-05",
+      "ceiling": 147456,
+      "measured_then": 89003,
+      "decision": "docs/decisions/0018_性能门与预算基线_20260805.md",
+      "reason": "T6的materials.py入仓（+23323字节），占用达90.5%、余量仅9301字节，下一个同量级模块必破门。抬到144KiB约1.65倍余量。这是0018自己写的那条路的后一半——“要么优化，要么走决策记录改预算表”；把校验往薄里写换余量是不接受的选项。"
+    }
   ],
   "wheel_budget_history": [
-    {"version": "0.4.0", "bytes": 30940, "note": "spec/13第零节原写“wheel 30KB离线装”，是对30940字节的口语化取整，不是30720字节的硬上限。0018把它改成随版本记账的曲线。"}
+    {
+      "version": "0.4.0",
+      "bytes": 30940,
+      "note": "spec/13第零节原写“wheel 30KB离线装”，是对30940字节的口语化取整，不是30720字节的硬上限。0018把它改成随版本记账的曲线。"
+    }
   ]
 }
