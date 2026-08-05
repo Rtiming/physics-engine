@@ -3,8 +3,8 @@
 安装（舰队wheelhouse链路，decisions/0010）：
 
     git clone ts-orangepi:wheelhouse.git ~/wheelhouse   # 每台机器一次
-    uv add "physics-engine==0.2.0" --find-links ~/wheelhouse
-    # 或 pip install "physics-engine==0.2.0" --find-links ~/wheelhouse
+    uv add "physics-engine==0.4.0" --find-links ~/wheelhouse
+    # 或 pip install "physics-engine==0.4.0" --find-links ~/wheelhouse
 
 **0.x语义**：仓库处于快速演进期（模块地图spec/01大半尚空），minor跳变可以
 破坏兼容。消费方必须**钉精确版本**并经自己的门禁自觉升级；升级永远不是

@@ -30,11 +30,25 @@
       "budget_s": 120.0,
       "measured_median_s": 0.5,
       "load_tier": "local_batch"
+    },
+    "solve_equilibrium_cantilever_160free_dof": {
+      "budget_s": 0.25,
+      "measured_median_s": 0.096,
+      "load_tier": "interactive",
+      "workload": "cases/cantilever_self_weight的装置加密到160段（483自由度、160个自由自由度、重力+线性弯曲、residual_tol_n=1e-7）；二次能量，牛顿2步收敛、零回溯。",
+      "measured_by": "docs/decisions/0030_欠账清理_20260805.md"
+    },
+    "solve_equilibrium_chain_762free_dof": {
+      "budget_s": 60.0,
+      "measured_median_s": 19.4,
+      "load_tier": "local_batch",
+      "workload": "tools/bench.py的build_chain(256, with_bending=True)（重力+轴向拉伸+线性弯曲、768自由度、762个自由自由度、钉住头两个节点、residual_tol_n=1e-7）；非二次能量，牛顿8步、6次回溯。**这一档不是交互级**——稠密LU让成本按自由自由度数的约2.6次方长，交互级的边界在约200个自由自由度。",
+      "measured_by": "docs/decisions/0030_欠账清理_20260805.md"
     }
   },
   "deterministic_gates": {
     "source_bytes": {
-      "measured": 182570,
+      "measured": 196027,
       "ceiling": 229376,
       "rationale": "source_bytes是wheel体积的确定性代理——wheel需要构建，源码字节不需要，且跨平台逐位稳定。上限**不是**“引擎必须保持小”的承诺（0015已裁决要把WDS的物理搬进来，源码注定大幅增长），而是“增长必须是一次被记录的决定”。抬上限是允许的，但必须在ceiling_history里留一行，且门校验现行上限等于历史末行——想悄悄抬过不去。"
     },
