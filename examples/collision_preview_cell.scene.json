@@ -1,0 +1,51 @@
+{
+  "contract_type": "physics_scene",
+  "contract_version": "1.0.0",
+  "scene_id": "scene/collision_preview_cell",
+  "description": "WDS碰撞预演对象集雏形：R1导轮与带盘包盒相接（真实参数），连杆与工装分开",
+  "extensions": [],
+  "bodies": [
+    {
+      "body_id": "body/roller_r1",
+      "collision": {
+        "direction": "fitted",
+        "shape": {"kind": "finite_cylinder", "radius_mm": 45.0, "half_width_mm": 9.0, "flange_outer_radius_mm": 60.0}
+      },
+      "pose": {"translation_mm": [0.0, 0.0, 0.0]}
+    },
+    {
+      "body_id": "body/spool",
+      "collision": {
+        "direction": "fitted",
+        "shape": {"kind": "finite_cylinder", "radius_mm": 50.0, "half_width_mm": 10.0}
+      },
+      "pose": {"translation_mm": [100.0, 0.0, 0.0]}
+    },
+    {
+      "body_id": "body/kuka_link3",
+      "collision": {
+        "direction": "envelope",
+        "shape": {
+          "kind": "mesh",
+          "path_relative": "robot-links/collision/link_03_j3.collision.stl",
+          "sha256": "50556eb4e7df6dc27fb2361710fa3419a938ccd8ef6f84ea822d937ab2eb973d",
+          "units": "mm",
+          "usage": "collision",
+          "convexity": "nonconvex_declared",
+          "aabb_min_mm": [-400.0, -300.0, -300.0],
+          "aabb_max_mm": [400.0, 300.0, 300.0]
+        }
+      },
+      "pose": {"translation_mm": [1500.0, 0.0, 0.0]}
+    },
+    {
+      "body_id": "body/fixture",
+      "collision": {
+        "direction": "envelope",
+        "shape": {"kind": "rounded_box", "half_extents_mm": [80.0, 80.0, 40.0], "fillet_radius_mm": 5.0}
+      },
+      "pose": {"translation_mm": [-500.0, 0.0, 0.0]}
+    }
+  ],
+  "allowed_pairs": []
+}

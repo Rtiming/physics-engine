@@ -14,12 +14,23 @@ from physics_engine.facets import Facet, FacetRegistry, FacetStatus
 ACCEPTANCE_RECEIPT_FACET = "engine_acceptance_receipt"
 ACCEPTANCE_RECEIPT_VERSION = "0.1"
 
+#: 场景文件面：数据层入口的格式（scene.py）。出生draft——第一个消费方
+#: 拿它过完自己的门禁前不作兼容承诺（升档须决策记录）。
+PHYSICS_SCENE_FACET = "physics_scene"
+PHYSICS_SCENE_VERSION = "1.0.0"
+
 ENGINE_REGISTRY = FacetRegistry(
     Facet(
         name=ACCEPTANCE_RECEIPT_FACET,
         major=0,
         max_tested_minor=1,
         status=FacetStatus.INTERNAL,
+    ),
+    Facet(
+        name=PHYSICS_SCENE_FACET,
+        major=1,
+        max_tested_minor=0,
+        status=FacetStatus.DRAFT,
     ),
 )
 

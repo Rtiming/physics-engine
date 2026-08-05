@@ -47,7 +47,7 @@ rtime的**物理引擎**：多域物理（力学、光学，将来热/电磁）+
 
 ```bash
 git clone ts-orangepi:wheelhouse.git ~/wheelhouse   # 每台机器一次，更新=git pull
-uv add "physics-engine==0.2.0" --find-links ~/wheelhouse
+uv add "physics-engine==0.3.0" --find-links ~/wheelhouse
 ```
 
 调用示例：
