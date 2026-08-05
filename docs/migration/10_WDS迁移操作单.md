@@ -11,25 +11,24 @@ spec/90消费方登记各记一行。
    重点看各轴第三节"已知缺口"里点名WDS的行
 3. WDS `docs/教训登记.md`（尤其5.6冻结diff→重签→跑门的顺序、6.4文档保质期）
 
-## 批次A：下一轮src批次（一次回执重签周期打包完成）
+## 批次A：~~四件~~三件（**2026-08-04晚已执行**，WDS决策记录design/27）
 
-四件事同批，理由：都动`src/`，分开做要重签两份绑执行树回执多次。
+1. ✅ **面清册加状态字段**：`_FACETS`单表38行（32 frozen/4 internal/2 draft），
+   36个存量行由活模块程序化转录零手抄，读取端行为逐字不变。
+2. ✅ **决策记录联动门**：`tests/test_facet_freeze_linkage.py`冻结清单门，
+   建立当日**验过红**（无记录改frame_packet minor→红→还原复绿）。
+3. ✅ **映射设施新契约出生即合规**：`contracts/groove_fit_sweep.py`两面
+   出生为draft；声明通道集（排除必带理由）、键碰撞与分母纪律
+   （失败点占行带理由禁携数值、丢点即炸）随契约立法。
+4. ↷ **runner基类改排批次B**（2026-08-04工程判断，理由：批次B切换import
+   时本就重写三插件接线层，指纹绑定的胶水只碰一次；实读发现的真实重复面
+   =canonical_payload+身份绑定verifier+指纹排除三件套，另有
+   `SpoolWrapOutcome`缺互斥校验的真缺口，一并归批次B）。
 
-1. **面清册加状态字段**（轴1规则5缺口）：`contracts/versions.py`的
-   `_SCHEMA_MAJORS`改为带`status: frozen|internal|draft`的记录结构。
-   已被案例/验收引用的面标frozen，仅仓内消费的标internal。
-2. **决策记录联动门**（轴1规则6缺口）：新增一条测试——frozen面的
-   major/minor变更若在`docs/design/`无对应决策记录（按日期与面名检索）则红。
-   门写完先造一例"无记录的版本跳变"**验红**（轴1规则7）。
-3. **runner基类**（WDS design/23 §5.3，既列事项）：把三个场景插件重复的
-   "解析→构造→求解→校验→发布"编排收进公共层，不动数值内核。
-4. **映射设施新契约出生即合规**（主线，WDS design/24七之四）：扫描清单与
-   映射结果schema按轴1（登记进清册、带状态）与轴2（单位后缀、四段ID、
-   μ文献出处进证据段并写明"区间骑在曲线最陡段"）实现。
-
-流程硬性提醒（教训5.6原文纪律）：**冻结diff→重签两份性能回执（负载<6，
-签完核status与resource_qualification两字段）→verify_project general/full/actual→
-更新design/26与本仓spec/90→提交**。中途改一个字节回执作废重来。
+流程硬性提醒（教训5.6原文纪律，批次B沿用）：**冻结diff→重签两份性能回执
+（负载<6，签完核status与resource_qualification两字段）→verify_project
+general/full/actual→更新design/26与本仓spec/90→提交**。
+中途改一个字节回执作废重来。竞争进程拦V2时等机器空再补，别杀别人的活。
 
 ## 批次B：存量迁移（阶段3，等本仓参考实现随批次A后落地）
 
