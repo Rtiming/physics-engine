@@ -80,6 +80,29 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
   accept不因缺库而红。**`batch`档从此不再是空档位**（4条真测试）
 - `.gitignore`补`.venv`（无斜杠）：并行开发的worktree里`.venv`是符号链接，
   带斜杠的规则只匹配目录，此前它一直显示为未跟踪
+- **`physics_engine.oracles`（实验档）**：轴7规则2的清单面参考实现——生成器身份
+  （含**生成器脚本自身的SHA-256**）、逐条expected与逐条tolerances、数组双哈希
+  （raw级+语义级）、清单自指哈希；严格加载失败关闭。三条本仓加强：每个量的容差
+  必须带非空`reason`（判据表第三列从文档义务变成**加载条件**）；非数值量的容差
+  必须为零；`regenerated_by`必须指向**存在的**`docs/decisions/`文件——轴7规则5
+  第一次有了执行体
+- **首批四条A档案例**（`cases/`，决策0020）：`segment_distance`（球/胶囊解析距离
+  与穿透，abs 1e-12mm，五条退化分支+一条一般路径各一条手算用例，**分支覆盖经
+  opcode级trace实测**且未改动源码一字节）、`rotated_aabb`（八角点枚举对Arvo
+  中心-半边长闭式解，abs 1e-9mm；四类典型错重算得31.0/18.5/40.0/65.3mm偏差）、
+  `broadphase_superset`（`separation<0 ⟹ AABB相交`，120对固定种子语料，反例严格为0）、
+  `mesh_asset_integrity`（资产SHA+包盒保守性双零容差，**两条必红语料常驻**）
+- **`tests/test_narrow_phase.py`的判据搬进清单**（轴7规则3：不得在测试里复述
+  oracle公式）；原文件保留可信度分级与诚实降级两条接口诚实性判据
+- **仓内自带合成网格资产**（Chrono形制）：284字节二进制STL+生成脚本一并入库。
+  0017那条真实缺陷（声明SHA逐字节吻合而声明包盒与真值在z轴完全不相交）此前
+  **引擎没有任何门能发现**，现在有了
+- **`tools/check_case_pages.py`**：案例页六必填字段缺一即红，`accept.py` full档的
+  可选槽位就此上膛；外加案例目录必须被`cases/README.md`索引、`oracle.json`必须过
+  严格加载器、清单`case_id`与`load_tier`必须在页里出现三条结构校验。
+  六必填按**标题正文**匹配、忽略中文序号——案例可以有第七第八节，
+  逼它为凑编号删掉最贵的发现是把形式看得比证据重
+- `accept.py`的ruff扫描范围加上`cases/`
 
 ### T4 力学地基
 

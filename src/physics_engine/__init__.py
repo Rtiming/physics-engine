@@ -20,12 +20,25 @@
 - `physics_engine.provenance` —— 溯源机械层：耐久写/no-replace/保护读（轴5）
 - `physics_engine.run_package` —— 装配、语义复读、生命周期法则（轴4/5）
 
-**实验档**（随spec/10、11草案演进，minor内可破坏）：
+**实验档**（随spec/10、11、12、14草案演进，minor内可破坏）：
 
-- `physics_engine.shapes` —— 模拟形状声明层
-- `physics_engine.collision` —— broad-phase碰撞查询
+- `physics_engine.shapes` —— 模拟形状声明层（spec/11）
+- `physics_engine.collision` —— broad phase + 球/胶囊族narrow phase（spec/10）
+- `physics_engine.scene` —— 场景文件与数据层入口
+- `physics_engine.geometry` —— 体积/质心/惯量张量与rounded-core SDF（spec/12）
+- `physics_engine.materials` —— 材料记录：多域字段+证据分级+单位边界（spec/14）
+- `physics_engine.oracles` —— oracle清单面：expected/tolerances/双哈希（轴7）
 
-顶层只re-export最常用的名字；完整面见各模块`__all__`。
+**本包不含时间积分器与求解器，尚不能推进任何物理状态**——物理域圈按
+decisions/0015在搬迁中，路线见`docs/plans/02`。
+
+**实验档模块不进顶层re-export，按全路径import**（`from physics_engine.geometry
+import mass_properties`）。这不是疏漏是预算纪律：顶层eager import的模块数是
+冷启动延迟的结构代理，`tests/perf/test_budgets.py`守着它；把三个实验档模块拉进
+顶层要多付5个模块的import成本，而它们的调用方都明确知道自己要什么。
+稳定倾向档才享有顶层便利——档位在这里是有价格的。
+
+完整面见各模块`__all__`。
 """
 
 from physics_engine.canonical import (

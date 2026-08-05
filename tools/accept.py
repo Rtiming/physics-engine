@@ -51,7 +51,7 @@ BUDGETS: dict[str, float] = {"quick": 30.0, "full": 120.0}
 #: 交互级命令（spec/13零之二第一级）：quick与full都跑。
 #: pytest的``-m``表达式是双档分家的执行体——无marker=交互级。
 QUICK_COMMANDS: tuple[tuple[str, ...], ...] = (
-    (".venv/bin/python", "-m", "ruff", "check", "src", "tests", "tools"),
+    (".venv/bin/python", "-m", "ruff", "check", "src", "tests", "tools", "cases"),
     (
         ".venv/bin/python", "-m", "pytest", "tests", "-q",
         "-m", "not batch and not serverclass",
