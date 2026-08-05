@@ -1,0 +1,461 @@
+{
+  "arrays": {},
+  "case_id": "case/two_beam_interference",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/two_beam_interference",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/two_beam_interference/generate_oracle.py",
+    "sha256": "d08d341b3b810172ec8fb672569480b71235be4077ad62b2f9393741d235131f"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "49ebea866fa02192afbf13844f95974ed2ffc8a0dd5e8c5f9e67f5ce1c2e8dbf",
+  "oracles": [
+    {
+      "expected": {
+        "intensity_at_pi_near_equal": 2.4999998779193435e-15,
+        "intensity_samples": [
+          6.75,
+          5.25,
+          3.75,
+          2.2500000000000004,
+          0.75,
+          2.2499999999999987,
+          3.7499999999999996,
+          6.75
+        ],
+        "intensity_samples_partial_coherence": [
+          5.6,
+          4.8,
+          4.0,
+          3.2,
+          2.4,
+          3.1999999999999993,
+          3.9999999999999996,
+          5.6
+        ],
+        "intensity_with_second_beam_absent": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ],
+        "intensity_with_zero_coherence": [
+          4.0,
+          4.0,
+          4.0,
+          4.0,
+          4.0,
+          4.0,
+          4.0,
+          4.0
+        ],
+        "max_intensity": 6.75,
+        "max_intensity_partial": 5.6,
+        "min_intensity": 0.75,
+        "min_intensity_near_equal": 2.4999998779193435e-15,
+        "min_intensity_negative_naive_case": 3.7926227910188746e-23,
+        "min_intensity_partial": 2.4,
+        "visibility_equal": 1.0,
+        "visibility_faint_closed_form": 1.999999999998e-06,
+        "visibility_faint_from_extremes": 1.999999999998e-06,
+        "visibility_partial_equal": 0.4,
+        "visibility_partial_unequal": 0.32,
+        "visibility_unequal": 0.8,
+        "visibility_with_second_beam_absent": 0.0,
+        "visibility_with_zero_coherence": 0.0
+      },
+      "id": "oracle:interference/two_beam_law",
+      "inputs": {
+        "equal_intensity": 2.0,
+        "faint_intensity_a": 1.0,
+        "faint_intensity_b": 1e-12,
+        "intensity_a": 3.0,
+        "intensity_b": 0.75,
+        "kind": "two_beam_cosine_law_in_60_digit_decimal",
+        "near_equal_a": 1.0,
+        "near_equal_b": 1.0000001,
+        "negative_naive_a": 6.887858857269796,
+        "negative_naive_b": 6.887858857237471,
+        "partial_coherence": 0.4,
+        "phase_samples_rad": [
+          0.0,
+          1.0471975511965976,
+          1.5707963267948966,
+          2.0943951023931953,
+          3.141592653589793,
+          4.1887902047863905,
+          4.71238898038469,
+          6.283185307179586
+        ],
+        "reference_digits": 60
+      },
+      "tolerances": {
+        "intensity_at_pi_near_equal": {
+          "abs": 5e-16,
+          "reason": "**同一个物理量的通用路径**：two_beam_intensity(dphi=pi)走I1+I2-2sqrt(I1I2)，两个约等于2的数相减。绝对误差界2u(I1+I2)=4.4e-16，实测1.65e-16；但真值只有2.5e-15，**相对误差因此到6.6%**。与上一条对照：同一个数，一条判相对5e-9、一条只能判绝对5e-16——差的不是精度是写法。这条**不许改成相对判据**，改了就是在量相消",
+          "rel": 0.0
+        },
+        "intensity_samples": {
+          "abs": 3e-15,
+          "reason": "条纹级次为0（相位直接给），误差是交叉项的三次舍入3u*2sqrt(I1I2) = 1.0e-15加上末次加法的u*|I| <= 7.5e-16，界1.75e-15，取3e-15是它的1.7倍（实测恰为0）。**判绝对不判相对**：dphi=pi处强度只有0.75而两个加数各3.75，相对判据在那里量的是相消不是实现",
+          "rel": 0.0
+        },
+        "intensity_samples_partial_coherence": {
+          "abs": 3e-15,
+          "reason": "同上，另加|gamma|一次乘法舍入。等强2.0、|gamma|=0.4，交叉项1.6、峰值5.6，界3u*1.6 + u*5.6 = 1.15e-15。**实测8.88e-16恰是ulp(5.6)——一位末位，一点也不多**；第一版容差写1e-15只余1.1倍，是按感觉写的不是按界写的，已按界改成3e-15",
+          "rel": 0.0
+        },
+        "intensity_with_second_beam_absent": {
+          "abs": 0.0,
+          "reason": "**退化极限，零容差**：I2=0时sqrt(I1*0)在float64上精确为0，交叉项精确为0，I(dphi)对一切相位精确等于I1。没有第二束就没有条纹——这条不许有余量",
+          "rel": 0.0
+        },
+        "intensity_with_zero_coherence": {
+          "abs": 0.0,
+          "reason": "**退化极限，零容差**：|gamma|=0时交叉项被乘成精确的0，两束按强度直接相加（非相干叠加）。与上一条是两个不同的退化机制落到同一个结论，各验各的",
+          "rel": 0.0
+        },
+        "max_intensity": {
+          "abs": 0.0,
+          "reason": "三项皆正不相消。I1=3、I2=0.75时I1*I2=2.25、sqrt=1.5**在float64上精确**，实测逐位相同；留1e-15（约4.5eps）是给将来换构型的余量，不是给本构型放水",
+          "rel": 1e-15
+        },
+        "max_intensity_partial": {
+          "abs": 0.0,
+          "reason": "等强2.0、|gamma|=0.4：4 + 4*0.4 = 5.6，两次舍入",
+          "rel": 1e-15
+        },
+        "min_intensity": {
+          "abs": 0.0,
+          "reason": "内核走不相消的等价式(sqrt(I1)-sqrt(I2))^2 + 2sqrt(I1I2)(1-|gamma|)。本构型真值0.75，内核实测0.7499999999999999（低1 ulp——**恒等变形在I1、I2相差远时反而多一次舍入**，如实记在这里）。1e-15容得下这1 ulp；该式的价值在近等强构型，见min_intensity_near_equal",
+          "rel": 1e-15
+        },
+        "min_intensity_near_equal": {
+          "abs": 0.0,
+          "reason": "I1=1、I2=1+1e-7的暗纹。**这个量本身病态**：放大因子sqrt(I2)/|sqrt(I1)-sqrt(I2)| = 2.0000e+07，sqrt(I2)自己的半ulp经它放大后相对误差界2*amp*u = 4.4e-9。内核走不相消的等价式，实测1.15e-9（界的1/3.8）。**容差是从放大因子算出来的**：换一个更近的构型它会更大",
+          "rel": 5e-09
+        },
+        "min_intensity_negative_naive_case": {
+          "abs": 0.0,
+          "reason": "这一对I1、I2上朴素式I1+I2-2sqrt(I1I2)**返回-1.78e-15**（负强度——物理上不存在的东西，不是精度问题）。真值只有3.79e-23，**放大因子sqrt(I2)/|sqrt(I1)-sqrt(I2)| = 4.3e11**，连内核那条不相消的路都只剩4位有效数字（界2*amp*u = 9.5e-5，实测6.55e-5）。取2e-4是界的2.1倍。**这条判相对**：判绝对的话5e-16比真值大七个数量级，那样的判据只是在说“结果接近0”，一点判别力都没有",
+          "rel": 0.0002
+        },
+        "min_intensity_partial": {
+          "abs": 0.0,
+          "reason": "等强时(sqrt(I1)-sqrt(I2))^2恰为0，剩2sqrt(I1I2)(1-|gamma|)= 4*0.6 = 2.4。1-0.4按Sterbenz引理精确",
+          "rel": 1e-15
+        },
+        "visibility_equal": {
+          "abs": 0.0,
+          "reason": "**零容差**：等强完全相干时2sqrt(I*I)与I+I逐位相同，商精确为1.0。这是一条能写成等号的物理主张，不留余量",
+          "rel": 0.0
+        },
+        "visibility_faint_closed_form": {
+          "abs": 0.0,
+          "reason": "I2/I1 = 1e-12时V = 2e-6。闭式路径无相消：sqrt(I1I2)与I1+I2都不是小差，一次除法",
+          "rel": 1e-15
+        },
+        "visibility_faint_from_extremes": {
+          "abs": 0.0,
+          "reason": "**同一个量的另一条路**：(Imax-Imin)/(Imax+Imin)。Imax与Imin的相对差只有2V = 4e-6，相减的**放大因子恰是1/V = 5e5**，解析界2u/V = 1.1e-10，取1e-9是它的9倍。**两条路容差差六个数量级，差的就是那个放大因子**——所以fringe_visibility走闭式不走极值相减",
+          "rel": 1e-09
+        },
+        "visibility_partial_equal": {
+          "abs": 0.0,
+          "reason": "等强时V = |gamma| = 0.4——**这就是|gamma|的操作定义**，也是相干性那半边的判据：它红了说明|gamma|没有按定义进公式",
+          "rel": 1e-15
+        },
+        "visibility_partial_unequal": {
+          "abs": 0.0,
+          "reason": "V = 0.8 * 0.4 = 0.32：可见度是**两个因子之积**（强度失配与相干度）。与上一条合起来才把|gamma|与强度比分开——只验等强时，把|gamma|错当成整个可见度的实现照样绿",
+          "rel": 1e-15
+        },
+        "visibility_unequal": {
+          "abs": 0.0,
+          "reason": "闭式2sqrt(I1I2)/(I1+I2) = 3.0/3.75 = 0.8，一次除法",
+          "rel": 1e-15
+        },
+        "visibility_with_second_beam_absent": {
+          "abs": 0.0,
+          "reason": "零容差：I2=0 → V精确为0。V>0而I2=0自相矛盾，不留余量",
+          "rel": 0.0
+        },
+        "visibility_with_zero_coherence": {
+          "abs": 0.0,
+          "reason": "零容差：|gamma|=0 → V精确为0。非相干光不产生条纹",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "deviation_estimate_over_measured": [
+          1.0000003189091073,
+          1.0000048241901027,
+          1.0001201481346518,
+          1.0076818525535707
+        ],
+        "exact_path_difference_m": [
+          0.0,
+          1.581999674672455e-07,
+          3.1639974488793185e-07,
+          6.327979694102398e-07,
+          9.49193153237828e-07,
+          3.163746617478087e-06
+        ],
+        "first_bright_fringe_relative_shift": 3.2089274433921106e-06,
+        "fringe_spacing_m": 0.0030374399999999998,
+        "paraxial_path_difference_m": [
+          0.0,
+          1.582e-07,
+          3.164e-07,
+          6.328e-07,
+          9.492000000000001e-07,
+          3.164e-06
+        ],
+        "paraxial_relative_deviation_estimate": [
+          2.0564326722222222e-07,
+          3.2089120672222218e-06,
+          8.009259334722223e-05,
+          0.005125584177347223
+        ],
+        "paraxial_relative_deviation_measured": [
+          2.0564320164073233e-07,
+          3.208896586895067e-06,
+          8.00829715275758e-05,
+          0.005086510354789519
+        ],
+        "screen_intensity_samples": [
+          6.75,
+          3.75,
+          0.75,
+          6.75,
+          0.75,
+          6.75
+        ]
+      },
+      "id": "oracle:interference/young_double_slit",
+      "inputs": {
+        "bisection_bracket_m": [
+          0.0015187199999999999,
+          0.00455616
+        ],
+        "bisection_steps": 200,
+        "deviation_multipliers": [
+          0.25,
+          1.0,
+          5.0,
+          40.0
+        ],
+        "deviation_positions_m": [
+          0.0007593599999999999,
+          0.0030374399999999998,
+          0.0151872,
+          0.1214976
+        ],
+        "intensity_a": 3.0,
+        "intensity_b": 0.75,
+        "kind": "young_fringes_against_exact_two_point_source_geometry",
+        "position_multipliers": [
+          0.0,
+          0.25,
+          0.5,
+          1.0,
+          1.5,
+          5.0
+        ],
+        "screen_distance_m": 1.2,
+        "screen_positions_m": [
+          0.0,
+          0.0007593599999999999,
+          0.0015187199999999999,
+          0.0030374399999999998,
+          0.00455616,
+          0.0151872
+        ],
+        "slit_separation_m": 0.00025,
+        "wavelength_m": 6.328e-07
+      },
+      "tolerances": {
+        "deviation_estimate_over_measured": {
+          "abs": 0.0,
+          "reason": "**这一条才是“适用条件”本身**：首阶估计除以实测偏差。四点实测1.0000003 / 1.0000048 / 1.0001201 / 1.0076819——**首阶展开在偏差5.09e-3（x=40dx、x/L约0.10）时自己差了7.7e-3，这就是它的适用边界，写成一个能被断言的数而不是一句“近轴时成立”**。容差随measured那条（同一个1/dev放大因子，最坏点同为x=0.25dx）",
+          "rel": 2e-09
+        },
+        "exact_path_difference_m": {
+          "abs": 0.0,
+          "reason": "**两条代数路对拍**：内核走2xd/(sqrt(A)+sqrt(B))（不相消），参考走60位Decimal上的定义式sqrt(A)-sqrt(B)。内核那条只有四次舍入，1e-15约4.5eps。**定义式在float64上直接相减会丢约6位**（L=1.2 m而OPD只有6.33e-7 m，实测两条路差8.3e-11相对；越近轴丢得越多），所以内核不许那么写——这条判据同时守着那件事",
+          "rel": 1e-15
+        },
+        "first_bright_fringe_relative_shift": {
+          "abs": 0.0,
+          "reason": "**二分精确几何求出的第一亮纹位置**相对傍轴dx的偏移，参考由生成器在60位上二分它自己的精确光程差得到（200次）。测量侧在float64上二分内核的精确光程差；偏移量本身约+3.209e-6（精确条纹比傍轴预测**更远**，与偏差同号）。两项误差：①float64二分的位置分辨率1 ulp(3e-3) = 4.3e-19 m，折成相对偏移4.4e-11；②精确光程差自身2.2e-16的相对误差经斜率dOPD/dx = 2.08e-4折算成6.7e-19 m，折成6.9e-11。界约1.2e-10，取5e-10是它的4.2倍（实测4.7e-11）。**这一条是条纹间距闭式的独立佐证**：闭式说dx，精确几何说dx(1+3.209e-6)，两者的差正好是傍轴偏差本身",
+          "rel": 5e-10
+        },
+        "fringe_spacing_m": {
+          "abs": 0.0,
+          "reason": "dx = lambda L / d，一乘一除两次舍入（约2.2e-16）。参考值在**精确有理数**上算再折成float64。L与d写颠倒得到1.3e-9 m而不是3.0e-3 m，这条当场红6个数量级",
+          "rel": 1e-15
+        },
+        "paraxial_path_difference_m": {
+          "abs": 0.0,
+          "reason": "OPD = d x / L，两次舍入。参考走精确有理数。x=0处两侧都精确为0，rel判据在零值上自动退化成等号——**中央条纹的光程差恰为零**，正该是等号",
+          "rel": 1e-15
+        },
+        "paraxial_relative_deviation_estimate": {
+          "abs": 0.0,
+          "reason": "闭式(x^2 + d^2/4)/(2 L^2)，四次舍入。参考走60位Decimal",
+          "rel": 1e-15
+        },
+        "paraxial_relative_deviation_measured": {
+          "abs": 0.0,
+          "reason": "1 - OPD_exact/OPD_paraxial：两个相对差只有dev的数相减，**放大因子就是1/dev**。四个取样点的dev是2.06e-7 / 3.21e-6 / 8.01e-5 / 5.09e-3，**最坏点是最靠里的x=0.25dx**（1/dev = 4.86e6，解析界3u/dev = 1.62e-9，实测2.37e-10）。**同一条容差由最坏点定**，取2e-9是界的1.2倍。注意最坏点不是最外面那个而是最里面那个——越近轴、傍轴近似越准，这个比值就越难算准",
+          "rel": 2e-09
+        },
+        "screen_intensity_samples": {
+          "abs": 5e-14,
+          "reason": "屏上位置→傍轴光程差→相位→强度四步。最远取样在第5级，相位误差界2.1e-15*5 = 1.05e-14 rad，乘交叉项3.0得3.15e-14。取5e-14≈解析界。**这一条同时是“相位差里漏了2pi/lambda”的捕手**：漏了之后暗纹位置上会算出亮纹强度，差3个数量级",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "declared_mean_intensity": [
+          3.75,
+          4.0,
+          4.0,
+          3.0
+        ],
+        "phase_average_intensity": [
+          3.75,
+          4.0,
+          4.0,
+          3.0
+        ],
+        "screen_average_over_one_fringe": 3.75
+      },
+      "id": "oracle:interference/energy_conservation",
+      "inputs": {
+        "configurations": [
+          [
+            3.0,
+            0.75,
+            1.0
+          ],
+          [
+            2.0,
+            2.0,
+            1.0
+          ],
+          [
+            2.0,
+            2.0,
+            0.4
+          ],
+          [
+            3.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "fringe_spacing_m": 0.0030374399999999998,
+        "intensity_a": 3.0,
+        "intensity_b": 0.75,
+        "kind": "fringe_average_returns_the_incoherent_sum",
+        "sample_count": 720,
+        "screen_distance_m": 1.2,
+        "slit_separation_m": 0.00025,
+        "wavelength_m": 6.328e-07
+      },
+      "tolerances": {
+        "declared_mean_intensity": {
+          "abs": 0.0,
+          "reason": "零容差：two_beam_mean_intensity就是I1+I2一次加法，必须与参考逐位相同。它是上一条的**申报值**——平均回到的那个数不许是另算的",
+          "rel": 0.0
+        },
+        "phase_average_intensity": {
+          "abs": 3e-15,
+          "reason": "**干涉重新分配能量，不创造能量**：余弦在整周期上的平均解析地恰为零，所以条纹的相位平均必须回到I1+I2，**与|gamma|、与条纹间距、与光程差机制全都无关**——这是一条独立于任何条纹公式的自洽门。720点整周期，残差是每点的舍入被平均之后剩下的，最坏情形（各点同号）就是单点的界1.75e-15，取3e-15是它的1.7倍。**四个构型实测残差都恰为0**——余弦在整周期上的抵消在float64里也是精确的。四个构型：不等强/等强/部分相干/单束，各一条",
+          "rel": 0.0
+        },
+        "screen_average_over_one_fringe": {
+          "abs": 5e-14,
+          "reason": "**空间平均**：屏上一个条纹间距内720点等间距取样的平均。与相位平均那条不同，**这一条是耦合的**——它同时用到条纹间距与整条相位链，条纹间距算错就不再是整周期平均、余弦不再抵消。如实标注它不独立；独立的那条是phase_average_intensity。容差按相位链的舍入取（同screen_intensity_samples）",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "declared_phase_accuracy_matches_manifest": true,
+        "fringe_slip_over_full_scan_rad": 6.283185307179586,
+        "ils_first_zero_per_m": 10.0,
+        "michelson_fringe_order": 15802.781289506953,
+        "michelson_intensity": 4.336001327557431,
+        "michelson_path_difference_m": 0.01,
+        "michelson_phase_rad": 99291.80321080257,
+        "shifted_wavelength_m": 6.327959956669394e-07
+      },
+      "id": "oracle:interference/michelson_and_fts_bridge",
+      "inputs": {
+        "fts_max_opd_m": 0.05,
+        "intensity_a": 3.0,
+        "intensity_b": 0.75,
+        "kind": "michelson_high_fringe_order_and_the_fts_resolution_bridge",
+        "mirror_displacement_m": 0.005,
+        "phase_accuracy_rad_per_fringe_order": 2.1e-15,
+        "wavelength_m": 6.328e-07
+      },
+      "tolerances": {
+        "declared_phase_accuracy_matches_manifest": {
+          "abs": 0.0,
+          "reason": "布尔零容差：内核常量PHASE_ACCURACY_RAD_PER_FRINGE_ORDER必须等于清单inputs里那个数。生成器不import内核，所以那个系数在两边各存了一份——**这条门就是不许它们漂**。上面三条容差全是拿它乘条纹级次算出来的，它漂了容差就成了空话",
+          "rel": 0.0
+        },
+        "fringe_slip_over_full_scan_rad": {
+          "abs": 8e-10,
+          "reason": "**与FTS的桥**：ILS首零1/(2L)按定义是分辨极限，它的物理内容是——波数差一个1/(2L)的两束光，在整个扫描程2L上相对相位**恰好滑过一个整条纹2pi**。期望值因此就写2pi。两项偏差：①级次158028上两个大相位相减，解析界2*2.1e-15*N = 6.637e-10（实测2.7e-13——两次舍入高度相关，**容差按界取不按运气取**）；②sigma→lambda→sigma的往返把dsigma挪了1.7e-12相对，使精确值比2pi低1.052e-11。取8e-10覆盖①的界。**本条不引入任何FFT**：0031把变换层声明为下一块，这里只用两条余弦的相位差",
+          "rel": 0.0
+        },
+        "ils_first_zero_per_m": {
+          "abs": 0.0,
+          "reason": "取自本子包已有的fts.unapodised_first_zero_per_m：1/(2L) = 10 per m。**本案例不另写一份**——两份等价实现是末位漂移的温床（本仓有过k*(d_a·d_b)那条教训）",
+          "rel": 1e-15
+        },
+        "michelson_fringe_order": {
+          "abs": 0.0,
+          "reason": "N = OPD/lambda一次除法、正确舍入，1 ulp约2.2e-16。N = 15802.78——**它同时是下面两条的相消放大因子**",
+          "rel": 2.3e-16
+        },
+        "michelson_intensity": {
+          "abs": 1e-10,
+          "reason": "相位误差经交叉项放大：2sqrt(I1I2)*3.319e-11 = 9.956e-11。取1e-10≈解析界，实测1.15e-11（界的1/8.6）。**这不是“实现不够好”**：这个量在float64上就只有这么准，级次再升一个数量级它还会更差——所以级次是公开的（fringe_order）",
+          "rel": 0.0
+        },
+        "michelson_path_difference_m": {
+          "abs": 0.0,
+          "reason": "零容差：动镜位移乘2在二进制上是精确的指数搬移。**这个2是“光去一趟回一趟”**，与fts.DOUBLE_SIDED_OPD_FACTOR那个“干涉图录在-L..+L上”的2不是同一件事，数值相同纯属巧合。写成1就是2倍的条纹级次错，这条当场红",
+          "rel": 0.0
+        },
+        "michelson_phase_rad": {
+          "abs": 3.4e-11,
+          "reason": "dphi = 2 pi N约99292 rad。内核走(2pi/lambda)*OPD，三次舍入使相对误差3u，绝对误差因此约3u*2pi*N = 2.1e-15*N = 3.319e-11 rad——**相位精度随条纹级次线性退化，放大因子就是级次本身**。参考侧用Fraction把OPD/lambda精确约化到[0,1)再乘2pi，一点不损失。取3.4e-11≈解析界。**判绝对**：相对判据在这里量的是级次不是实现",
+          "rel": 0.0
+        },
+        "shifted_wavelength_m": {
+          "abs": 0.0,
+          "reason": "lambda2 = 1/(1/lambda1 + dsigma0)，两次取倒一次加法。**这里的波数必须是谱学波数sigma = 1/lambda不是角波数**，差2pi则整条桥塌掉——两个换算函数并存就是为这一刻",
+          "rel": 1e-15
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

@@ -1,6 +1,7 @@
-"""光学域第一块——标量衍射闭式解与FTS仪器线型（spec/15登记的第二个物理域）。
+"""光学域——标量衍射闭式解、FTS仪器线型、双光束干涉（spec/15登记的第二个物理域）。
 
-用户2026-08-05裁决光学域进引擎（决策0031）。本子包是它的第一块代码。
+用户2026-08-05裁决光学域进引擎（决策0031）。本子包是它的第一块代码，
+双光束干涉（`interference.py`）是第二块（决策0044）。
 
 ## 边界（spec/15，本块与它同批落地）
 
@@ -31,7 +32,12 @@ research/06已测出本仓的标度指数约1.05（线性、没有可摊薄的�
 * **自切趾**（有限接收立体角把条纹对比度吃掉的那一项）、**相位误差**、
   **采样与混叠**——FTS一侧有成熟实现，搬迁按spec/12第七节的切换门走，
   不在本块预支；
-* **偏振、相干、色散、非线性**——一个都没有；
+* **偏振、色散、非线性**——一个都没有；
+* **相干只做`|gamma|`不做`arg(gamma)`**（决策0044改写了本行）。
+  第一块写的是"相干一个都没有"，`interference.py`落地后这句话不再成立：
+  部分相干以**复相干度的模**作为申报输入进来了，而它的相位没有。
+  理由与触发条件见`interference.py`的模块docstring——
+  **负空间声明过期了要改，不改就是谎**；
 * **不做第二套FTS**。物理正本在fts-digital-twin，本块是引擎侧的规范面与
   可对拍的闭式参照。
 """
@@ -73,6 +79,23 @@ from physics_engine.optics.fts import (
     unapodised_fwhm_per_m,
     unapodised_line_shape,
 )
+from physics_engine.optics.interference import (
+    FULL_COHERENCE,
+    MICHELSON_OPD_PER_MIRROR_DISPLACEMENT,
+    PHASE_ACCURACY_RAD_PER_FRINGE_ORDER,
+    fringe_order,
+    fringe_visibility,
+    michelson_path_difference_m,
+    phase_difference_rad,
+    two_beam_intensity,
+    two_beam_max_intensity,
+    two_beam_mean_intensity,
+    two_beam_min_intensity,
+    young_exact_path_difference_m,
+    young_fringe_spacing_m,
+    young_paraxial_path_difference_m,
+    young_paraxial_relative_deviation,
+)
 from physics_engine.optics.parameters import (
     OPTICS_DOMAIN,
     OPTICS_LENGTH_UNIT,
@@ -86,14 +109,17 @@ __all__ = [
     "AIRY_FIRST_ZERO_TRUNCATION",
     "AIRY_FIRST_ZERO_X",
     "DOUBLE_SIDED_OPD_FACTOR",
+    "FULL_COHERENCE",
     "J1_ABSOLUTE_ACCURACY",
     "J1_TESTED_ARGUMENT_MAX",
+    "MICHELSON_OPD_PER_MIRROR_DISPLACEMENT",
     "NORTON_BEER_COEFFICIENTS",
     "NORTON_BEER_STRENGTHS",
     "NORTON_BEER_UNIT_SUM_TOLERANCE",
     "OPTICS_DOMAIN",
     "OPTICS_LENGTH_UNIT",
     "OpticsError",
+    "PHASE_ACCURACY_RAD_PER_FRINGE_ORDER",
     "RADIANS_PER_CYCLE",
     "SERIES_LIMIT",
     "UNAPODISED_FWHM_IN_SINC_UNITS",
@@ -104,16 +130,28 @@ __all__ = [
     "airy_intensity",
     "angular_wavenumber_rad_per_m",
     "bessel_j1",
+    "fringe_order",
+    "fringe_visibility",
+    "michelson_path_difference_m",
     "normalised_sinc",
     "norton_beer_coefficients",
     "norton_beer_throughput",
     "norton_beer_window",
     "optics_evidence_grade",
     "optics_parameters",
+    "phase_difference_rad",
     "require_optics_parameter",
     "spatial_frequency_per_m",
     "spectroscopic_wavenumber_per_m",
+    "two_beam_intensity",
+    "two_beam_max_intensity",
+    "two_beam_mean_intensity",
+    "two_beam_min_intensity",
     "unapodised_first_zero_per_m",
     "unapodised_fwhm_per_m",
     "unapodised_line_shape",
+    "young_exact_path_difference_m",
+    "young_fringe_spacing_m",
+    "young_paraxial_path_difference_m",
+    "young_paraxial_relative_deviation",
 ]
