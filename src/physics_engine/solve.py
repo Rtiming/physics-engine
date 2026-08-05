@@ -109,15 +109,22 @@ def solve_equilibrium(
     state = State(layout=layout, vector=tuple(float(value) for value in initial))
     backtracks = 0
     for iteration in range(1, max_iterations + 1):
-        energy, gradient, hessian = registry.total(
-            state, context, need_gradient=True, need_hessian=True
-        )
-        assert gradient is not None and hessian is not None
+        energy, gradient, _ = registry.total(state, context, need_gradient=True)
+        assert gradient is not None
         residual = _max_abs(gradient[index] for index in free)
         if residual <= residual_tol_n:
             return SolveResult(state, True, iteration - 1, residual, backtracks)
 
-        reduced = [[hessian[row][column] for column in free] for row in free]
+        # 稀疏取Hessian再压成自由自由度上的稠密块。**不建全尺寸稠密矩阵**——
+        # 实测结构非零只占0.5852%，建它是本装配唯一的复杂度问题（decisions/0026）。
+        entries = registry.hessian_entries(state, context)
+        position = {index: offset for offset, index in enumerate(free)}
+        reduced = [[0.0] * len(free) for _ in free]
+        for (row, column), value in entries.items():
+            row_offset = position.get(row)
+            column_offset = position.get(column)
+            if row_offset is not None and column_offset is not None:
+                reduced[row_offset][column_offset] = value
         rhs = [-gradient[index] for index in free]
         step = _solve_dense(reduced, rhs)
         if not all(math.isfinite(value) for value in step):

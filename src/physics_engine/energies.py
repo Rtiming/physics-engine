@@ -78,6 +78,17 @@ class EnergyTerm(Protocol):
         need_gradient: bool, need_hessian: bool,
     ) -> tuple[float, Vector | None, Matrix | None]: ...
 
+    def hessian_entries(
+        self, state: State, context: EnergyContext
+    ) -> tuple[tuple[int, int, float], ...]:
+        """结构非零项``(行, 列, 值)``。
+
+        稠密``hessian()``是协议面、保持不变；本方法是**同一份数学的稀疏读法**。
+        实测（decisions/0026）：结构非零只占稠密的0.5852%，稠密累加做了170.9倍
+        多余的工作，且让装配的标度指数从约1升到2.02——那是画像里唯一的复杂度问题。
+        """
+        ...
+
 
 def _zeros(n: int) -> list[float]:
     return [0.0] * n
@@ -133,10 +144,31 @@ class UniformGravity:
         n = len(state.vector)
         return tuple(tuple(row) for row in _zero_matrix(n))
 
+    def hessian_entries(self, state, context):
+        """恒为零——**没有一个非零项**。稠密路径为它构造并累加了整个n²零矩阵。"""
+
+        return ()
+
     def quantities(self, state, context, *, need_gradient, need_hessian):
+        """融合：一次遍历同时出能量与梯度（spec/12第3.1节的承重条款）。"""
+
+        gx, gy, gz = context.gravity_mm_s2
+        vector = state.vector
+        total = 0.0
+        gradient = _zeros(len(vector)) if need_gradient else None
+        for index in range(len(vector) // 3):
+            mass = context.node_masses_kg[index]
+            base = 3 * index
+            total -= mass * (
+                gx * vector[base] + gy * vector[base + 1] + gz * vector[base + 2]
+            ) / MM_PER_M
+            if gradient is not None:
+                gradient[base] = -mass * gx / MM_PER_M
+                gradient[base + 1] = -mass * gy / MM_PER_M
+                gradient[base + 2] = -mass * gz / MM_PER_M
         return (
-            self.energy(state, context),
-            self.gradient(state, context) if need_gradient else None,
+            total,
+            tuple(gradient) if gradient is not None else None,
             self.hessian(state, context) if need_hessian else None,
         )
 
@@ -221,11 +253,70 @@ class AxialStretch:
                         result[3 * si + a][3 * sj + b] += sign * block
         return tuple(tuple(row) for row in result)
 
+    def _edge_blocks(self, state: State, edge):
+        """一条边的完整贡献：(能量, 力矢, 3×3块)。**边核只求值一次**。"""
+
+        i, j, rest_mm, _ = edge
+        energy, direction, elongation, k = self._edge_energy(state, edge)
+        length = rest_mm + elongation
+        force = k * elongation
+        # **求值结构必须与`hessian()`逐字一致**：`k*(d_a·d_b)`不是`(k*d_a)*d_b`，
+        # 浮点乘法不结合。第一版融合就是在这里丢了末位，被spec/12第3.1节的
+        # 逐字节门当场抓住——那条门不是形式主义。
+        transverse = k * elongation / length
+        block = []
+        for a in range(3):
+            row = []
+            for b in range(3):
+                outer = direction[a] * direction[b]
+                identity = 1.0 if a == b else 0.0
+                row.append(k * outer + transverse * (identity - outer))
+            block.append(tuple(row))
+        block = tuple(block)
+        return i, j, energy, direction, force, block
+
+    def hessian_entries(self, state, context):
+        entries = []
+        for edge in self.edges:
+            i, j, _, _, _, block = self._edge_blocks(state, edge)
+            for a in range(3):
+                for b in range(3):
+                    value = block[a][b]
+                    for si, sj, sign in ((i, i, 1.0), (j, j, 1.0),
+                                         (i, j, -1.0), (j, i, -1.0)):
+                        entries.append((3 * si + a, 3 * sj + b, sign * value))
+        return tuple(entries)
+
     def quantities(self, state, context, *, need_gradient, need_hessian):
+        """融合：**边核只求值一次**，能量/梯度/Hessian一次遍历同时出。
+
+        分开调会把边核跑三遍——实测边核求值恰为边数的1.0×/2.0×/3.0×
+        （decisions/0026）。spec/12第3.1节把融合写成承重条款，理由正是这个。
+        """
+
+        n = len(state.vector)
+        total = 0.0
+        gradient = _zeros(n) if need_gradient else None
+        hessian = _zero_matrix(n) if need_hessian else None
+        for edge in self.edges:
+            i, j, energy, direction, force, block = self._edge_blocks(state, edge)
+            total += energy
+            if gradient is not None:
+                for axis in range(3):
+                    gradient[3 * i + axis] -= force * direction[axis]
+                    gradient[3 * j + axis] += force * direction[axis]
+            if hessian is not None:
+                for a in range(3):
+                    for b in range(3):
+                        value = block[a][b]
+                        hessian[3 * i + a][3 * i + b] += value
+                        hessian[3 * j + a][3 * j + b] += value
+                        hessian[3 * i + a][3 * j + b] -= value
+                        hessian[3 * j + a][3 * i + b] -= value
         return (
-            self.energy(state, context),
-            self.gradient(state, context) if need_gradient else None,
-            self.hessian(state, context) if need_hessian else None,
+            total,
+            tuple(gradient) if gradient is not None else None,
+            tuple(tuple(row) for row in hessian) if hessian is not None else None,
         )
 
 
@@ -316,11 +407,41 @@ class LinearBending:
                         result[3 * node_a + axis][3 * node_b + axis] += block
         return tuple(tuple(row) for row in result)
 
+    def hessian_entries(self, state, context):
+        entries = []
+        for coefficients, scale, _offset in self.stencils:
+            for node_a, coefficient_a in coefficients:
+                for node_b, coefficient_b in coefficients:
+                    value = scale * coefficient_a * coefficient_b
+                    for axis in range(3):
+                        entries.append((3 * node_a + axis, 3 * node_b + axis, value))
+        return tuple(entries)
+
     def quantities(self, state, context, *, need_gradient, need_hessian):
+        """融合：模板矢量只求值一次。"""
+
+        n = len(state.vector)
+        total = 0.0
+        gradient = _zeros(n) if need_gradient else None
+        hessian = _zero_matrix(n) if need_hessian else None
+        for coefficients, scale, offset in self.stencils:
+            d = self._stencil_vector(state, coefficients, offset)
+            total += 0.5 * scale * (d[0] * d[0] + d[1] * d[1] + d[2] * d[2])
+            if gradient is not None:
+                for node, coefficient in coefficients:
+                    factor = scale * coefficient
+                    for axis in range(3):
+                        gradient[3 * node + axis] += factor * d[axis]
+            if hessian is not None:
+                for node_a, coefficient_a in coefficients:
+                    for node_b, coefficient_b in coefficients:
+                        value = scale * coefficient_a * coefficient_b
+                        for axis in range(3):
+                            hessian[3 * node_a + axis][3 * node_b + axis] += value
         return (
-            self.energy(state, context),
-            self.gradient(state, context) if need_gradient else None,
-            self.hessian(state, context) if need_hessian else None,
+            total,
+            tuple(gradient) if gradient is not None else None,
+            tuple(tuple(row) for row in hessian) if hessian is not None else None,
         )
 
 
@@ -405,6 +526,30 @@ class EnergyRegistry:
             tuple(gradient) if gradient is not None else None,
             tuple(tuple(row) for row in hessian) if hessian is not None else None,
         )
+
+    def hessian_entries(
+        self, state: State, context: EnergyContext
+    ) -> dict[tuple[int, int], float]:
+        """稀疏Hessian：``{(行, 列): 值}``，只含结构非零。
+
+        **累加次序逐字复刻稠密路径**：先把每个能量项自己的项累成该项的稠密值
+        （`(a1+a2)`），再按声明次序把各项相加（`(a1+a2)+(b1+b2)`）。
+        直接把所有项流式相加会得到`((a1+a2)+b1)+b2`——浮点加法不结合，
+        那是另一个数。这一条有门守着（`test_sparse_hessian_matches_the_dense_one`）。
+
+        实测（decisions/0026）：结构非零占稠密的0.5852%，稠密累加多做170.9倍工作，
+        并把装配的标度指数从约1推到2.02。
+        """
+
+        accumulated: dict[tuple[int, int], float] = {}
+        for term in self.terms:
+            per_term: dict[tuple[int, int], float] = {}
+            for row, column, value in term.hessian_entries(state, context):
+                key = (row, column)
+                per_term[key] = per_term.get(key, 0.0) + value
+            for key, value in per_term.items():
+                accumulated[key] = accumulated.get(key, 0.0) + value
+        return accumulated
 
     def acceleration(self, context: EnergyContext, layout: StateLayout):
         """把能量梯度变成加速度回调，接`integrate`——**这是内核与积分器的接缝**。

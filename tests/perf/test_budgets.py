@@ -116,3 +116,64 @@ def test_wheel_budget_is_recorded_per_version_not_a_single_hard_number(baseline)
         f"当前版本 {__version__} 没有wheel体积记账——发版前补一行到"
         "benchmarks/engine_budgets.baseline.json的wheel_budget_history。"
     )
+
+
+def test_the_fused_path_evaluates_each_edge_kernel_exactly_once():
+    """确定性整数门：**融合的回归会在这里红**（decisions/0026第八节点名的那条）。
+
+    `quantities`若做回"分别调energy/gradient/hessian"，边核求值会变成边数的
+    3.0×——这个倍数是实测出来的，不是估的。整数计数跨平台逐位稳定，
+    正是决策0018说的"进门的是确定性量、墙钟只产报告"那一类。
+    """
+
+    from physics_engine import energies
+    from physics_engine.energies import (
+        AxialStretch,
+        EnergyContext,
+        EnergyRegistry,
+        UniformGravity,
+    )
+    from physics_engine.state import State, StateField, StateLayout
+
+    nodes, step = 9, 4.0
+    layout = StateLayout(
+        layout_id="layout/counter",
+        fields=tuple(
+            field
+            for index in range(nodes)
+            for field in (
+                StateField(f"node{index}_x_mm", 1),
+                StateField(f"node{index}_y_mm", 1),
+                StateField(f"node{index}_z_mm", 1),
+            )
+        ),
+    )
+    edges = tuple((i, i + 1, step, 700.0) for i in range(nodes - 1))
+    registry = EnergyRegistry(terms=(UniformGravity(), AxialStretch(edges=edges)))
+    context = EnergyContext(
+        context_id="context/counter", node_masses_kg=(0.4,) * nodes,
+        gravity_mm_s2=(0.0, -9806.65, 0.0),
+    )
+    state = State(
+        layout=layout,
+        vector=tuple(v for i in range(nodes) for v in (i * step, 0.1 * i * i, 0.0)),
+    )
+
+    calls = 0
+    original = AxialStretch._edge_energy
+
+    def counting(self, *args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(self, *args, **kwargs)
+
+    AxialStretch._edge_energy = counting
+    try:
+        registry.total(state, context, need_gradient=True, need_hessian=True)
+    finally:
+        AxialStretch._edge_energy = original
+    assert calls == len(edges), (
+        f"边核求值{calls}次，边数{len(edges)}——融合被做回去了。"
+        "分开调energy/gradient/hessian会是3倍边数（decisions/0026实测）"
+    )
+    assert energies is not None

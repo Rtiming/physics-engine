@@ -281,3 +281,53 @@ def test_the_solver_refuses_a_fully_fixed_problem():
             registry, context, layout, (0.0, 0.0, 0.0),
             fixed_indices=frozenset({0, 1, 2}),
         )
+
+
+def test_sparse_hessian_matches_the_dense_one_bitwise():
+    """稀疏读法与稠密路径**逐位**相同——累加次序逐字复刻，不是"数值上接近"。
+
+    这条门守的是spec/13第一节义务2：声称"结果不变"的优化，附逐字节对拍。
+    第一版融合就在这里丢过末位（把`k*(d_a·d_b)`写成`(k*d_a)*d_b`，
+    浮点乘法不结合），被抓住了。
+    """
+
+    from physics_engine.energies import LinearBending, clamped_chain_bending_stencils
+
+    nodes, step = 7, 6.5
+    layout = _layout(nodes)
+    context = EnergyContext(
+        context_id="context/sparse", node_masses_kg=tuple(0.2 + 0.07 * i for i in range(nodes)),
+        gravity_mm_s2=(0.13, -9806.65, -0.41),
+    )
+    registry = EnergyRegistry(terms=(
+        UniformGravity(),
+        AxialStretch(edges=tuple((i, i + 1, step, 900.0 + i) for i in range(nodes - 1))),
+        LinearBending(stencils=clamped_chain_bending_stencils(nodes, step, 4.4e5)),
+    ))
+    state = State(
+        layout=layout,
+        vector=tuple(
+            v for i in range(nodes)
+            for v in (i * step + 0.02 * i * i, 0.41 * i - 0.03 * i * i, 0.09 * i)
+        ),
+    )
+    _, _, dense = registry.total(state, context, need_gradient=True, need_hessian=True)
+    assert dense is not None
+    sparse = registry.hessian_entries(state, context)
+    size = len(state.vector)
+    for row in range(size):
+        for column in range(size):
+            assert dense[row][column] == sparse.get((row, column), 0.0), (
+                f"({row},{column}) 稠密{dense[row][column]!r} 稀疏{sparse.get((row, column), 0.0)!r}"
+            )
+
+
+def test_gravity_contributes_no_hessian_entries_at_all():
+    """重力Hessian恒零——稀疏读法下它一个项都不该产生（稠密路径为它建了整个n²零矩阵）。"""
+
+    context = EnergyContext(
+        context_id="context/g", node_masses_kg=(1.0, 2.0),
+        gravity_mm_s2=(0.0, -9806.65, 0.0),
+    )
+    state = State(layout=_layout(2), vector=(0.0, 0.0, 0.0, 3.0, 4.0, 5.0))
+    assert UniformGravity().hessian_entries(state, context) == ()
