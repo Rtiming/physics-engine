@@ -72,7 +72,14 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
     #: 它import `state`（力学）、`integrate`（力学）、`energies`（力学，取`MM_PER_M`）
     #: 与`geometry`/`shapes`（基座modelgen）——**没有一条边越到别的域**。
     #: 判据仍是0035那条：import决定环，不是愿望决定环。
-    "mechanics": ("energies", "integrate", "rigidbody", "sensors", "solve", "state"),
+    #: `contact`归力学（2026-08-05，决策0050）：它import `state`（力学）与
+    #: `energies`（力学，取`EnergyContext`做质量表比对）——**没有一条边越到别的域**。
+    #: 判据仍是0035那条：**import决定环，不是愿望决定环**。
+    #: 它今天**不**import `scene`（基座）——0050第一节写明声明由调用方给，
+    #: 接`FinalizedScene`要等第一个既走装配又走求解的案例。
+    "mechanics": (
+        "contact", "energies", "integrate", "rigidbody", "sensors", "solve", "state",
+    ),
     "optics": ("optics",),
     #: 第三个物理域（决策0041第三节预登记；0042互感、0047超导薄带两块落地）。
     #: 按spec/15第七节冻结条件2，第三个域进来时登记表**只加一行就够**——
