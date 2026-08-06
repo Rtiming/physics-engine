@@ -34,7 +34,6 @@
 | [`large_deflection_cantilever`](large_deflection_cantilever/case.md) | 大挠度悬臂端点位置对Bisshopp-Drucker 1945椭圆积分闭式，二阶收敛实测比3.9612/4.0512/4.0600；几何精确项比小挠度理论准**1519倍**；固支Voronoi退回`h`必掉到一阶（正向必须红） | B | local_batch | 1条 | `tests/cases/test_large_deflection_cantilever.py` |
 | [`euler_buckling`](euler_buckling/case.md) | 临界载荷对`Fc = π²EI/(bL)²`，**b=1/2/0.5三种边界条件由特征方程求根而非抄表**；对铰接刚性链的**精确特征值**命中到2e-6（比连续解紧100倍）；二阶收敛3.9916/4.0033/4.0226；保长扰动的能量在0.7Fc升、1.3Fc降（**唯一验`energy()`符号的门**）；正弦半波在四个试验形状里给出最低临界载荷，间隙5.9e-7 | C | local_batch | 1条 | `tests/cases/test_euler_buckling.py` |
 | [`norris_thin_strip`](norris_thin_strip/case.md) | Norris 1970薄带临界态：片电流分布对**50位十进制**参考，rel 1e-12；电流守恒`∫K dx = I`两条求积（代换式1e-9 对 直接式1e-6，**同一恒等式差三个数量级**）；`b`的两个零容差极限；损耗渐近`i⁴/3`与`i³/3`（**幂次4与3是这两条式的招牌**）。**验公式不验引擎，不进0040分母** | B | interactive | 4条 | `tests/cases/test_norris_thin_strip.py` |
-
 | [`peer_fcl_distance`](peer_fcl_distance/case.md) | 同行库对拍：球/胶囊解析距离对python-fcl 0.7.0.11（版本钉死，漂了就红），3类形状对×3构型带×300组=2700组；**判据正本是`criteria.json`不是本页**。抓到FCL两处大错（`enable_signed_distance`最坏相对误差45.6%、胶囊-胶囊接触深度最大偏2.11mm且**FCL自相矛盾**），本仓的数与Fraction精确值逐位相同 | A | local_batch | `criteria.json` | `tests/cases/test_peer_fcl_distance.py` |
 
 ## 一之二、每个案例穿过引擎的哪几层（决策0048第三节通则）
@@ -113,7 +112,7 @@ FEBio的`acceptChanges.py`是这条闭环的出处，本仓的加强是"决策�
 | 分母 | 验什么 | 今天 |
 |---|---|---|
 | **主｜用户六场景端到端**（[plans/04](../docs/plans/04_真实使用场景与能力差距_20260805.md)） | 算不算得了**我们要算的** | **0/6** |
-| 从｜同行C档13条标准案例（research/05第2.3节） | 算得**对不对** | 7/13 |
+| 从｜同行C档13条标准案例（research/05第2.3节） | 算得**对不对** | **6/13**（逐条重数，见决策0049第十节；此前长期报7是多算了一条） |
 
 **只报后者是恭维自己。** 0040当初选同行案例当分母的理由
 （"用别人的题当分母，比自己出题自己打分诚实"）**当时是对的**——
@@ -123,10 +122,15 @@ FEBio的`acceptChanges.py`是这条闭环的出处，本仓的加强是"决策�
 从分母的构成：C档13条（杆梁族6、接触族3、光学族4），
 是MuJoCo/Bullet/Chrono/Drake/PyElastica/SOFA/FEBio等十余家共同承认的标准案例。
 
-**今天13条过7条**：`cantilever_self_weight`、`large_deflection_cantilever`、
-**`euler_buckling`（第3条，决策0046打钩）**、`scalar_diffraction_airy`、
-`fts_instrument_line_shape`（含Norton-Beer两条）。
-缺的六条与各自缺的能力见决策0040第二、三节。
+**今天13条过6条**（逐条重数，见决策0049第十节——**此前长期报7是多算了一条**）：
+第1条自重悬臂（`cantilever_self_weight`）、第2条大挠度悬臂
+（`large_deflection_cantilever`）、第3条Euler屈曲（`euler_buckling`，0046打钩）、
+第10条艾里斑（`scalar_diffraction_airy`）、第11条FTS仪器线型与第12条Norton-Beer
+（同在`fts_instrument_line_shape`内，**一个案例文件顶两条C档**）。
+
+**缺7条**：第4条Timoshenko悬臂（缺剪切刚度）、第5条Michell失稳与第6条局部螺旋屈曲
+（缺扭转）、第7—9条接触族（缺接触与摩擦，且要先解0033）、
+第13条变换层自洽三件套（缺复数场与FFT）。各自缺的能力见决策0040第二、三节。
 
 **上表其余案例不计入分母**——它们验的是"我们自己的实现有没有内部错误"
 （协议门、逐字节门、失败关闭），而C档验的是"这个引擎算不算得对同行公认的物理"。
