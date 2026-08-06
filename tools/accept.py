@@ -75,6 +75,9 @@ COMMANDS: dict[str, tuple[tuple[str, ...], ...]] = {
 #: 如实记一条``absent_optional_commands``——不假装绿，也不冒充红。
 OPTIONAL_FULL_COMMANDS: tuple[tuple[str, ...], ...] = (
     (".venv/bin/python", "tools/check_case_pages.py"),
+    #: 冲突标记门（决策0049第二节）。它同时挂在`pre-commit`上，**两处都要**：
+    #: 钩子可能没装（那次事故里就没装），而批末这道跑不掉。
+    (".venv/bin/python", "tools/check_conflict_markers.py"),
 )
 
 TIMEOUT_RETURNCODE = 124

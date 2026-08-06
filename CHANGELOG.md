@@ -6,7 +6,14 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
 
 ## Unreleased
 
-（空）
+### 冲突标记门补齐提交时那一层（决策0049第二节续）
+
+- **判据搬进`tools/check_conflict_markers.py`**（只用标准库、走裸`python`），
+  `pre-commit`与`accept.py` full**两处都挂**：钩子可能没装（那次事故里就没装），
+  批末这道跑不掉。测试文件import它并补必红——**一个判据两个时机，
+  不许有第二份实现**，两份实现迟早分叉而分叉那天绿的那份会被相信
+- `.git/hooks/pre-commit`**实际安装了**（此前只有配置没有钩子）；
+  `pre-commit>=4`进dev依赖
 
 ## 0.5.0 — 2026-08-05
 

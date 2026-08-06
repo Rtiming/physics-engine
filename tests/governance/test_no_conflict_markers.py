@@ -44,6 +44,16 @@ setext式一级标题的下划线就是一串`=`，长度恰好7个的时候与�
 所以标记一律由`"<" * 7`一类的式子在运行期拼出来，
 本文件的字节里**一个七连标记都没有**。
 
+## 判据在`tools/check_conflict_markers.py`，本文件只补必红
+
+这道门要在**两个时机**上膛：`pre-commit`（提交时）与`accept.py`（批末）。
+提交时那次**不能依赖pytest与`.venv`**——钩子在裸`python`下跑，
+且要跨Windows/macOS（本仓两台开发机平级）。所以判据落在`tools/`的独立脚本里、
+只用标准库，本文件import它并补必红用例。
+
+**一个判据，两个时机，不许有第二份实现。** 两份实现迟早会分叉，
+而分叉的那天，**绿的那份会被相信**。
+
 ## 必红清单（AGENTS.md"每个门要红过"）
 
 1. `test_detector_catches_the_nested_shape_that_actually_got_in`——
@@ -58,96 +68,27 @@ setext式一级标题的下划线就是一串`=`，长度恰好7个的时候与�
 
 from __future__ import annotations
 
-import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools"))
 
-#: 七连标记按运行期拼，理由见模块docstring末段（本文件不许含标记字面量）。
-_OURS = "<" * 7
-_BASE = "|" * 7
-_THEIRS = ">" * 7
-_SEPARATOR = "=" * 7
+import check_conflict_markers as checker  # noqa: E402  判据正本在tools/，见docstring第三节
 
-#: 无条件标记：行首出现即为冲突，合法文本里没有第二种解释。
-#: git写的形态是"标记+空格+标签"（`<<<<<<< HEAD`），但手工mangle过的冲突
-#: 可能只剩裸标记，故两种都收。
-_UNCONDITIONAL = (_OURS, _BASE, _THEIRS)
-
-
-def _is_unconditional_marker(line: str) -> bool:
-    stripped = line.rstrip("\r\n")
-    return any(
-        stripped == marker or stripped.startswith(marker + " ")
-        for marker in _UNCONDITIONAL
-    )
-
-
-def find_conflict_markers(text: str) -> list[tuple[int, str]]:
-    """返回``[(行号从1起, 该行内容), ...]``。判据见模块docstring第二节。
-
-    ``=======``的条件化在这里实现：先扫一遍无条件标记，
-    **只有扫到了**才把裸分隔线也算进去。单文件两趟，
-    因为"这份文本里有没有别的标记"是分隔线能否定罪的前提。
-    """
-    lines = text.splitlines()
-    hits = [
-        (number, line)
-        for number, line in enumerate(lines, start=1)
-        if _is_unconditional_marker(line)
-    ]
-    if not hits:
-        return []
-    hits.extend(
-        (number, line)
-        for number, line in enumerate(lines, start=1)
-        if line.rstrip("\r\n") == _SEPARATOR
-    )
-    return sorted(hits)
-
-
-def _tracked_files() -> list[Path]:
-    """受版本控制的文件清单，走``git ls-files -z``。
-
-    用``-z``而不是按行切：本仓文件名大量是中文，
-    默认``core.quotepath``会把它们转义成``"\\346\\226\\207"``形态，
-    按行切再去掉引号是在**猜**原文件名。``-z``给的是原始字节，不用猜。
-
-    git不可用时**不是跳过而是失败**：一道"因为拿不到清单所以通过"的门，
-    与没有这道门等价，且更坏——它会在报告里显示为绿。
-    """
-    completed = subprocess.run(
-        ["git", "ls-files", "-z"],
-        cwd=ROOT,
-        capture_output=True,
-        check=True,
-    )
-    names = [name for name in completed.stdout.decode("utf-8").split("\0") if name]
-    return [ROOT / name for name in names]
+#: 标记常量从判据正本取，**不在本文件重新定义**——重定义就是第二份实现。
+_OURS = checker.OURS
+_BASE = checker.BASE
+_THEIRS = checker.THEIRS
+_SEPARATOR = checker.SEPARATOR
+find_conflict_markers = checker.find_conflict_markers
+_tracked_files = checker.tracked_files
 
 
 def _scan_tracked_text() -> tuple[dict[Path, list[tuple[int, str]]], int]:
-    """扫全部受版本控制的文本文件，返回``(命中表, 实扫文件数)``。
-
-    非UTF-8的文件（二进制资产，如``.stl``）跳过并**不计入实扫数**——
-    实扫数是给"零执行绝不pass"那条门用的，掺进跳过的文件就不再是覆盖面证据。
-    """
-    hits: dict[Path, list[tuple[int, str]]] = {}
-    scanned = 0
-    for path in _tracked_files():
-        if not path.is_file():
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            continue
-        scanned += 1
-        found = find_conflict_markers(text)
-        if found:
-            hits[path] = found
-    return hits, scanned
+    return checker.scan(checker.tracked_files())
 
 
 # ---------------------------------------------------------------------------

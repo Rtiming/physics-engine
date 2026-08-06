@@ -5,9 +5,22 @@
 repos:
   - repo: local
     hooks:
+      # --no-git 是必需的,不是放松:--strict 让 [W] 也算失败,而 git-dirty
+      # 与 git-diverge 这两个 [W] 在 commit 过程中**必然成立**(暂存区里的改动
+      # 在提交完成前一直算未提交)。不加 --no-git 这条钩子永远无法通过,
+      # 于是它只有两种下场:被 --no-verify 绕过,或者被卸掉。
+      # 路径/编码/行尾这些真正的可移植性规则仍然是 --strict。
+      # 完整口径(含 git 状态)的自检仍按 AGENTS.md 在批末手工跑。
       - id: rtime-project-check
         name: rtime-project 跨设备可移植性校验
-        entry: python tools/rtime-project-check.py . --strict
+        entry: python tools/rtime-project-check.py . --strict --no-git
         language: system
         pass_filenames: false
         always_run: true
+      # 决策0049第二节：main曾带着12行未解冲突标记进仓,而上面那条不查这个。
+      # 只用标准库、走裸 python,故 Windows/macOS 两台开发机上一致。
+      - id: check-conflict-markers
+        name: 未解合并冲突标记
+        entry: python tools/check_conflict_markers.py
+        language: system
+        pass_filenames: true
