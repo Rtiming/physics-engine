@@ -15,6 +15,7 @@ import pytest
 
 from physics_engine.contact import (
     ContactDeclaration,
+    PenaltyNormalContact,
     advance_contact_quasistatic,
     build_contact_layout,
 )
@@ -55,7 +56,11 @@ class _Drag:
             gravity_mm_s2=(0.0, 0.0, -GRAVITY_MM_S2),
         )
         self.contact_layout.assert_matches_context(self.context)
-        self.base = EnergyRegistry(terms=(UniformGravity(),))
+        self.ground = PenaltyNormalContact(
+            planes=((0, (0.0, 0.0, 0.0), NORMAL, normal_stiffness, 0.0),)
+        )
+        # 法向接触归调用方的注册表——步进器只要一个数（当前法向力）
+        self.base = EnergyRegistry(terms=(UniformGravity(), self.ground))
         self.slot = self.contact_layout.slot_of("block_ground")
         self.friction_coefficient = friction_coefficient
         self.normal_stiffness = normal_stiffness
@@ -80,7 +85,7 @@ class _Drag:
                 vector=tuple(self.vector),
                 node=0,
                 normal=NORMAL,
-                normal_stiffness_n_per_mm=self.normal_stiffness,
+                normal_force_of=lambda state: self.ground.normal_force_n(state)[0],
                 tangential_stiffness_n_per_mm=self.tangential_stiffness,
                 friction_coefficient=self.friction_coefficient,
                 fixed_indices=self.fixed,

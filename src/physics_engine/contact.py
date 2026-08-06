@@ -47,6 +47,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from physics_engine.energies import EnergyContext, Matrix, Vector
@@ -66,6 +67,14 @@ SLOT_WIDTH = 5
 #: 法向必须是单位矢量的容差。取1e-12：归一化误差进的是刚度，
 #: 而刚度是使用者声明的量——悄悄改它比拒收更坏。
 NORMAL_UNIT_TOLERANCE = 1e-12
+
+#: 法向的来源：固定元组，或「给定当前状态向量返回当前法向」的可调用对象。
+#: 后者是曲面接触需要的——法向随位形转时一趟预测-修正不够
+#: （见`advance_contact_quasistatic`的实测数据）。
+NormalSource = (
+    tuple[float, float, float]
+    | Callable[[tuple[float, ...]], tuple[float, float, float]]
+)
 
 #: `regime`字段的取值。**用数而不用字符串**，因为状态是一维浮点向量
 #: （spec/12第2.2节：显式数组不是对象图）。
@@ -654,6 +663,15 @@ class ContactStep:
     tangential_force_n: tuple[float, float, float]
     regime: float
     slip_increment_mm: float
+    #: 实际走了几趟预测-修正。固定法向下恒为1。
+    passes: int = 1
+    #: **最后一趟的屈服超出量**``|T_trial| − μN``：预测-修正是否收敛的唯一观测量。
+    #:
+    #: `tangential_force_n`是**投影后**的力，滑移时它按构造恒等于``μN``——
+    #: 拿它去判收敛永远得到0。起草时正是这样量了个寂寞。
+    #: **一个观测不到的收敛判据不是判据**，所以它必须是公开字段。
+    #: 粘着时它≤0。
+    yield_excess_n: float = 0.0
 
     @property
     def is_stick(self) -> bool:
@@ -668,13 +686,15 @@ def advance_contact_quasistatic(
     slot: ContactSlot,
     vector: tuple[float, ...],
     node: int,
-    normal: tuple[float, float, float],
-    normal_stiffness_n_per_mm: float,
+    normal: NormalSource,
+    normal_force_of: Callable[[State], float],
     tangential_stiffness_n_per_mm: float,
     friction_coefficient: float,
     fixed_indices: frozenset[int],
     residual_tol_n: float = 1.0e-12,
     max_iterations: int = 60,
+    max_passes: int = 1,
+    yield_tol_n: float = 0.0,
 ) -> ContactStep:
     """走一步准静态接触：**弹性预测 → 求解 → return-map修正 → 锚点写回状态**。
 
@@ -683,70 +703,103 @@ def advance_contact_quasistatic(
     前三片里锚点是**输入**：调用方给一个值，它整个过程不动。
     本函数是第一个**改写**它的东西——而改写它就是"历史发生了"。
 
-    ## 为什么一趟预测-修正就够（不需要在牛顿里反复迭代）
+    ## 一趟够不够，取决于**法向转不转**——这是实测出来的，不是推的
 
-    理想塑性（无硬化）的return-map有一条性质：**修正之后屈服条件恰好成立**。
-    锚点被挪到``k_t·|x − a_new| = μN``，所以再解一次得到的还是同一个点。
+    **法向固定时一趟就够**：理想塑性的return-map修正后屈服条件恰好成立
+    （锚点被挪到``k_t·|x − a_new| = μN``），法向不动意味着再解一次还是同一个点。
+    斜面与位移控制的拖拽都落在这个前提内。
 
-    **这条性质对本片成立，是因为切向是位移控制的**（``x``被钉住）。
-    载荷控制下``x``会随锚点变、锚点又随``x``变，那才需要真的迭代。
-    **本函数不做那件事，也不假装做了**——触发条件登记在plans/07：
-    第一个载荷控制的接触问题出现时。
+    **法向随位形转时一趟远远不够。** 实测（两个固定球夹一个受横载的球，
+    ``μ = 0.35``、``k = 1e5``）：一趟之后屈服残差``|T| − μN``是**2.32 N**，
+    此后**每多一趟恰好减半**——2.319、1.160、0.580、0.290、0.145……
+    **线性收敛、压缩因子1/2。**
 
-    ## 法向与切向在本片是解耦的
+    因此``normal``可以是**可调用对象**：给定当前向量返回当前法向；
+    固定法向传元组即可（等价于常值可调用）。
+    ``max_passes``是预测-修正的趟数，``yield_tol_n``是屈服残差的收敛判据。
 
-    粘着弹簧扣掉了法向分量（``P = I − n⊗n``），法向罚只作用在法向，
-    所以两者的Hessian块正交、``N``与``T``互不影响。
-    **斜面与拖拽都落在这个前提内；一般曲面接触不落在**（法向随位置转），
-    同样登记不假装。
+    **两者的默认值刻意保守（1趟、0容差）**：老调用点全是固定法向、一趟本来就精确，
+    **默认值不该替既有调用方改变行为**——那是把一次能力扩展偷偷变成一次行为变更。
 
     ``registry_without_stick``是**不含粘着项**的注册表——本函数按当前锚点
     自己造粘着项并接上去。这么设计是因为锚点每步都变，
     而`EnergyRegistry`是冻结的：**让调用方每步重建注册表，等于让它每步重写
     求和次序**，而求和次序是形制（spec/12第3.3节）。
+
+    ## 法向力由调用方给，**本函数不拥有法向接触**
+
+    第一版自己造了一个"过原点的半空间"法向项。**那个设计在球-球接触上当场失效**：
+    球心离原点27 mm，那个半空间把它判成分离，于是法向力为0、
+    return-map走"分离"分支、锚点一动不动——**而屈服超出量明明是2.9 N**。
+
+    症状是"迭代不收敛"，病根是**步进器越权拥有了一个它不该拥有的东西**。
+    法向接触可能是半空间、可能是球-球、将来可能是网格，
+    **它属于调用方的注册表，而这里只需要一个数：当前法向力**。
     """
 
     from physics_engine.energies import EnergyRegistry
     from physics_engine.solve import solve_equilibrium
 
-    anchor = tuple(vector[slot.anchor_base : slot.anchor_base + 3])
-    normal_term = PenaltyNormalContact(
-        planes=((node, (0.0, 0.0, 0.0), normal, normal_stiffness_n_per_mm, 0.0),)
-    )
-    stick_term = TangentialStickSpring(
-        springs=((node, anchor, normal, tangential_stiffness_n_per_mm),)
-    )
-    registry = EnergyRegistry(
-        terms=(*registry_without_stick.terms, normal_term, stick_term)
-    )
-    solved = solve_equilibrium(
-        registry,
-        context,
-        contact_layout.layout,
-        vector,
-        fixed_indices=fixed_indices,
-        residual_tol_n=residual_tol_n,
-        max_iterations=max_iterations,
-    )
-    if not solved.converged:
-        raise ContactError(f"contact step did not converge: {solved.reason}")
+    if max_passes < 1:
+        raise ContactError(f"max_passes must be at least 1: {max_passes!r}")
+    normal_of = normal if callable(normal) else (lambda _v, fixed=normal: fixed)
 
-    normal_force = normal_term.normal_force_n(solved.state)[0]
-    trial = stick_term.tangential_force_n(solved.state)[0]
-    outcome = coulomb_return_map(
-        trial_force_n=trial,
-        normal_force_n=normal_force,
-        friction_coefficient=friction_coefficient,
-        tangential_stiffness_n_per_mm=tangential_stiffness_n_per_mm,
-    )
+    anchor = tuple(vector[slot.anchor_base : slot.anchor_base + 3])
+    current = vector
+    stick_term = solved = outcome = None
+    normal_force = 0.0
+    passes = 0
+    for _ in range(max_passes):
+        passes += 1
+        direction = normal_of(current)
+        stick_term = TangentialStickSpring(
+            springs=((node, anchor, direction, tangential_stiffness_n_per_mm),)
+        )
+        registry = EnergyRegistry(terms=(*registry_without_stick.terms, stick_term))
+        solved = solve_equilibrium(
+            registry,
+            context,
+            contact_layout.layout,
+            current,
+            fixed_indices=fixed_indices,
+            residual_tol_n=residual_tol_n,
+            max_iterations=max_iterations,
+        )
+        if not solved.converged:
+            raise ContactError(f"contact step did not converge: {solved.reason}")
+        current = solved.state.vector
+
+        normal_force = normal_force_of(solved.state)
+        trial = stick_term.tangential_force_n(solved.state)[0]
+        outcome = coulomb_return_map(
+            trial_force_n=trial,
+            normal_force_n=normal_force,
+            friction_coefficient=friction_coefficient,
+            tangential_stiffness_n_per_mm=tangential_stiffness_n_per_mm,
+        )
+        anchor = tuple(
+            anchor[axis] + outcome.anchor_correction_mm[axis] for axis in range(3)
+        )
+        #: 屈服残差：试探力超出锥面多少。粘着时它按定义≤0，
+        #: 故本判据只在滑移分支上有内容——粘着一趟就退出，与旧行为一致。
+        excess = (
+            math.sqrt(sum(value * value for value in trial))
+            - friction_coefficient * normal_force
+        )
+        if excess <= yield_tol_n:
+            break
+
 
     updated = list(solved.state.vector)
     for axis in range(3):
-        updated[slot.anchor_base + axis] = anchor[axis] + outcome.anchor_correction_mm[axis]
+        updated[slot.anchor_base + axis] = anchor[axis]
     updated[slot.active_index] = 0.0 if normal_force == 0.0 else 1.0
     updated[slot.regime_index] = outcome.regime
+    #: **整步的总滑移，不是最后一趟的修正量。** 多趟时锚点是逐趟累加的，
+    #: 取最后一趟等于把前面几趟滑掉的距离丢掉——而那正是这一步的不可逆位移。
+    origin = vector[slot.anchor_base : slot.anchor_base + 3]
     slip = math.sqrt(
-        sum(value * value for value in outcome.anchor_correction_mm)
+        sum((anchor[axis] - origin[axis]) ** 2 for axis in range(3))
     )
     return ContactStep(
         state=State(layout=contact_layout.layout, vector=tuple(updated)),
@@ -754,6 +807,8 @@ def advance_contact_quasistatic(
         tangential_force_n=outcome.tangential_force_n,
         regime=outcome.regime,
         slip_increment_mm=slip,
+        passes=passes,
+        yield_excess_n=excess,
     )
 
 
