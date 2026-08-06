@@ -1084,14 +1084,32 @@ class EnergyRegistry:
         "雅可比是不是我写的那个能量的导数"——换算因子不在能量里，FD看不见它。
         抓住它的是`cases/two_body_spring`的解析频率门。这就是spec/12第6.1节
         "有限差分验不了物理"最锋利的那句话的一个活标本。
+
+        ## 辅助自由度**不是动力学自由度**，它们的加速度恒为零
+
+        决策0050让状态向量在节点块之后挂上接触锚点槽。那些槽位是**历史**，
+        由return-map推进（`contact.advance_contact_quasistatic`），
+        **不由积分器推进**——把它们当成有质量的点去积分，等于给摩擦锚点编造一个惯性。
+
+        本方法此前按``node_masses_kg[index // 3]``取质量，**那是"整条向量都是节点"
+        的假定**，遇到含锚点槽的布局直接抛裸``IndexError``——实测确认过。
+        修法不是"给锚点也编个质量"，是**在节点块之外一律返回0.0**并在这里写明理由。
+
+        零加速度加上零初速度意味着积分器不会动它们，但**别把正确性寄托在
+        "梯度恰好是零"上**：能量项不许碰节点块之外（`EnergyTerm.node_index_bound`
+        那道门守着），而这里是同一条纪律在积分侧的另一半。
         """
 
         def acceleration_of(x: Sequence[float], v: Sequence[float], t: float):
             state = State(layout=layout, vector=tuple(x))
+            node_count = resolve_node_count(state, context)
             _, gradient, _ = self.total(state, context, need_gradient=True)
             assert gradient is not None
+            node_dof = 3 * node_count
             return tuple(
                 -gradient[index] / context.node_masses_kg[index // 3] * MM_PER_M
+                if index < node_dof
+                else 0.0
                 for index in range(len(gradient))
             )
 

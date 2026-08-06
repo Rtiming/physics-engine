@@ -1103,3 +1103,99 @@ def test_terms_that_stay_inside_the_node_block_are_untouched():
     energy, gradient, _ = registry.total(state, context, need_gradient=True)
     assert energy == pytest.approx(-50.0)
     assert gradient[6:] == (0.0, 0.0, 0.0), "锚点自由度上不许出现任何力"
+
+
+# ---------------------------------------------------------------------------
+# 能量→加速度的桥：节点块之外不是动力学自由度（决策0050）
+# ---------------------------------------------------------------------------
+
+
+def test_the_acceleration_bridge_survives_auxiliary_state():
+    """**桥此前也踩了"整条向量都是节点"那个假定，实测抛裸`IndexError`。**
+
+    能量项那一侧在本轮早些时候修过（`resolve_node_count`），
+    但这条桥没有跟上——**同一个假定有两处实现，修了一处不等于修了那件事**。
+
+    修法不是"给锚点也编个质量"，是**节点块之外一律返回0.0**：
+    锚点是历史，由return-map推进，把它当成有质量的点去积分
+    等于给摩擦锚点编造一个惯性。
+    """
+
+    from physics_engine.energies import UniformGravity
+
+    layout = _with_anchor_slot(_layout(2))
+    context = EnergyContext(
+        context_id="context/bridge",
+        node_masses_kg=(2.0, 3.0),
+        gravity_mm_s2=(0.0, 0.0, -9810.0),
+    )
+    registry = EnergyRegistry(terms=(UniformGravity(),))
+    acceleration = registry.acceleration(context, layout)
+
+    vector = (0.0, 0.0, 1.0, 5.0, 0.0, 2.0, 0.0, 0.0, 7.0)
+    result = acceleration(vector, (0.0,) * 9, 0.0)
+
+    assert len(result) == 9
+    # 自由落体：两个节点都恰好是g，**与质量无关**（2kg与3kg给同一个数）
+    assert result[2] == pytest.approx(-9810.0, rel=1e-15)
+    assert result[5] == pytest.approx(-9810.0, rel=1e-15)
+    assert result[6:] == (0.0, 0.0, 0.0), (
+        f"锚点自由度上出现了加速度：{result[6:]}——积分器会把摩擦锚点当成有质量的点推走"
+    )
+
+
+def test_the_bridge_does_not_lean_on_the_gradient_being_zero_there():
+    """**别把正确性寄托在"梯度恰好是零"上。**
+
+    今天能量项都不碰节点块之外（`node_index_bound`那道门守着），
+    所以那一段的梯度确实是零。但桥返回0.0是**独立的一条保证**——
+    两条纪律各守一半，任一条被改坏时另一条还在。
+
+    这里直接构造一个"锚点上有梯度"的情形来验桥自己那一半。
+    """
+
+    from physics_engine.energies import UniformGravity
+
+    layout = _with_anchor_slot(_layout(1))
+    context = EnergyContext(
+        context_id="context/bridge-independent",
+        node_masses_kg=(1.0,),
+        gravity_mm_s2=(0.0, 0.0, -9810.0),
+    )
+
+    class _TouchesTheAnchor:
+        """一个**违规**的项：往锚点自由度上写梯度。只在本门里存在。"""
+
+        name = "rogue"
+
+        def node_index_bound(self) -> int:
+            return 0
+
+        def energy(self, state, context):
+            return 0.0
+
+        def gradient(self, state, context):
+            values = [0.0] * len(state.vector)
+            values[-1] = 1234.0
+            return tuple(values)
+
+        def hessian(self, state, context):
+            size = len(state.vector)
+            return tuple(tuple(0.0 for _ in range(size)) for _ in range(size))
+
+        def hessian_entries(self, state, context):
+            return ()
+
+        def quantities(self, state, context, *, need_gradient, need_hessian):
+            return (
+                0.0,
+                self.gradient(state, context) if need_gradient else None,
+                self.hessian(state, context) if need_hessian else None,
+            )
+
+    registry = EnergyRegistry(terms=(UniformGravity(), _TouchesTheAnchor()))
+    acceleration = registry.acceleration(context, layout)
+    result = acceleration((0.0,) * 6, (0.0,) * 6, 0.0)
+    assert result[3:] == (0.0, 0.0, 0.0), (
+        f"桥把锚点上的梯度变成了加速度：{result[3:]}——它该自己挡住，不该靠别人"
+    )
