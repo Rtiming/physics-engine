@@ -1,0 +1,125 @@
+{
+  "arrays": {},
+  "case_id": "case/friction_hysteresis_loop",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/friction_hysteresis_loop",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/friction_hysteresis_loop/generate_oracle.py",
+    "sha256": "0bded8de0b4bad11721a90fa54f0157373a4d0c7c7a931c7296cbaf3ea9e7bc9"
+  },
+  "load_tier": "local_batch",
+  "manifest_self_sha256": "0a5a533a0d1b2b3a7ab5f8a0842e3f830a57f75ab300bb1ac95a7ddafb7184e8",
+  "oracles": [
+    {
+      "expected": {
+        "cone_limit_n": 5.886,
+        "normal_force_n": 19.62,
+        "yield_displacement_mm": 0.0001962
+      },
+      "id": "oracle:friction/cone_saturation",
+      "inputs": {
+        "amplitude_in_yield": 5.0,
+        "friction_coefficient": 0.3,
+        "gravity_mm_s2": 9810.0,
+        "kind": "coulomb_slider_saturation",
+        "mass_kg": 2.0,
+        "normal_stiffness_n_per_mm": 50000.0,
+        "steps_per_leg": 500,
+        "tangential_stiffness_n_per_mm": 30000.0
+      },
+      "tolerances": {
+        "cone_limit_n": {
+          "abs": 0.0,
+          "reason": "**零容差**：饱和值是return-map投影出来的上界，``|T| = μN``是构造保证的等式，不是数值逼近的结果。它若不逐位相等，说明投影写错了",
+          "rel": 0.0
+        },
+        "normal_force_n": {
+          "abs": 0.0,
+          "reason": "拖拽全程法向不变（面水平、粘着项扣掉法向分量）。**它若随切向位移漂，说明粘着弹簧漏了法向投影**",
+          "rel": 4e-16
+        },
+        "yield_displacement_mm": {
+          "abs": 0.0,
+          "reason": "``u_y = μN/k_t``是一次除法；1e-15是那一次运算的余量",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "dissipation_n_mm": [
+          0.0046193328,
+          0.018477331200000002,
+          0.08776732320000001
+        ]
+      },
+      "id": "oracle:friction/loop_dissipation",
+      "inputs": {
+        "amplitudes_in_yield": [
+          2.0,
+          5.0,
+          20.0
+        ],
+        "friction_coefficient": 0.3,
+        "kind": "elastic_perfectly_plastic_loop_area",
+        "steps_per_leg": 500,
+        "tangential_stiffness_n_per_mm": 30000.0
+      },
+      "tolerances": {
+        "dissipation_n_mm": {
+          "abs": 0.0,
+          "reason": "回线分段线性、梯形积分在线性段上精确，且步数取5的倍数让拐点恰落在步长边界，故实测偏差为0。**取1e-14而不是0**：零容差会把「某天有人改了步数」变成一次神秘的红，而那本该是一条可读的、关于离散化的警告。不对齐时的实测量级是1e-5（见生成器注释）",
+          "rel": 1e-14
+        }
+      }
+    },
+    {
+      "expected": {
+        "anchor_a_mm": 0.0003924,
+        "anchor_b_mm": 0.0002943,
+        "force_ratio_a_over_b": 0.5,
+        "path_a_sticks": true,
+        "path_b_slips": true
+      },
+      "id": "oracle:friction/path_dependence",
+      "inputs": {
+        "final_in_yield": 2.5,
+        "friction_coefficient": 0.3,
+        "kind": "same_position_two_paths",
+        "path_a_peak_in_yield": 3.0,
+        "steps_per_leg": 400,
+        "tangential_stiffness_n_per_mm": 30000.0
+      },
+      "tolerances": {
+        "anchor_a_mm": {
+          "abs": 0.0,
+          "reason": "滑移把锚点推到``(peak − u_y)``，随后粘着不再动它。**锚点是被断言的量，不是中间变量**——它若对不上，说明历史没有被正确写回状态",
+          "rel": 1e-15
+        },
+        "anchor_b_mm": {
+          "abs": 0.0,
+          "reason": "单调加载下锚点停在``(final − u_y)``",
+          "rel": 1e-15
+        },
+        "force_ratio_a_over_b": {
+          "abs": 0.0,
+          "reason": "``0.5·T_max / T_max``——分子分母同源，比值是一次除法",
+          "rel": 1e-15
+        },
+        "path_a_sticks": {
+          "abs": 0.0,
+          "reason": "**定性判据零容差**：回退之后必须落回锥内",
+          "rel": 0.0
+        },
+        "path_b_slips": {
+          "abs": 0.0,
+          "reason": "同上，反向。两条路径的判别相反才叫路径相关",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

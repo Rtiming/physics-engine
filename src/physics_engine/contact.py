@@ -402,10 +402,12 @@ __all__ = [
     "ContactError",
     "ContactLayout",
     "ContactSlot",
+    "ContactStep",
     "FrictionOutcome",
     "NORMAL_UNIT_TOLERANCE",
     "PenaltyNormalContact",
     "TangentialStickSpring",
+    "advance_contact_quasistatic",
     "build_contact_layout",
     "coulomb_return_map",
 ]
@@ -621,3 +623,119 @@ class TangentialStickSpring:
             )
             for node, anchor, normal, stiffness in self.springs
         )
+
+
+@dataclass(frozen=True)
+class ContactStep:
+    """一步准静态接触求解的结果。``state``里的锚点槽**已经被更新**。
+
+    ``slip_increment_mm``是这一步滑掉的距离——**不可逆的那一部分**。
+    它是本仓第一个真正被写回状态的历史量（0033裁"锚点是真历史"之后的兑现）。
+    """
+
+    state: State
+    normal_force_n: float
+    tangential_force_n: tuple[float, float, float]
+    regime: float
+    slip_increment_mm: float
+
+    @property
+    def is_stick(self) -> bool:
+        return self.regime == REGIME_STICK
+
+
+def advance_contact_quasistatic(
+    *,
+    registry_without_stick,
+    context: EnergyContext,
+    contact_layout: ContactLayout,
+    slot: ContactSlot,
+    vector: tuple[float, ...],
+    node: int,
+    normal: tuple[float, float, float],
+    normal_stiffness_n_per_mm: float,
+    tangential_stiffness_n_per_mm: float,
+    friction_coefficient: float,
+    fixed_indices: frozenset[int],
+    residual_tol_n: float = 1.0e-12,
+    max_iterations: int = 60,
+) -> ContactStep:
+    """走一步准静态接触：**弹性预测 → 求解 → return-map修正 → 锚点写回状态**。
+
+    ## 这一步与前三片的差别
+
+    前三片里锚点是**输入**：调用方给一个值，它整个过程不动。
+    本函数是第一个**改写**它的东西——而改写它就是"历史发生了"。
+
+    ## 为什么一趟预测-修正就够（不需要在牛顿里反复迭代）
+
+    理想塑性（无硬化）的return-map有一条性质：**修正之后屈服条件恰好成立**。
+    锚点被挪到``k_t·|x − a_new| = μN``，所以再解一次得到的还是同一个点。
+
+    **这条性质对本片成立，是因为切向是位移控制的**（``x``被钉住）。
+    载荷控制下``x``会随锚点变、锚点又随``x``变，那才需要真的迭代。
+    **本函数不做那件事，也不假装做了**——触发条件登记在plans/07：
+    第一个载荷控制的接触问题出现时。
+
+    ## 法向与切向在本片是解耦的
+
+    粘着弹簧扣掉了法向分量（``P = I − n⊗n``），法向罚只作用在法向，
+    所以两者的Hessian块正交、``N``与``T``互不影响。
+    **斜面与拖拽都落在这个前提内；一般曲面接触不落在**（法向随位置转），
+    同样登记不假装。
+
+    ``registry_without_stick``是**不含粘着项**的注册表——本函数按当前锚点
+    自己造粘着项并接上去。这么设计是因为锚点每步都变，
+    而`EnergyRegistry`是冻结的：**让调用方每步重建注册表，等于让它每步重写
+    求和次序**，而求和次序是形制（spec/12第3.3节）。
+    """
+
+    from physics_engine.energies import EnergyRegistry
+    from physics_engine.solve import solve_equilibrium
+
+    anchor = tuple(vector[slot.anchor_base : slot.anchor_base + 3])
+    normal_term = PenaltyNormalContact(
+        planes=((node, (0.0, 0.0, 0.0), normal, normal_stiffness_n_per_mm),)
+    )
+    stick_term = TangentialStickSpring(
+        springs=((node, anchor, normal, tangential_stiffness_n_per_mm),)
+    )
+    registry = EnergyRegistry(
+        terms=(*registry_without_stick.terms, normal_term, stick_term)
+    )
+    solved = solve_equilibrium(
+        registry,
+        context,
+        contact_layout.layout,
+        vector,
+        fixed_indices=fixed_indices,
+        residual_tol_n=residual_tol_n,
+        max_iterations=max_iterations,
+    )
+    if not solved.converged:
+        raise ContactError(f"contact step did not converge: {solved.reason}")
+
+    normal_force = normal_term.normal_force_n(solved.state)[0]
+    trial = stick_term.tangential_force_n(solved.state)[0]
+    outcome = coulomb_return_map(
+        trial_force_n=trial,
+        normal_force_n=normal_force,
+        friction_coefficient=friction_coefficient,
+        tangential_stiffness_n_per_mm=tangential_stiffness_n_per_mm,
+    )
+
+    updated = list(solved.state.vector)
+    for axis in range(3):
+        updated[slot.anchor_base + axis] = anchor[axis] + outcome.anchor_correction_mm[axis]
+    updated[slot.active_index] = 0.0 if normal_force == 0.0 else 1.0
+    updated[slot.regime_index] = outcome.regime
+    slip = math.sqrt(
+        sum(value * value for value in outcome.anchor_correction_mm)
+    )
+    return ContactStep(
+        state=State(layout=contact_layout.layout, vector=tuple(updated)),
+        normal_force_n=normal_force,
+        tangential_force_n=outcome.tangential_force_n,
+        regime=outcome.regime,
+        slip_increment_mm=slip,
+    )
