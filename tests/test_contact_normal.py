@@ -66,7 +66,7 @@ def _setup(stiffness_n_per_mm: float):
         gravity_mm_s2=(0.0, 0.0, -GRAVITY_MM_S2),
     )
     contact_layout.assert_matches_context(context)
-    term = PenaltyNormalContact(planes=((0, GROUND[0], GROUND[1], stiffness_n_per_mm),))
+    term = PenaltyNormalContact(planes=((0, GROUND[0], GROUND[1], stiffness_n_per_mm, 0.0),))
     return contact_layout, context, term
 
 
@@ -221,7 +221,7 @@ def test_hessian_is_the_outer_product_of_the_normal():
 
     normal = (0.0, 1.0 / math.sqrt(2.0), 1.0 / math.sqrt(2.0))
     contact_layout, context, _ = _setup(1.0)
-    term = PenaltyNormalContact(planes=((0, (0.0, 0.0, 0.0), normal, 100.0),))
+    term = PenaltyNormalContact(planes=((0, (0.0, 0.0, 0.0), normal, 100.0, 0.0),))
     state = _state(contact_layout, -1.0)
     hessian = term.hessian(state, context)
     assert hessian[1][1] == pytest.approx(50.0, rel=1e-15)
@@ -249,8 +249,8 @@ def test_node_index_bound_covers_every_declared_plane():
     contact_layout, context, _ = _setup(1.0)
     term = PenaltyNormalContact(
         planes=(
-            (0, (0.0, 0.0, 0.0), (0.0, 0.0, 1.0), 10.0),
-            (3, (0.0, 0.0, 0.0), (0.0, 0.0, 1.0), 10.0),
+            (0, (0.0, 0.0, 0.0), (0.0, 0.0, 1.0), 10.0, 0.0),
+            (3, (0.0, 0.0, 0.0), (0.0, 0.0, 1.0), 10.0, 0.0),
         )
     )
     assert term.node_index_bound() == 4
@@ -265,12 +265,12 @@ def test_a_non_unit_normal_fails_closed():
     """不归一化等于把刚度悄悄乘上``|n|²``，而调用方以为自己给的是``k``。"""
 
     with pytest.raises(ContactError, match="unit vector"):
-        PenaltyNormalContact(planes=((0, (0.0, 0.0, 0.0), (0.0, 0.0, 2.0), 10.0),))
+        PenaltyNormalContact(planes=((0, (0.0, 0.0, 0.0), (0.0, 0.0, 2.0), 10.0, 0.0),))
 
 
 def test_a_nonpositive_stiffness_fails_closed():
     with pytest.raises(ContactError, match="stiffness must be positive"):
-        PenaltyNormalContact(planes=((0, (0.0, 0.0, 0.0), (0.0, 0.0, 1.0), 0.0),))
+        PenaltyNormalContact(planes=((0, (0.0, 0.0, 0.0), (0.0, 0.0, 1.0), 0.0, 0.0),))
 
 
 def test_no_planes_fails_closed():

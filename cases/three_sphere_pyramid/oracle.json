@@ -1,0 +1,121 @@
+{
+  "arrays": {},
+  "case_id": "case/three_sphere_pyramid",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/three_sphere_pyramid",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/three_sphere_pyramid/generate_oracle.py",
+    "sha256": "ddc7190ef926b69c098dbb1f8746c89094bf4c54f40aec1ef8067875283a4947"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "aff68d41a47122d65c740290b17fad6a008c832d24d328dda37fd85c540477c8",
+  "oracles": [
+    {
+      "expected": {
+        "collapses_below": true,
+        "critical_friction": 0.19245008972987526,
+        "holds_above": true
+      },
+      "id": "oracle:pyramid/critical_friction",
+      "inputs": {
+        "friction_ratios": [
+          0.99999,
+          1.00001
+        ],
+        "gravity_mm_s2": 9810.0,
+        "kind": "three_sphere_pyramid_critical_friction",
+        "mass_kg": 1.5,
+        "radius_mm": 10.0,
+        "stiffness_n_per_mm": 20000000.0
+      },
+      "tolerances": {
+        "collapses_below": {
+          "abs": 0.0,
+          "reason": "同上，另一边必须塌。**两侧都断言才叫临界值**",
+          "rel": 0.0
+        },
+        "critical_friction": {
+          "abs": 0.0,
+          "reason": "``μc = 1/(3√3)``是几何决定的闭式值，但罚函数柔度让实测的``T/N``带``O(1/k)``偏差（穿透改变接触几何本身）。``k = 2e7``档实测5.4e-08，取2e-7约3.7倍余量。**这个容差是模型的柔度，不是实现的余量**——收敛阶那条门专门验这一点",
+          "rel": 2e-07
+        },
+        "holds_above": {
+          "abs": 0.0,
+          "reason": "**定性判据零容差**（Chrono `utest_DEM_pyramid.cpp`的形制）：同一模型只改``μ``，一边必须撑住",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "ground_normal_n": 22.072499999999998,
+        "ground_tangential_n": 4.247854605562671,
+        "sphere_contact_force_n": 8.495709211125343
+      },
+      "id": "oracle:pyramid/force_decomposition",
+      "inputs": {
+        "gravity_mm_s2": 9810.0,
+        "kind": "pyramid_static_decomposition",
+        "mass_kg": 1.5,
+        "radius_mm": 10.0,
+        "stiffness_n_per_mm": 20000000.0
+      },
+      "tolerances": {
+        "ground_normal_n": {
+          "abs": 0.0,
+          "reason": "``N = 3W/2``。**它比另外两个准得多**（实测7e-12量级）——竖直平衡不依赖接触角，所以柔度不进这一条。容差仍取统一值，理由是判据表的可读性优先于逐条压紧",
+          "rel": 2e-07
+        },
+        "ground_tangential_n": {
+          "abs": 0.0,
+          "reason": "``T = W/(2√3)``，经接触角进来，故带柔度偏差",
+          "rel": 2e-07
+        },
+        "sphere_contact_force_n": {
+          "abs": 0.0,
+          "reason": "同``μc``那条：``O(1/k)``的柔度偏差",
+          "rel": 2e-07
+        }
+      }
+    },
+    {
+      "expected": {
+        "deviation_ratio_high": 12.0,
+        "deviation_ratio_low": 8.0,
+        "deviations_shrink": true
+      },
+      "id": "oracle:pyramid/compliance_is_first_order",
+      "inputs": {
+        "gravity_mm_s2": 9810.0,
+        "kind": "penalty_compliance_convergence_order",
+        "mass_kg": 1.5,
+        "radius_mm": 10.0,
+        "stiffnesses_n_per_mm": [
+          200000.0,
+          2000000.0,
+          20000000.0
+        ]
+      },
+      "tolerances": {
+        "deviation_ratio_high": {
+          "abs": 0.0,
+          "reason": "同上，区间上端",
+          "rel": 0.0
+        },
+        "deviation_ratio_low": {
+          "abs": 0.0,
+          "reason": "区间端点是**声明的判据**不是测出来的数：刚度每涨10倍偏差应降约10倍。实测10.00与10.50，区间取[8,12]。**不写死为10**——一阶是渐近性质，写死会让正确实现在别的构型上红（与`harmonic_oscillator`那条「不写死为4」同源）",
+          "rel": 0.0
+        },
+        "deviations_shrink": {
+          "abs": 0.0,
+          "reason": "**前置断言**：偏差必须逐档单调减小。不减小时比值区间那条门是在拿噪声算阶",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

@@ -67,7 +67,7 @@ def _solve_on_slope(
     contact_layout.assert_matches_context(context)
 
     normal_term = PenaltyNormalContact(
-        planes=((0, (0.0, 0.0, 0.0), normal, normal_stiffness),)
+        planes=((0, (0.0, 0.0, 0.0), normal, normal_stiffness, 0.0),)
     )
     stick_term = TangentialStickSpring(
         springs=((0, (0.0, 0.0, 0.0), normal, tangential_stiffness),)
