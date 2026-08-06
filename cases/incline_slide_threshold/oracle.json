@@ -1,0 +1,100 @@
+{
+  "arrays": {},
+  "case_id": "case/incline_slide_threshold",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/incline_slide_threshold",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/incline_slide_threshold/generate_oracle.py",
+    "sha256": "83bb1516e7dad9d7b03b8d2d5fdfe43fcf85c969c5f6527228fcf8092f02ecf7"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "a67969a8310c4f99253e96ce2df81bd5b53bfc52f7b3a4131fee433b58a7c138",
+  "oracles": [
+    {
+      "expected": {
+        "slips_above": true,
+        "sticks_below": true,
+        "threshold_angle_deg": 16.69924423399362
+      },
+      "id": "oracle:incline/threshold_angle",
+      "inputs": {
+        "friction_coefficient": 0.3,
+        "gravity_mm_s2": 9810.0,
+        "kind": "coulomb_incline_threshold",
+        "mass_kg": 2.0,
+        "normal_stiffness_n_per_mm": 50000.0,
+        "offsets_deg": [
+          -0.0001,
+          -1e-07,
+          1e-07,
+          0.0001
+        ],
+        "tangential_stiffness_n_per_mm": 30000.0
+      },
+      "tolerances": {
+        "slips_above": {
+          "abs": 0.0,
+          "reason": "同上，反向。**两侧都断言才叫阈值**——只断一侧的话，一个'永远粘住'的实现能过一半",
+          "rel": 0.0
+        },
+        "sticks_below": {
+          "abs": 0.0,
+          "reason": "**定性判据零容差**：阈值下方必须粘住。布尔量没有'差不多'",
+          "rel": 0.0
+        },
+        "threshold_angle_deg": {
+          "abs": 0.0,
+          "reason": "θc = arctan(μs)是闭式值，本仓只做一次atan与一次弧度转角度；1e-12是两次浮点运算的余量，不是给实现留的空间",
+          "rel": 1e-12
+        }
+      }
+    },
+    {
+      "expected": {
+        "normal_force_n": [
+          19.545339976560047,
+          19.32192811409952,
+          18.792551739063395,
+          17.78175878165907,
+          15.02979197399435
+        ],
+        "tangential_force_n": [
+          1.7099956727090533,
+          3.4069772458251735,
+          5.637765438063685,
+          8.291770295352524,
+          12.611492902049902
+        ]
+      },
+      "id": "oracle:incline/force_decomposition",
+      "inputs": {
+        "angles_deg": [
+          5.0,
+          10.0,
+          16.699244,
+          25.0,
+          40.0
+        ],
+        "kind": "gravity_decomposition_on_slope",
+        "normal_stiffness_n_per_mm": 50000.0,
+        "tangential_stiffness_n_per_mm": 30000.0,
+        "weight_n": 19.62
+      },
+      "tolerances": {
+        "normal_force_n": {
+          "abs": 0.0,
+          "reason": "罚函数模型的**法向力是精确的**：平衡时k·δ = N，k被约掉。实测五档偏差≤2.2e-16（1 ulp），故取4e-16≈2 ulp。**位置不在判据里**——那一项是O(1/k)的模型穿透，不是误差",
+          "rel": 4e-16
+        },
+        "tangential_force_n": {
+          "abs": 0.0,
+          "reason": "粘着弹簧同构：平衡时k_t·|Δ| = T，与k_t无关。实测≤3.3e-16",
+          "rel": 4e-16
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

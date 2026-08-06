@@ -34,16 +34,17 @@
 | [`large_deflection_cantilever`](large_deflection_cantilever/case.md) | 大挠度悬臂端点位置对Bisshopp-Drucker 1945椭圆积分闭式，二阶收敛实测比3.9612/4.0512/4.0600；几何精确项比小挠度理论准**1519倍**；固支Voronoi退回`h`必掉到一阶（正向必须红） | B | local_batch | 1条 | `tests/cases/test_large_deflection_cantilever.py` |
 | [`euler_buckling`](euler_buckling/case.md) | 临界载荷对`Fc = π²EI/(bL)²`，**b=1/2/0.5三种边界条件由特征方程求根而非抄表**；对铰接刚性链的**精确特征值**命中到2e-6（比连续解紧100倍）；二阶收敛3.9916/4.0033/4.0226；保长扰动的能量在0.7Fc升、1.3Fc降（**唯一验`energy()`符号的门**）；正弦半波在四个试验形状里给出最低临界载荷，间隙5.9e-7 | C | local_batch | 1条 | `tests/cases/test_euler_buckling.py` |
 | [`norris_thin_strip`](norris_thin_strip/case.md) | Norris 1970薄带临界态：片电流分布对**50位十进制**参考，rel 1e-12；电流守恒`∫K dx = I`两条求积（代换式1e-9 对 直接式1e-6，**同一恒等式差三个数量级**）；`b`的两个零容差极限；损耗渐近`i⁴/3`与`i³/3`（**幂次4与3是这两条式的招牌**）。**验公式不验引擎，不进0040分母** | B | interactive | 4条 | `tests/cases/test_norris_thin_strip.py` |
+| [`incline_slide_threshold`](incline_slide_threshold/case.md) | **引擎第一个带接触的案例**：斜面滑动阈值`θc = arctan(μs)`，**阈值两侧行为定性相反**（θc−1e-7°粘、θc+1e-7°滑，零容差）；重力分解`N=Wcosθ`/`T=Wsinθ`五档倾角实测偏差**≤2.2e-16（1 ulp）**；**阈值与两个罚刚度、与质量全部无关**各自一道门（换一个数量级判据必须照样过）；return-map投影后落在锥面上的自洽门。**判力与阈值，不判位置**——穿透是模型自带的O(1/k) | C | interactive | 2条 | `tests/cases/test_incline_slide_threshold.py` |
 | [`peer_fcl_distance`](peer_fcl_distance/case.md) | 同行库对拍：球/胶囊解析距离对python-fcl 0.7.0.11（版本钉死，漂了就红），3类形状对×3构型带×300组=2700组；**判据正本是`criteria.json`不是本页**。抓到FCL两处大错（`enable_signed_distance`最坏相对误差45.6%、胶囊-胶囊接触深度最大偏2.11mm且**FCL自相矛盾**），本仓的数与Fraction精确值逐位相同 | A | local_batch | `criteria.json` | `tests/cases/test_peer_fcl_distance.py` |
 
 ## 一之二、每个案例穿过引擎的哪几层（决策0048第三节通则）
 
 **"验公式"与"验引擎"是两类，混在一个计数里计数就不再有意义。**
-本节是那条通则的执行面：19个案例按**穿过引擎哪几层**分类，**不按案例数报成绩**。
+本节是那条通则的执行面：20个案例按**穿过引擎哪几层**分类，**不按案例数报成绩**。
 
 | 穿过的层 | 条数 | 案例 |
 |---|---|---|
-| **`state`→`energies`→`solve`（整条路）** | **3** | `cantilever_self_weight`、`large_deflection_cantilever`、`euler_buckling` |
+| **`state`→`energies`→`solve`（整条路）** | **4** | `cantilever_self_weight`、`large_deflection_cantilever`、`euler_buckling`、**`incline_slide_threshold`（第一条带接触的）** |
 | `state`→`energies`→`integrate` | 1 | `two_body_spring` |
 | `state`→`integrate`（不碰能量装配与求解器） | 3 | `ballistic_free_flight`、`harmonic_oscillator`、`rigid_body_free_flight` |
 | `energies`协议层（梯度与Hessian，不求解） | 1 | `axial_stretch_hessian` |
@@ -55,7 +56,7 @@
 我们自己0029那条只对一半）。**但它们证明的是"这个公式我们抄对了"，
 不是"这个引擎算得对"。**
 
-真正锻炼引擎机械的是第一行那3条。**新增案例时先问它落在哪一行**——
+真正锻炼引擎机械的是第一行那4条，而其中**只有`incline_slide_threshold`带接触**——另外三条都是梁。**新增案例时先问它落在哪一行**——
 若又是一条闭式计算器，它可以进仓，但**不许被算进"引擎能力"那本账**。
 
 ## 二、案例页六必填字段（缺一即红）
@@ -128,8 +129,11 @@ FEBio的`acceptChanges.py`是这条闭环的出处，本仓的加强是"决策�
 第10条艾里斑（`scalar_diffraction_airy`）、第11条FTS仪器线型与第12条Norton-Beer
 （同在`fts_instrument_line_shape`内，**一个案例文件顶两条C档**）。
 
-**缺7条**：第4条Timoshenko悬臂（缺剪切刚度）、第5条Michell失稳与第6条局部螺旋屈曲
-（缺扭转）、第7—9条接触族（缺接触与摩擦，且要先解0033）、
+**缺7条**（其中第8条已做一半）：第4条Timoshenko悬臂（缺剪切刚度）、
+第5条Michell失稳与第6条局部螺旋屈曲（缺扭转）、
+**第8条斜面滑动阈值`incline_slide_threshold`已过，但该条还含无滑滚球**——
+要转动自由度参与接触，故**按半条记、分母仍算6**（0050后续片才补齐）；
+第7条三球金字塔与第9条恢复系数（前者要多体接触、后者要隐式积分族）、
 第13条变换层自洽三件套（缺复数场与FFT）。各自缺的能力见决策0040第二、三节。
 
 **上表其余案例不计入分母**——它们验的是"我们自己的实现有没有内部错误"
