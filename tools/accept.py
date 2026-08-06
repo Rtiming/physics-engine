@@ -78,6 +78,9 @@ OPTIONAL_FULL_COMMANDS: tuple[tuple[str, ...], ...] = (
     #: 冲突标记门（决策0049第二节）。它同时挂在`pre-commit`上，**两处都要**：
     #: 钩子可能没装（那次事故里就没装），而批末这道跑不掉。
     (".venv/bin/python", "tools/check_conflict_markers.py"),
+    #: 缺口清册的防过期门（plans/07第七节）：登记了欠账的决策记录必须被汇总。
+    #: **散着的欠账各自都写得很清楚，合起来没人看得见。**
+    (".venv/bin/python", "tools/check_gap_register.py"),
 )
 
 TIMEOUT_RETURNCODE = 124
