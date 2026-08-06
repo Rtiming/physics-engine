@@ -23,7 +23,12 @@ from physics_engine.contact import (
     ContactLayout,
     build_contact_layout,
 )
-from physics_engine.energies import EnergyContext, UniformGravity, resolve_node_count
+from physics_engine.energies import (
+    EnergyContext,
+    EnergyError,
+    UniformGravity,
+    resolve_node_count,
+)
 from physics_engine.state import State
 
 
@@ -126,14 +131,19 @@ def test_declaration_order_is_the_layout(
 
 
 def test_context_that_disagrees_with_the_node_block_now_fails_closed():
-    """**上一片如实登记、这一片关掉的那条洞。**
+    """**那条洞的两半，现在都关上了。**
 
-    `energies.resolve_node_count`只看得见``len(vector)``，看不见"哪一段是节点块"，
-    所以一份"声明3个质量而布局只有2个节点"的上下文在那里**判不出来**——
-    实测：它会返回3，于是重力落到锚点自由度上。
+    历史：`resolve_node_count`起初只看得见``len(vector)``，看不见"哪一段是节点块"，
+    于是一份"声明3个质量而布局只有2个节点"的上下文判不出来——**重力会落到锚点上**。
+    第一次修只加了`ContactLayout.assert_matches_context`这条**要调用方主动去调**的路，
+    而`EnergyRegistry.acceleration`那条桥是另一处实现，它照样信上下文。
 
-    本条先把"那里确实判不出来"钉住（否则这道门在验一件已经不成立的事），
-    再验`ContactLayout`把它判出来。
+    **本条的前半段曾经断言"那里确实判不出来"，并写明"洞不在了就该删"。
+    2026-08-06`StateLayout.node_dof_count`让布局成为权威之后，它红了，于是删了。**
+    这就是那句话该兑现的样子——**门不许验一件已经不成立的事**。
+
+    今天两条路各守一段：布局声明了边界，`resolve_node_count`见不一致即失败关闭；
+    `assert_matches_context`仍在，给不走能量层的调用方用。
     """
 
     contact = _layout(node_count=2, pairs=("a",))
@@ -144,14 +154,12 @@ def test_context_that_disagrees_with_the_node_block_now_fails_closed():
     )
     state = State(layout=contact.layout, vector=contact.initial_vector((0.0,) * 6))
 
-    # 上一片那里：判不出来，而且**真的把重力放到了锚点上**
-    assert resolve_node_count(state, bad) == 3
-    gradient = UniformGravity().gradient(state, bad)
-    assert gradient[contact.slot_of("a").base + 2] != 0.0, (
-        "洞已经不存在了？那本门的前半段该删——门不该验一件已经不成立的事"
-    )
+    # 布局是权威：不一致即失败关闭，不再返回一个错的节点数
+    with pytest.raises(EnergyError, match="node block"):
+        resolve_node_count(state, bad)
+    with pytest.raises(EnergyError, match="node block"):
+        UniformGravity().gradient(state, bad)
 
-    # 这一片：判得出来
     with pytest.raises(ContactError, match="node masses"):
         contact.assert_matches_context(bad)
 
@@ -161,6 +169,30 @@ def test_context_that_disagrees_with_the_node_block_now_fails_closed():
         gravity_mm_s2=(0.0, 0.0, -9810.0),
     )
     contact.assert_matches_context(good)
+    assert resolve_node_count(state, good) == 2
+
+
+def test_the_acceleration_bridge_is_covered_by_the_same_authority():
+    """**桥是那条洞的另一半，它必须走同一个权威。**
+
+    第一次修桥只让它"不崩"（节点块之外返回0.0），没让它拒绝一个与布局不符的上下文。
+    实测那时桥仍会把重力放到锚点槽的前三格上。
+    """
+
+    from physics_engine.energies import EnergyRegistry
+
+    contact = _layout(node_count=2, pairs=("a",))
+    bad = EnergyContext(
+        context_id="context/bridge-mismatch",
+        node_masses_kg=(1.0, 1.0, 1.0),
+        gravity_mm_s2=(0.0, 0.0, -9810.0),
+    )
+    acceleration = EnergyRegistry(terms=(UniformGravity(),)).acceleration(
+        bad, contact.layout
+    )
+    vector = contact.initial_vector((0.0,) * 6)
+    with pytest.raises(EnergyError, match="node block"):
+        acceleration(vector, (0.0,) * len(vector), 0.0)
 
 
 # ---------------------------------------------------------------------------

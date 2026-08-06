@@ -90,22 +90,30 @@ def resolve_node_count(state: State, context: EnergyContext) -> int:
     节点块是状态向量的**前缀**：``[0, 3n)``是节点位置，其后是辅助自由度
     （锚点等），**能量项一律不许碰后面那段**。
 
-    ### 这条**没有**关掉的一种错，如实登记
+    ### 布局是权威，上下文只提供值（2026-08-06补齐）
 
-    口径改成"上下文说了算"之后，**加锚点不再改变答案**——那是本次要修的。
-    但**质量表本身与布局不一致**是另一回事：一份声明了3个质量而布局只有2个节点
-    的上下文，这里会返回3，于是重力照样落到锚点上。
+    此前这里只按"上下文的质量表说了算"，于是**一份声明3个质量而布局只有2个节点的
+    上下文判不出来**——实测重力会落到接触锚点槽上。那条洞当时如实登记了，
+    触发条件写的是"锚点布局构造器进仓时把边界带上来"。
 
-    今天**判不了**它：本函数只看得见``len(vector)``，看不见"布局里哪一段是节点块"。
-    要判它得让布局显式声明节点块边界，而**那要等接触锚点的布局构造器落地**
-    （它是唯一会造出带辅助段的布局的东西，边界由它产出）。
+    **构造器进仓后第一次修只修了一半**：能量项这一侧改了，
+    而`EnergyRegistry.acceleration`那条桥是另一处实现，它照样信上下文。
+    实测两处都要修，而**真正的病根是节点数有两个来源而没有一个是权威的**。
 
-    **触发条件**：接触锚点布局构造器进仓时，把边界带上来并在这里比第二次。
-    在那之前这条口径的成立依赖"上下文与布局由同一处构造"——
-    **写在这里，不假装它已经关上了。**
+    现在`StateLayout.node_dof_count`让布局成为权威：声明了就必须与质量表一致，
+    不一致即失败关闭。**老形制（不声明）保持"上下文说了算"**——
+    它对纯节点布局永远正确，而带辅助段的布局一律由`build_contact_layout`产出、
+    一律声明边界。
     """
 
     count = len(context.node_masses_kg)
+    declared = state.layout.node_dof_count
+    if declared is not None and declared != 3 * count:
+        raise EnergyError(
+            f"layout declares a node block of {declared} scalars "
+            f"({declared // 3} nodes) but the context carries {count} node masses — "
+            "**布局是权威**：对不上时重力会落到节点块之后的辅助自由度（接触锚点）上"
+        )
     if 3 * count > len(state.vector):
         raise EnergyError(
             f"context declares {count} node masses ({3 * count} position dof) "

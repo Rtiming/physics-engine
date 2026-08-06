@@ -237,7 +237,13 @@ def build_contact_layout(
             base += SLOT_WIDTH
 
     return ContactLayout(
-        layout=StateLayout(layout_id=layout_id, fields=tuple(fields)),
+        layout=StateLayout(
+            layout_id=layout_id,
+            fields=tuple(fields),
+            #: **边界带上来**：没有它，能量层与积分桥都只能信上下文的质量表，
+            #: 而那两处各自都判不出"上下文与布局不符"（实测重力落到锚点上）。
+            node_dof_count=3 * node_count,
+        ),
         node_count=node_count,
         slots=tuple(slots),
     )

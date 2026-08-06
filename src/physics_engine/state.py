@@ -75,6 +75,19 @@ class StateLayout:
 
     layout_id: str
     fields: tuple[StateField, ...]
+    #: **节点块占前多少个标量**；``None``表示"整条向量都是节点"（老形制）。
+    #:
+    #: 加它的理由是一条实测的洞：能量层与积分桥都按"上下文的质量表说了算"取节点数，
+    #: 而一份声明3个质量、布局只有2个节点的上下文**在两处都判不出来**——
+    #: 实测重力会直接落到接触锚点槽上。两处各修一次都只修了一半，
+    #: **因为真正的问题是节点数有两个来源而没有一个是权威的**。
+    #:
+    #: 本字段让**布局**成为权威：它声明了自己的结构，上下文只提供值。
+    #:
+    #: **不进`to_document()`**，理由与`StateField.is_dimensionless`逐字相同：
+    #: 打包契约的内容地址描述的是"次序与宽度"，而节点块边界不改变哪个数落在哪一格。
+    #: 把它算进指纹会让既有布局的指纹全变一遍，破0001三前提第三条。
+    node_dof_count: int | None = None
 
     def __post_init__(self) -> None:
         if not self.layout_id.startswith("layout/"):
@@ -85,6 +98,19 @@ class StateLayout:
         duplicates = sorted({name for name in names if names.count(name) > 1})
         if duplicates:
             raise StateError(f"duplicate state field names: {duplicates}")
+        if self.node_dof_count is not None:
+            total = sum(field.width for field in self.fields)
+            if not isinstance(self.node_dof_count, int) or isinstance(self.node_dof_count, bool):
+                raise StateError(f"node_dof_count must be an int: {self.node_dof_count!r}")
+            if not (0 < self.node_dof_count <= total):
+                raise StateError(
+                    f"node_dof_count {self.node_dof_count} must be in (0, {total}]"
+                )
+            if self.node_dof_count % 3 != 0:
+                raise StateError(
+                    f"node_dof_count {self.node_dof_count} is not a multiple of 3 — "
+                    "节点块按每节点三个分量计"
+                )
 
     @property
     def dof_count(self) -> int:
