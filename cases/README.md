@@ -32,14 +32,32 @@
 | [`mutual_inductance_coaxial`](mutual_inductance_coaxial/case.md) | 同轴圆环互感Maxwell闭式`M = μ0·√(r1r2)·[(2/k−k)K−(2/k)E]`对Neumann双回路积分，rel 1e-12（**7组构型，含d=0与k=0.002的极远场**）；椭圆积分对Carlson（**模k与参数m两种约定各一对函数并互钉**）；互易零容差；远场退化到偶极子**收敛阶实测1.9806→1.9999**；匝数`N1·N2`逐位精确；mm↔m往返零容差 | B | interactive | 6条 | `tests/cases/test_mutual_inductance_coaxial.py` |
 | [`rigid_body_free_flight`](rigid_body_free_flight/case.md) | 四层：无力矩下**惯性系**角动量与转动动能漂移随步长降16倍（区间`[15,17]`，实测15.68—16.12）；轴对称进动率`λ=ω3(Ia−It)/It`**带符号**（扁体正长体负，rel 1e-8）；中间轴增长率`σ=Ω√((I3−I2)(I2−I1)/(I1I3))`与稳定轴振幅上界闭式、翻转数2/0/0；四元数范数**归一化前**偏离≤1e-11。**七门×五注错的必红矩阵，含一条主动找出的盲区（无力矩判据对`I→c·I`全盲）** | B | local_batch | 11条 | `tests/cases/test_rigid_body_free_flight.py` |
 | [`large_deflection_cantilever`](large_deflection_cantilever/case.md) | 大挠度悬臂端点位置对Bisshopp-Drucker 1945椭圆积分闭式，二阶收敛实测比3.9612/4.0512/4.0600；几何精确项比小挠度理论准**1519倍**；固支Voronoi退回`h`必掉到一阶（正向必须红） | B | local_batch | 1条 | `tests/cases/test_large_deflection_cantilever.py` |
-<<<<<<< HEAD
 | [`euler_buckling`](euler_buckling/case.md) | 临界载荷对`Fc = π²EI/(bL)²`，**b=1/2/0.5三种边界条件由特征方程求根而非抄表**；对铰接刚性链的**精确特征值**命中到2e-6（比连续解紧100倍）；二阶收敛3.9916/4.0033/4.0226；保长扰动的能量在0.7Fc升、1.3Fc降（**唯一验`energy()`符号的门**）；正弦半波在四个试验形状里给出最低临界载荷，间隙5.9e-7 | C | local_batch | 1条 | `tests/cases/test_euler_buckling.py` |
-=======
 | [`norris_thin_strip`](norris_thin_strip/case.md) | Norris 1970薄带临界态：片电流分布对**50位十进制**参考，rel 1e-12；电流守恒`∫K dx = I`两条求积（代换式1e-9 对 直接式1e-6，**同一恒等式差三个数量级**）；`b`的两个零容差极限；损耗渐近`i⁴/3`与`i³/3`（**幂次4与3是这两条式的招牌**）。**验公式不验引擎，不进0040分母** | B | interactive | 4条 | `tests/cases/test_norris_thin_strip.py` |
->>>>>>> worktree-agent-adfd3097200897d3c
 
-**在建**：`peer_fcl_distance`（同行库对拍：球/胶囊距离对FCL，plans/02第四节
-第一批第2条）由同行对比轨道交付，落地后在上表补一行。
+| [`peer_fcl_distance`](peer_fcl_distance/case.md) | 同行库对拍：球/胶囊解析距离对python-fcl 0.7.0.11（版本钉死，漂了就红），3类形状对×3构型带×300组=2700组；**判据正本是`criteria.json`不是本页**。抓到FCL两处大错（`enable_signed_distance`最坏相对误差45.6%、胶囊-胶囊接触深度最大偏2.11mm且**FCL自相矛盾**），本仓的数与Fraction精确值逐位相同 | A | local_batch | `criteria.json` | `tests/cases/test_peer_fcl_distance.py` |
+
+## 一之二、每个案例穿过引擎的哪几层（决策0048第三节通则）
+
+**"验公式"与"验引擎"是两类，混在一个计数里计数就不再有意义。**
+本节是那条通则的执行面：19个案例按**穿过引擎哪几层**分类，**不按案例数报成绩**。
+
+| 穿过的层 | 条数 | 案例 |
+|---|---|---|
+| **`state`→`energies`→`solve`（整条路）** | **3** | `cantilever_self_weight`、`large_deflection_cantilever`、`euler_buckling` |
+| `state`→`energies`→`integrate` | 1 | `two_body_spring` |
+| `state`→`integrate`（不碰能量装配与求解器） | 3 | `ballistic_free_flight`、`harmonic_oscillator`、`rigid_body_free_flight` |
+| `energies`协议层（梯度与Hessian，不求解） | 1 | `axial_stretch_hessian` |
+| **闭式计算器（不碰引擎的任何一层）** | **5** | `scalar_diffraction_airy`、`fts_instrument_line_shape`、`two_beam_interference`、`mutual_inductance_coaxial`、`norris_thin_strip` |
+| 几何查询／资产治理／模型生成（基座，不碰物理求解） | 6 | `segment_distance`、`rotated_aabb`、`broadphase_superset`、`mesh_asset_integrity`、`generator_determinism`、`peer_fcl_distance` |
+
+**怎么读这张表**：闭式计算器那5条**判据强度很高**（第1档解析闭式、容差是算出来的、
+必红门逐条实测），而且它们**抓到过两个真缺陷**（`materials.py`的长度制漏项、
+我们自己0029那条只对一半）。**但它们证明的是"这个公式我们抄对了"，
+不是"这个引擎算得对"。**
+
+真正锻炼引擎机械的是第一行那3条。**新增案例时先问它落在哪一行**——
+若又是一条闭式计算器，它可以进仓，但**不许被算进"引擎能力"那本账**。
 
 ## 二、案例页六必填字段（缺一即红）
 
@@ -88,12 +106,22 @@ FEBio的`acceptChanges.py`是这条闭环的出处，本仓的加强是"决策�
       PYTHONPATH=src .venv/bin/python cases/$case/generate_oracle.py
     done
 
-## 计入成功标准的是哪些（决策0040）
+## 计入成功标准的是哪些（决策0040，经0048第二节修订为两条并列）
 
-本仓的成功标准是**案例阶梯**，分母取 research/05 第2.3节的
-**C档13条同行标准案例**（杆梁族6、接触族3、光学族4）——它们是
-MuJoCo/Bullet/Chrono/Drake/PyElastica/SOFA/FEBio 等十余家共同承认的标准案例。
-**用别人的题当分母，比自己出题自己打分诚实。**
+**两条分母，报的时候必须并排**：
+
+| 分母 | 验什么 | 今天 |
+|---|---|---|
+| **主｜用户六场景端到端**（[plans/04](../docs/plans/04_真实使用场景与能力差距_20260805.md)） | 算不算得了**我们要算的** | **0/6** |
+| 从｜同行C档13条标准案例（research/05第2.3节） | 算得**对不对** | 7/13 |
+
+**只报后者是恭维自己。** 0040当初选同行案例当分母的理由
+（"用别人的题当分母，比自己出题自己打分诚实"）**当时是对的**——
+但那是在**还不知道引擎要用来算什么**的时候定的。用户随后给出六个真实场景，
+于是主从关系倒过来了：**同行阶梯验的是手艺，用户场景验的是有没有用。**
+
+从分母的构成：C档13条（杆梁族6、接触族3、光学族4），
+是MuJoCo/Bullet/Chrono/Drake/PyElastica/SOFA/FEBio等十余家共同承认的标准案例。
 
 **今天13条过7条**：`cantilever_self_weight`、`large_deflection_cantilever`、
 **`euler_buckling`（第3条，决策0046打钩）**、`scalar_diffraction_airy`、

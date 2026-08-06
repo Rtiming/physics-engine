@@ -3,8 +3,8 @@
 安装（舰队wheelhouse链路，decisions/0010）：
 
     git clone ts-orangepi:wheelhouse.git ~/wheelhouse   # 每台机器一次
-    uv add "physics-engine==0.4.0" --find-links ~/wheelhouse
-    # 或 pip install "physics-engine==0.4.0" --find-links ~/wheelhouse
+    uv add "physics-engine==0.5.0" --find-links ~/wheelhouse
+    # 或 pip install "physics-engine==0.5.0" --find-links ~/wheelhouse
 
 **0.x语义**：仓库处于快速演进期（模块地图spec/01大半尚空），minor跳变可以
 破坏兼容。消费方必须**钉精确版本**并经自己的门禁自觉升级；升级永远不是
@@ -30,15 +30,26 @@
 - `physics_engine.oracles` —— oracle清单面：expected/tolerances/双哈希（轴7）
 - `physics_engine.state` —— 状态形制与打包次序契约（spec/12）
 - `physics_engine.integrate` —— 时间推进：三个积分器与五项出生声明（spec/12）
-- `physics_engine.energies` —— 能量项四方法协议与三个能量项（spec/12第三节）
-- `physics_engine.solve` —— 准静态平衡：牛顿+回溯线搜索（spec/12第4.1节）
+- `physics_engine.energies` —— 能量项四方法协议与五个能量项（spec/12第三节）
+- `physics_engine.solve` —— 准静态平衡：牛顿+回溯线搜索+带状求解（spec/12第4.1节）
+- `physics_engine.rigidbody` —— 刚体姿态与自由飞行（力学域，spec/12）
+- `physics_engine.motion` / `.actuators` / `.sensors` —— spec/10六接口的三个声明层
+- `physics_engine.modelgen` —— 参数化模型生成器（spec/11）
+- `physics_engine.optics` —— 光学域：干涉/衍射/FTS仪器线型的闭式解（spec/15）
+- `physics_engine.electromagnetics` —— 电磁域：互感与超导薄带的闭式解（spec/15）
 
-**能力边界（诚实条款）**：`integrate`能推进无接触、无约束的二阶系统
-（显式/半隐式/velocity Verlet，三者`production_ready`全为`False`）。
-能量项有均匀重力、轴向拉伸、小挠度弯曲；准静态平衡可解。
-**没有隐式时间积分族、没有几何精确（DER）弯曲、没有扭转、
-没有接触与摩擦、没有约束**——
-力学与光学按decisions/0015仍在搬迁中，路线见`docs/plans/02`。
+**能力边界（诚实条款）**：本段回答"有什么"，**回答不了"能不能算你要算的"**——
+后者按用户六场景逐条写在`README.md`同名小节与`docs/plans/04`，
+**今天是0/6端到端**（同行C档13条标准案例7/13，两条分母必须并排报，见0048第二节）。
+
+`integrate`能推进无接触、无约束的二阶系统；`rigidbody`能推姿态与自由飞行
+（五个积分器`production_ready`全为`False`）。能量项有均匀重力、轴向拉伸、
+小挠度弯曲、几何精确（DER）弯曲、点载荷；准静态平衡可解并可判是不是极小。
+光学与电磁**全是闭式解**——没有网格、没有复数场、没有FFT。
+
+**没有隐式时间积分族、没有扭转、没有接触与摩擦、没有约束、没有跨域耦合
+（`couplings/`目录不存在）、没有场求解。** 结构性缺的四条（体积与厚度、
+接触、耦合、历史）见`docs/plans/06`，路线见`docs/plans/02`。
 
 **加速档**：`pip install 'physics-engine[accel]'`装NumPy后走加速实现；
 核心永不要求它（0014零设施承诺），两实现逐字节对拍是进仓门（0016甲案）。
@@ -91,7 +102,7 @@ from physics_engine.run_package import (
     read_verified_package,
 )
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "BASE_UNIT_SUFFIXES",
