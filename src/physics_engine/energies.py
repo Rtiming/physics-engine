@@ -65,10 +65,73 @@ class EnergyContext:
             raise EnergyError("gravity_mm_s2 must be a 3-vector")
 
 
+def resolve_node_count(state: State, context: EnergyContext) -> int:
+    """节点数的**唯一口径**：来自上下文的质量表，并与状态向量交叉校验。
+
+    ### 为什么不是``len(state.vector) // 3``
+
+    那个写法假定**整条状态向量都是节点坐标**。它在T4—T5一直成立，
+    因为那时状态里除了节点位置什么都没有。**决策0050让它不再成立**：
+    接触锚点按声明的接触对分槽，挂在节点块之后。
+
+    `EnergyContext`第52行的注释从一开始就写着"**节点数由布局定，这里只存值**"——
+    **契约写对了，实现从来没照做**。这不是新需求，是把既有契约兑现。
+
+    ### 实测的后果（写下来，因为它是静默的）
+
+    在两节点布局后面挂一个锚点槽、而质量表恰好有三项时（上下文按体数或按声明
+    填质量表，这很容易发生）：重力能从29.43变成98.1（**3.3倍**），
+    **梯度长度仍然等于布局长度所以求解器察觉不到**，
+    而且**重力出现在锚点自由度上**——求解器会真的把摩擦锚点往下拉。
+    质量表不够长时报的是裸``IndexError``，也不是能读的错。
+
+    ### 口径
+
+    节点块是状态向量的**前缀**：``[0, 3n)``是节点位置，其后是辅助自由度
+    （锚点等），**能量项一律不许碰后面那段**。
+
+    ### 这条**没有**关掉的一种错，如实登记
+
+    口径改成"上下文说了算"之后，**加锚点不再改变答案**——那是本次要修的。
+    但**质量表本身与布局不一致**是另一回事：一份声明了3个质量而布局只有2个节点
+    的上下文，这里会返回3，于是重力照样落到锚点上。
+
+    今天**判不了**它：本函数只看得见``len(vector)``，看不见"布局里哪一段是节点块"。
+    要判它得让布局显式声明节点块边界，而**那要等接触锚点的布局构造器落地**
+    （它是唯一会造出带辅助段的布局的东西，边界由它产出）。
+
+    **触发条件**：接触锚点布局构造器进仓时，把边界带上来并在这里比第二次。
+    在那之前这条口径的成立依赖"上下文与布局由同一处构造"——
+    **写在这里，不假装它已经关上了。**
+    """
+
+    count = len(context.node_masses_kg)
+    if 3 * count > len(state.vector):
+        raise EnergyError(
+            f"context declares {count} node masses ({3 * count} position dof) "
+            f"but the state vector is only {len(state.vector)} long — "
+            "节点块必须是状态向量的前缀"
+        )
+    return count
+
+
 class EnergyTerm(Protocol):
     """四方法协议（形制采WDS `model/energies.py:43`的`EnergyTerm`）。"""
 
     name: str
+
+    def node_index_bound(self) -> int:
+        """本项索引到的**最大节点号+1**；不按索引取节点的项返回0。
+
+        由`EnergyRegistry`在装配时与`resolve_node_count`比对**一次**，
+        越界即失败关闭。**不做逐次索引的边界检查**：0026的画像里装配是唯一的
+        复杂度问题，往每个``3*i``上加一次比较是在热点上收税；
+        而索引清单在项构造时就冻结了，**构造期算一次、装配期比一次**足够。
+
+        这条门挡的是：一条边/一个载荷/一个模板点名了**超出节点数**的索引，
+        于是它读写的是锚点槽——**长度对得上、求解器不报错、结果是错的**。
+        """
+        ...
 
     def energy(self, state: State, context: EnergyContext) -> float: ...
     def gradient(self, state: State, context: EnergyContext) -> Vector: ...
@@ -118,13 +181,15 @@ class UniformGravity:
 
     name = "uniform_gravity"
 
-    def _nodes(self, state: State) -> int:
-        return len(state.vector) // 3
+    def node_index_bound(self) -> int:
+        """0——本项不按索引点名节点，它作用在**上下文说有多少就是多少**个节点上。"""
+
+        return 0
 
     def energy(self, state: State, context: EnergyContext) -> float:
         gx, gy, gz = context.gravity_mm_s2
         total = 0.0
-        for index in range(self._nodes(state)):
+        for index in range(resolve_node_count(state, context)):
             mass = context.node_masses_kg[index]
             x, y, z = state.vector[3 * index : 3 * index + 3]
             total -= mass * (gx * x + gy * y + gz * z) / MM_PER_M
@@ -133,7 +198,7 @@ class UniformGravity:
     def gradient(self, state: State, context: EnergyContext) -> Vector:
         gx, gy, gz = context.gravity_mm_s2
         result = _zeros(len(state.vector))
-        for index in range(self._nodes(state)):
+        for index in range(resolve_node_count(state, context)):
             mass = context.node_masses_kg[index]
             result[3 * index] = -mass * gx / MM_PER_M
             result[3 * index + 1] = -mass * gy / MM_PER_M
@@ -156,7 +221,7 @@ class UniformGravity:
         vector = state.vector
         total = 0.0
         gradient = _zeros(len(vector)) if need_gradient else None
-        for index in range(len(vector) // 3):
+        for index in range(resolve_node_count(state, context)):
             mass = context.node_masses_kg[index]
             base = 3 * index
             total -= mass * (
@@ -222,19 +287,31 @@ class PointLoad:
             if len(force) != 3 or not all(math.isfinite(value) for value in force):
                 raise EnergyError(f"point load force must be a finite 3-vector: {force!r}")
 
-    def _base(self, state: State, node: int) -> int:
-        base = 3 * node
-        if base + 3 > len(state.vector):
+    def node_index_bound(self) -> int:
+        return max(node for node, _ in self.loads) + 1
+
+    def _base(self, state: State, context: EnergyContext, node: int) -> int:
+        """节点号→向量偏移。
+
+        **界限取节点块而不是向量长度**（决策0050）：向量末尾挂着接触锚点槽时，
+        按向量长度判界会把越界的节点号放进锚点里——**长度检查照样通过，
+        力加到了锚点上**。所以这里问的是`resolve_node_count`，不是``len(vector)//3``。
+
+        `EnergyRegistry`在装配时已按`node_index_bound`比过一次；
+        这里兜住的是**直接调用本项**的路径（案例与测试都这么调）。
+        """
+
+        if node >= resolve_node_count(state, context):
             raise EnergyError(
-                f"point load names node {node} but the state only has "
-                f"{len(state.vector) // 3} nodes"
+                f"point load names node {node} but the context only has "
+                f"{resolve_node_count(state, context)} nodes"
             )
-        return base
+        return 3 * node
 
     def energy(self, state: State, context: EnergyContext) -> float:
         total = 0.0
         for node, force in self.loads:
-            base = self._base(state, node)
+            base = self._base(state, context, node)
             total -= (
                 force[0] * state.vector[base]
                 + force[1] * state.vector[base + 1]
@@ -245,7 +322,7 @@ class PointLoad:
     def gradient(self, state: State, context: EnergyContext) -> Vector:
         result = _zeros(len(state.vector))
         for node, force in self.loads:
-            base = self._base(state, node)
+            base = self._base(state, context, node)
             for axis in range(3):
                 result[base + axis] -= force[axis]
         return tuple(result)
@@ -270,7 +347,7 @@ class PointLoad:
         total = 0.0
         gradient = _zeros(len(vector)) if need_gradient else None
         for node, force in self.loads:
-            base = self._base(state, node)
+            base = self._base(state, context, node)
             total -= (
                 force[0] * vector[base]
                 + force[1] * vector[base + 1]
@@ -314,6 +391,9 @@ class AxialStretch:
                 raise EnergyError(f"rest length must be positive and finite: {rest_mm!r}")
             if not (stiffness_n > 0.0 and math.isfinite(stiffness_n)):
                 raise EnergyError(f"axial stiffness must be positive: {stiffness_n!r}")
+
+    def node_index_bound(self) -> int:
+        return max(max(i, j) for i, j, _, _ in self.edges) + 1
 
     def _edge_energy(self, state: State, edge) -> tuple[float, Vector, float, float]:
         """单条边的标量闭包：返回(能量, 单位方向, 伸长量, 刚度/l0)。"""
@@ -465,6 +545,9 @@ class LinearBending:
     stencils: tuple[
         tuple[tuple[tuple[int, float], ...], float, tuple[float, float, float]], ...
     ] = ()
+
+    def node_index_bound(self) -> int:
+        return max(node for coefficients, _, _ in self.stencils for node, _ in coefficients) + 1
 
     def __post_init__(self) -> None:
         if not self.stencils:
@@ -637,6 +720,9 @@ class DiscreteElasticBending:
     name: str = "discrete_elastic_bending"
     #: 顶点：(左节点, 中节点, 右节点, 弯曲刚度EI_nmm2, 参考Voronoi长度ℓ_mm)
     vertices: tuple[tuple[int, int, int, float, float], ...] = ()
+
+    def node_index_bound(self) -> int:
+        return max(max(left, middle, right) for left, middle, right, _, _ in self.vertices) + 1
 
     def __post_init__(self) -> None:
         if not self.vertices:
@@ -908,10 +994,35 @@ class EnergyRegistry:
     def order(self) -> tuple[str, ...]:
         return tuple(term.name for term in self.terms)
 
+    def assert_within_nodes(self, state: State, context: EnergyContext) -> int:
+        """装配前比一次：**没有一个项索引到节点块之外**。返回节点数。
+
+        决策0050让状态向量不再"整条都是节点"——接触锚点按声明的接触对分槽挂在
+        节点块之后。于是一个越界的节点索引不再撞上``IndexError``，
+        **它会静默地读写锚点槽**：长度对得上、求解器不报错、结果是错的。
+
+        比较放在这里而不是每次索引处，理由见`EnergyTerm.node_index_bound`——
+        0026的画像里装配是唯一的复杂度问题，**热点上不加逐元素比较**。
+        这里是O(项数)，与一次装配的O(自由度²)相比可忽略。
+        """
+
+        count = resolve_node_count(state, context)
+        for term in self.terms:
+            bound = term.node_index_bound()
+            if bound > count:
+                raise EnergyError(
+                    f"energy term {term.name!r} indexes node {bound - 1} but the "
+                    f"context declares only {count} nodes — "
+                    "越界的节点号会落进节点块之后的辅助自由度（接触锚点）里，"
+                    "那里长度对得上但物理是错的"
+                )
+        return count
+
     def total(
         self, state: State, context: EnergyContext, *,
         need_gradient: bool = False, need_hessian: bool = False,
     ) -> tuple[float, Vector | None, Matrix | None]:
+        self.assert_within_nodes(state, context)
         n = len(state.vector)
         energy = 0.0
         gradient = _zeros(n) if need_gradient else None
@@ -948,6 +1059,7 @@ class EnergyRegistry:
         并把装配的标度指数从约1推到2.02。
         """
 
+        self.assert_within_nodes(state, context)
         accumulated: dict[tuple[int, int], float] = {}
         for term in self.terms:
             per_term: dict[tuple[int, int], float] = {}

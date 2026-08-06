@@ -967,3 +967,139 @@ def test_the_stability_check_separates_a_minimum_from_a_saddle():
             State(layout=layout, vector=(0.0,) * 9),
             fixed_indices=frozenset(range(9)),
         )
+
+
+# ---------------------------------------------------------------------------
+# 节点块边界（决策0050的前置：状态向量不再"整条都是节点"）
+# ---------------------------------------------------------------------------
+
+
+def _with_anchor_slot(layout: StateLayout) -> StateLayout:
+    """在节点块之后挂一个接触锚点槽（决策0050的形制：按声明的接触对分槽）。"""
+
+    return StateLayout(
+        layout_id=layout.layout_id + ".anchor",
+        fields=layout.fields
+        + tuple(
+            StateField(f"contact0_anchor_{axis}_mm", 1, is_history=True)
+            for axis in "xyz"
+        ),
+    )
+
+
+def test_gravity_ignores_everything_past_the_node_block():
+    """**本轮修的那个静默缺陷的正向门。**
+
+    改之前`UniformGravity`按``len(state.vector) // 3``数节点，于是节点块后面
+    挂一个锚点槽就多出一个"节点"。实测后果：两节点(z=1,2)的重力能29.43
+    变成98.1（**3.3倍**），**而梯度长度仍然等于布局长度，求解器察觉不到**。
+    """
+
+    from physics_engine.energies import UniformGravity
+
+    layout = _layout(2)
+    context = EnergyContext(
+        context_id="context/anchor-probe",
+        node_masses_kg=(1.0, 1.0),
+        gravity_mm_s2=(0.0, 0.0, -9810.0),
+    )
+    nodes_only = State(layout=layout, vector=(0.0, 0.0, 1.0, 10.0, 0.0, 2.0))
+    term = UniformGravity()
+    baseline = term.energy(nodes_only, context)
+
+    with_anchor = State(
+        layout=_with_anchor_slot(layout), vector=nodes_only.vector + (0.0, 0.0, 7.0)
+    )
+    assert term.energy(with_anchor, context) == baseline, "锚点槽改变了重力能"
+
+    gradient = term.gradient(with_anchor, context)
+    assert len(gradient) == 9, "梯度长度必须仍然等于布局长度"
+    assert gradient[6:] == (0.0, 0.0, 0.0), (
+        f"重力落到了锚点自由度上：{gradient[6:]}——"
+        "求解器会把摩擦锚点当成有质量的点往下拉"
+    )
+
+    fused_energy, fused_gradient, _ = term.quantities(
+        with_anchor, context, need_gradient=True, need_hessian=False
+    )
+    assert fused_energy == baseline, "融合路径没跟上（spec/12第3.1节要求两者逐字节相同）"
+    assert fused_gradient == gradient
+
+
+def test_the_historical_wrong_answer_is_now_red():
+    """把当年那个数钉死：**98.1必须不再出现**。
+
+    只断言"等于29.43"不够——一个把锚点算成半个节点的实现也能不等于98.1。
+    两条一起断言，改坏的方向才被夹住。
+    """
+
+    from physics_engine.energies import UniformGravity
+
+    layout = _with_anchor_slot(_layout(2))
+    context = EnergyContext(
+        context_id="context/historical",
+        node_masses_kg=(1.0, 1.0),
+        gravity_mm_s2=(0.0, 0.0, -9810.0),
+    )
+    state = State(layout=layout, vector=(0.0, 0.0, 1.0, 10.0, 0.0, 2.0, 0.0, 0.0, 7.0))
+    energy = UniformGravity().energy(state, context)
+    assert energy == pytest.approx(29.43), energy
+    assert energy != pytest.approx(98.1), "锚点又被当成节点了"
+
+
+def test_node_count_fails_closed_when_the_mass_table_outruns_the_vector():
+    """质量表比向量还长——改之前这里报的是裸``IndexError``，不是能读的错。"""
+
+    from physics_engine.energies import resolve_node_count
+
+    context = EnergyContext(
+        context_id="context/too-many-masses", node_masses_kg=(1.0, 1.0, 1.0)
+    )
+    state = State(layout=_layout(2), vector=(0.0,) * 6)
+    with pytest.raises(EnergyError, match="node masses"):
+        resolve_node_count(state, context)
+
+
+def test_registry_rejects_a_term_that_indexes_past_the_node_block():
+    """**这是本组最要紧的一条**：越界索引会落进锚点槽，而那里长度对得上。
+
+    两个项各验一次——载荷点名越界节点、边连到越界节点。
+    """
+
+    from physics_engine.energies import PointLoad
+
+    layout = _with_anchor_slot(_layout(2))
+    context = EnergyContext(
+        context_id="context/oob", node_masses_kg=(1.0, 1.0), gravity_mm_s2=(0.0, 0.0, 0.0)
+    )
+    state = State(layout=layout, vector=(0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 1.0, 2.0, 3.0))
+
+    load_past_the_end = EnergyRegistry(terms=(PointLoad(loads=((2, (1.0, 0.0, 0.0)),)),))
+    with pytest.raises(EnergyError, match="indexes node 2"):
+        load_past_the_end.total(state, context)
+
+    edge_past_the_end = EnergyRegistry(
+        terms=(AxialStretch(edges=((0, 2, 10.0, 1000.0),)),)
+    )
+    with pytest.raises(EnergyError, match="indexes node 2"):
+        edge_past_the_end.total(state, context)
+    with pytest.raises(EnergyError, match="indexes node 2"):
+        edge_past_the_end.hessian_entries(state, context)
+
+
+def test_terms_that_stay_inside_the_node_block_are_untouched():
+    """反向：合法索引不许被这道门误伤（一道会误红的门最终会被拆掉）。"""
+
+    from physics_engine.energies import PointLoad
+
+    layout = _with_anchor_slot(_layout(2))
+    context = EnergyContext(
+        context_id="context/inbounds", node_masses_kg=(1.0, 1.0), gravity_mm_s2=(0.0, 0.0, 0.0)
+    )
+    state = State(layout=layout, vector=(0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 1.0, 2.0, 3.0))
+    registry = EnergyRegistry(
+        terms=(PointLoad(loads=((1, (5.0, 0.0, 0.0)),)), UniformGravity())
+    )
+    energy, gradient, _ = registry.total(state, context, need_gradient=True)
+    assert energy == pytest.approx(-50.0)
+    assert gradient[6:] == (0.0, 0.0, 0.0), "锚点自由度上不许出现任何力"
