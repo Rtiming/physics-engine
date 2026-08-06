@@ -209,11 +209,23 @@ def internal_imports(package_root: Path, package: str) -> tuple[InternalImport, 
                     if alias.name == package or alias.name.startswith(package + "."):
                         edges.append(InternalImport(module, alias.name, node.lineno))
             elif isinstance(node, ast.ImportFrom):
-                base = (
-                    _resolve_relative(anchor, node.level)
-                    if node.level
-                    else (node.module or "")
-                )
+                if node.level:
+                    #: **相对import要把``node.module``拼回去。**
+                    #: 此前这里只取`_resolve_relative(anchor, level)`就丢掉了它，
+                    #: 于是``from .optics import x``扫出来的边是``physics_engine``
+                    #: 而不是``physics_engine.optics``——**五条门同时对相对import失明**，
+                    #: 而PEP 328推荐的包内写法正是它。
+                    #: 门当时全绿不是因为它挡得住，是因为仓里恰好一条相对import都没有，
+                    #: 且九条必红用例**全部用绝对import**，这条分支从没被走过。
+                    #: （2026-08-06对抗审核发现）
+                    anchored = _resolve_relative(anchor, node.level)
+                    base = (
+                        f"{anchored}.{node.module}"
+                        if anchored is not None and node.module
+                        else anchored
+                    )
+                else:
+                    base = node.module or ""
                 if base is None or not (base == package or base.startswith(package + ".")):
                     continue
                 for alias in node.names:
@@ -576,3 +588,41 @@ def test_must_be_red_gate_five_dynamic_import_in_a_domain(engine_copy: Path):
         if ring is not None and ring[0] in {"domain", "couplings"}
     ]
     assert sites and "import_module" in sites[0]
+
+
+# ---------------------------------------------------------------------------
+# 必红：相对import（2026-08-06对抗审核补）
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("target", "line", "what"),
+    [
+        ("energies.py", "from .optics import airy_amplitude\n", "力学→光学，同级相对"),
+        ("optics/fts.py", "from ..state import State\n", "光学→力学，上一级相对"),
+        ("scene.py", "from .state import State\n", "基座→力学，同级相对"),
+    ],
+)
+def test_must_be_red_relative_imports_are_not_invisible(tmp_path, target, line, what):
+    """**这九条必红此前全部用绝对import，相对import那条分支从没被走过。**
+
+    2026-08-06对抗审核实测：`node.level`非零时实现只取`_resolve_relative(anchor, level)`，
+    **把`node.module`整个丢掉了**——``from .optics import x``扫出来的边是
+    ``physics_engine``而不是``physics_engine.optics``，于是**五条门同时失明**。
+
+    门当时全绿**不是因为它挡得住，是因为仓里恰好一条相对import都没有**
+    （实测0条），而PEP 328推荐的包内写法正是它。
+
+    **一条从没被必红用例走过的分支，等于一条没有门的分支。**
+    """
+
+    tree = tmp_path / "physics_engine"
+    shutil.copytree(PACKAGE_ROOT, tree, ignore=shutil.ignore_patterns("__pycache__"))
+    path = tree / target
+    path.write_text(line + path.read_text(encoding="utf-8"), encoding="utf-8")
+
+    edges = internal_imports(tree, PACKAGE)
+    offences = cross_domain_edges(edges, ENGINE_RINGS) + channel_violations(
+        edges, ENGINE_RINGS
+    )
+    assert offences, f"{what}没有被任何一条门抓住——相对import又变成盲区了"

@@ -33,8 +33,14 @@
 - `physics_engine.energies` —— 能量项四方法协议与五个能量项（spec/12第三节）
 - `physics_engine.solve` —— 准静态平衡：牛顿+回溯线搜索+带状求解（spec/12第4.1节）
 - `physics_engine.rigidbody` —— 刚体姿态与自由飞行（力学域，spec/12）
-- `physics_engine.motion` / `.actuators` / `.sensors` —— spec/10六接口的三个声明层
+- `physics_engine.contact` —— 接触：锚点布局、罚法向（半空间/球-球）、粘着弹簧、
+  库仑return-map、准静态步进器（力学域，决策0050）
+- `physics_engine.motion` —— 位姿时间线（spec/10 `MotionSource`）
+- `physics_engine.actuators` —— 驱动器声明层（spec/10 `Actuator`；**`apply`的物理未实现**）
+- `physics_engine.sensors` —— 传感器声明层（spec/10 `Sensor`）
 - `physics_engine.modelgen` —— 参数化模型生成器（spec/11）
+- `physics_engine.cli` —— `pe-scene`命令行的实现（数据层入口；
+  **它是被`[project.scripts]`暴露的真公开面**，此前长期不在本清单里）
 - `physics_engine.optics` —— 光学域：干涉/衍射/FTS仪器线型的闭式解（spec/15）
 - `physics_engine.electromagnetics` —— 电磁域：互感与超导薄带的闭式解（spec/15）
 
@@ -42,14 +48,21 @@
 后者按用户六场景逐条写在`README.md`同名小节与`docs/plans/04`，
 **今天是0/6端到端**（同行C档13条标准案例6/13，两条分母必须并排报，见0048第二节）。
 
-`integrate`能推进无接触、无约束的二阶系统；`rigidbody`能推姿态与自由飞行
+`integrate`能推进二阶系统；`rigidbody`能推姿态与自由飞行
 （五个积分器`production_ready`全为`False`）。能量项有均匀重力、轴向拉伸、
 小挠度弯曲、几何精确（DER）弯曲、点载荷；准静态平衡可解并可判是不是极小。
 光学与电磁**全是闭式解**——没有网格、没有复数场、没有FFT。
 
-**没有隐式时间积分族、没有扭转、没有接触与摩擦、没有约束、没有跨域耦合
+**接触有了，但要说清有到哪**（决策0050，六片）：罚法向（半空间与球-球）、
+粘着弹簧、库仑return-map、准静态步进器；**多体接触成立**（球-球两端都是自由度）；
+锚点是**真历史**、写回状态。**瞬态接触也通了**（罚接触+显式积分，即DEM形制）。
+**仍缺**：网格窄相、恢复系数（缺一个dashpot）、载荷控制的真迭代、
+接触体的**转动自由度**（今天是质点+半径，**没有力矩**，故多点接触无意义）。
+
+**没有隐式时间积分族、没有扭转、没有约束、没有跨域耦合
 （`couplings/`目录不存在）、没有场求解。** 结构性缺的四条（体积与厚度、
-接触、耦合、历史）见`docs/plans/06`，路线见`docs/plans/02`。
+接触、耦合、历史）见`docs/plans/06`，**其中"历史"已由0050解、"接触"已开工**；
+路线见`docs/plans/02`与`docs/plans/08`。
 
 **加速档**：`pip install 'physics-engine[accel]'`装NumPy后走加速实现；
 核心永不要求它（0014零设施承诺），两实现逐字节对拍是进仓门（0016甲案）。

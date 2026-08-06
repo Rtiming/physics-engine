@@ -276,3 +276,124 @@ def test_a_nonpositive_stiffness_fails_closed():
 def test_no_planes_fails_closed():
     with pytest.raises(ContactError, match="at least one half-space"):
         PenaltyNormalContact(planes=())
+
+
+# ---------------------------------------------------------------------------
+# 分离态的**报数**（2026-08-06对抗审核补：这四条此前一条门都没有）
+# ---------------------------------------------------------------------------
+
+
+def test_a_separated_contact_reports_zero_force_not_just_zero_energy():
+    """**`test_a_separated_contact_contributes_nothing_at_all`只查了能量/梯度/Hessian。**
+
+    对抗审核实测：把`normal_force_n`改成分离时也报``k·|g|``，
+    **全部977条测试一条都不红**。而`normal_force_n`正是喂给摩擦锥的那个数
+    （`advance_contact_quasistatic`），也是活动标志
+    ``active = 0.0 if normal_force == 0.0 else 1.0``的**唯一依据**——
+    一个飞在空中的接触会带着幽灵摩擦力，且永远被标成active。
+
+    **能量为零不蕴含报数为零**：前者走`g < 0`分支，后者是另一段代码。
+    """
+
+    contact_layout, context, term = _setup(1.0e4)
+    for height in (0.5, 5.0, 500.0):
+        state = _state(contact_layout, height)
+        assert term.normal_force_n(state) == (0.0,), (
+            f"节点在面上方{height}mm，法向力却不是零——摩擦锥会拿到一个幽灵法向力"
+        )
+    # 边界：恰好接触（g == 0）也报零，与Hessian的活动集判据(`g < 0`)一致
+    assert term.normal_force_n(_state(contact_layout, 0.0)) == (0.0,)
+    assert term.hessian_entries(_state(contact_layout, 0.0), context) == ()
+
+
+def test_a_separated_sphere_pair_reports_zero_force():
+    """球-球那一侧同源，同样此前无门。"""
+
+    from physics_engine.contact import PenaltySphereContact
+
+    contact_layout = build_contact_layout(
+        layout_id="layout/sphere-separated",
+        node_count=2,
+        declarations=(ContactDeclaration("pair"),),
+    )
+    context = EnergyContext(
+        context_id="context/sphere-separated",
+        node_masses_kg=(1.0, 1.0),
+        gravity_mm_s2=(0.0, 0.0, 0.0),
+    )
+    term = PenaltySphereContact(pairs=((0, 1, 20.0, 1.0e4),))
+    for separation in (20.5, 100.0):
+        state = State(
+            layout=contact_layout.layout,
+            vector=contact_layout.initial_vector((0.0, 0.0, 0.0, separation, 0.0, 0.0)),
+        )
+        assert term.contact_force_n(state) == (0.0,), f"心距{separation}mm却报了接触力"
+        assert term.energy(state, context) == 0.0
+        assert term.hessian_entries(state, context) == ()
+
+
+def test_a_zero_normal_force_gives_separated_not_stick():
+    """**没有法向力就没有摩擦，而且"分离"与"在滑"是两件事。**
+
+    `coulomb_return_map`的docstring花了一整节讲这条分界
+    （"混起来会让案例分不清'飞出去了'和'在蹭着走'"），
+    但对抗审核实测：把`N == 0`分支改成返回`REGIME_STICK`，**977条测试一条不红**。
+    `REGIME_SEPARATED`此前在全仓测试里**只出现在出生态那条常量断言里**，
+    从来没有一条测试断言过return-map会返回它。
+    """
+
+    from physics_engine.contact import (
+        REGIME_SEPARATED,
+        REGIME_SLIP,
+        REGIME_STICK,
+        coulomb_return_map,
+    )
+
+    outcome = coulomb_return_map(
+        trial_force_n=(5.0, 0.0, 0.0),
+        normal_force_n=0.0,
+        friction_coefficient=0.3,
+        tangential_stiffness_n_per_mm=1.0e4,
+    )
+    assert outcome.regime == REGIME_SEPARATED, (
+        f"法向力为零却报了{outcome.regime}——分离被当成了粘着或滑动"
+    )
+    assert not outcome.is_stick
+    assert outcome.tangential_force_n == (0.0, 0.0, 0.0), "没有法向力却有摩擦力"
+    assert outcome.anchor_correction_mm == (0.0, 0.0, 0.0), "分离却挪了锚点（伪历史）"
+
+    # 反向：有法向力时不许再报分离
+    engaged = coulomb_return_map(
+        trial_force_n=(5.0, 0.0, 0.0),
+        normal_force_n=10.0,
+        friction_coefficient=0.3,
+        tangential_stiffness_n_per_mm=1.0e4,
+    )
+    assert engaged.regime in (REGIME_STICK, REGIME_SLIP)
+    assert engaged.regime != REGIME_SEPARATED
+
+
+def test_the_cone_boundary_is_inclusive():
+    """**锥面上恰好那一点判成粘，这条边界此前从没被真的取到过。**
+
+    清册把它登记成一条载荷条款（"`|T| ≤ μN`把边界判成粘，故1趟报滑、2趟报粘，
+    改默认趟数会改语义"），而`test_contact_stepper`里那条看似在钉它的断言，
+    实测那里的量比``μN``小约8个ulp——**`<=`与`<`在那里给同一个答案**。
+
+    这里**构造精确落在锥面上的试探力**，把边界真的取到。
+    """
+
+    from physics_engine.contact import REGIME_STICK, coulomb_return_map
+
+    normal_force = 8.0
+    friction = 0.25
+    limit = friction * normal_force  # 恰为2.0，二进制可精确表示
+    outcome = coulomb_return_map(
+        trial_force_n=(limit, 0.0, 0.0),
+        normal_force_n=normal_force,
+        friction_coefficient=friction,
+        tangential_stiffness_n_per_mm=1.0e4,
+    )
+    assert outcome.regime == REGIME_STICK, "恰在锥面上被判成滑——边界约定变了"
+    assert outcome.anchor_correction_mm == (0.0, 0.0, 0.0), "边界上不许挪锚点"
+    assert outcome.tangential_force_n == (limit, 0.0, 0.0), "边界上力被投影动了"

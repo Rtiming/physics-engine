@@ -261,3 +261,135 @@ def test_a_fixed_normal_is_exact_in_one_pass():
 def test_a_zero_pass_budget_fails_closed():
     with pytest.raises(ContactError, match="at least 1"):
         _step(1.5, max_passes=0)
+
+
+# ---------------------------------------------------------------------------
+# 分离：活动集与历史（2026-08-06对抗审核抓到的两条静默错值）
+# ---------------------------------------------------------------------------
+
+
+def _ground_drag(lateral_load_n: float, height_mm: float, anchor_x_mm: float = 0.0):
+    """块在水平地面上，`height_mm`控制它贴地还是悬在空中。"""
+
+    contact_layout = build_contact_layout(
+        layout_id="layout/separation",
+        node_count=1,
+        declarations=(ContactDeclaration("ground"),),
+    )
+    context = EnergyContext(
+        context_id="context/separation",
+        node_masses_kg=(MASS_KG,),
+        gravity_mm_s2=(0.0, 0.0, -GRAVITY_MM_S2),
+    )
+    ground = PenaltyNormalContact(
+        planes=((0, (0.0, 0.0, 0.0), UP, STIFFNESS_N_PER_MM, 0.0),)
+    )
+    registry = EnergyRegistry(
+        terms=(UniformGravity(), ground, PointLoad(loads=((0, (lateral_load_n, 0.0, 0.0)),)))
+    )
+    slot = contact_layout.slot_of("ground")
+    vector = list(contact_layout.initial_vector((0.0, 0.0, height_mm)))
+    vector[slot.anchor_base] = anchor_x_mm
+    return contact_layout, context, ground, registry, slot, tuple(vector)
+
+
+def _advance(contact_layout, context, ground, registry, slot, vector, *, free_x: bool):
+    fixed = set(range(3, contact_layout.layout.dof_count)) | {1}
+    if not free_x:
+        fixed.add(0)
+    return advance_contact_quasistatic(
+        registry_without_stick=registry,
+        context=context,
+        contact_layout=contact_layout,
+        slot=slot,
+        vector=vector,
+        node=0,
+        normal=UP,
+        normal_force_of=lambda state: ground.normal_force_n(state)[0],
+        tangential_stiffness_n_per_mm=STIFFNESS_N_PER_MM,
+        friction_coefficient=FRICTION,
+        fixed_indices=frozenset(fixed),
+        residual_tol_n=RESIDUAL_TOL_N,
+        max_iterations=200,
+    )
+
+
+def test_a_separated_contact_exerts_no_tangential_force():
+    """**分离时不许接粘着项。**
+
+    对抗审核实测：节点抬到面上方500mm，法向力正确归零、regime正确报SEPARATED、
+    报告的切向力也是0，**而平衡位置仍被一根不存在的摩擦弹簧顶在`T/k_t`上**。
+
+    更难看的是**正确的活动集会失败关闭**——把粘着项拿掉，切向没有任何刚度，
+    `solve_equilibrium`当场报奇异。**正确的做法炸，错误的做法静默给答案。**
+    """
+
+    setup = _ground_drag(2.0, height_mm=-2.0e-4, anchor_x_mm=0.0)
+    engaged = _advance(*setup, free_x=True)
+    assert engaged.normal_force_n > 0.0
+    held_x = engaged.state.vector[0]
+    assert held_x != 0.0, "贴地时应当被摩擦弹簧顶住一个位移，否则本门在验空气"
+
+    # 抬到空中：没有法向力就没有摩擦，切向**不该**再有任何刚度
+    airborne = _ground_drag(2.0, height_mm=5.0, anchor_x_mm=0.0)
+    with pytest.raises((ContactError, Exception)) as excinfo:
+        _advance(*airborne, free_x=True)
+    assert "singular" in str(excinfo.value) or "converge" in str(excinfo.value), (
+        f"悬空且切向自由时本该欠约束失败关闭，实际：{excinfo.value}"
+    )
+
+
+def test_lifting_and_moving_in_the_air_invents_no_slip():
+    """**分离要清切向历史。**
+
+    对抗审核实测的原始形态：贴地拖到2mm（锚点跟着到1.9998）、抬到空中横移到50mm、
+    再放回地面——那一步报出`slip_increment_mm = 48`，
+    **凭空记了282.5 N·mm的摩擦功，而那48mm是在空中走的**。
+
+    同行的罚摩擦实现（Chrono DEM、LAMMPS granular）在失去接触时一律清切向历史。
+
+    **装置上的一条限制先说清**：悬空的节点在**准静态下根本没有平衡**——
+    法向分离后z方向也没有任何刚度（重力的Hessian恒为零），
+    所以"抬起—空中横移—放下"整条路本质是**瞬态**问题。
+    因此这里把节点钉在空中的一个位置上，只验**历史记账**那一半：
+    分离那一步不许报滑移、不许留旧锚点。
+
+    这条限制本身值得记：**分离的准静态解不存在，是模型的性质不是实现的缺陷**。
+    """
+
+    # 空中的一步：锚点里带着旧历史（贴地时拖出来的），位置已横移到50mm。
+    # z留一个自由度给求解器（否则`solve_equilibrium`报"每个自由度都被钉住"），
+    # 但节点被一个把它按在空中的外载托住——本门只关心历史记账。
+    airborne = _ground_drag(0.0, height_mm=5.0, anchor_x_mm=1.9998)
+    contact_layout, context, ground, _registry, slot, vector = airborne
+    weight = MASS_KG * GRAVITY_MM_S2 / 1000.0
+    # 恰好托住自重的外载：空中因此有一个平凡的平衡
+    airborne_registry = EnergyRegistry(
+        terms=(UniformGravity(), ground, PointLoad(loads=((0, (0.0, 0.0, weight)),)))
+    )
+    vector = list(vector)
+    vector[0] = 50.0
+    fixed = frozenset({0, 1} | set(range(3, contact_layout.layout.dof_count)))
+    step = advance_contact_quasistatic(
+        registry_without_stick=airborne_registry,
+        context=context,
+        contact_layout=contact_layout,
+        slot=slot,
+        vector=tuple(vector),
+        node=0,
+        normal=UP,
+        normal_force_of=lambda state: ground.normal_force_n(state)[0],
+        tangential_stiffness_n_per_mm=STIFFNESS_N_PER_MM,
+        friction_coefficient=FRICTION,
+        fixed_indices=fixed,
+        residual_tol_n=RESIDUAL_TOL_N,
+        max_iterations=200,
+    )
+
+    assert step.normal_force_n == 0.0
+    assert step.slip_increment_mm == 0.0, (
+        f"空中那一步报了{step.slip_increment_mm}mm滑移——那段路是在空中走的"
+    )
+    anchor = step.state.vector[slot.anchor_base : slot.anchor_base + 3]
+    assert anchor == (0.0, 0.0, 0.0), f"分离后旧锚点还留着：{anchor}——再接触时会凭空滑一次"
+    assert step.state.vector[slot.active_index] == 0.0

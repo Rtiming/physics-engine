@@ -7,10 +7,10 @@
     "algorithm_id": "algorithm:oracle/three_sphere_pyramid",
     "algorithm_version": "1.0.0",
     "path_relative": "cases/three_sphere_pyramid/generate_oracle.py",
-    "sha256": "ddc7190ef926b69c098dbb1f8746c89094bf4c54f40aec1ef8067875283a4947"
+    "sha256": "73071bdf2ee55e87fbbb62212c03ff5749240c5303f78ed1526e904ce3228ab2"
   },
   "load_tier": "interactive",
-  "manifest_self_sha256": "aff68d41a47122d65c740290b17fad6a008c832d24d328dda37fd85c540477c8",
+  "manifest_self_sha256": "65cc86ce286e76de1d319ea77f7abe6eb659c6389f09802c1fa64603b6978436",
   "oracles": [
     {
       "expected": {

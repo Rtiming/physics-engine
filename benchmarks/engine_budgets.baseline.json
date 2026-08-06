@@ -28,7 +28,7 @@
     },
     "accept_full": {
       "budget_s": 120.0,
-      "measured_median_s": 0.5,
+      "measured_median_s": 21.3,
       "load_tier": "local_batch"
     },
     "solve_equilibrium_cantilever_160free_dof": {
@@ -48,8 +48,9 @@
   },
   "deterministic_gates": {
     "source_bytes": {
-      "measured": 475269,
+      "measured": 529440,
       "ceiling": 720896,
+      "measured_on": "2026-08-06",
       "rationale": "source_bytes是wheel体积的确定性代理——wheel需要构建，源码字节不需要，且跨平台逐位稳定。上限**不是**“引擎必须保持小”的承诺（0015已裁决要把WDS的物理搬进来，源码注定大幅增长），而是“增长必须是一次被记录的决定”。抬上限是允许的，但必须在ceiling_history里留一行，且门校验现行上限等于历史末行——想悄悄抬过不去。",
       "scope": "src/physics_engine/**/*.py（含子包，rglob）"
     },

@@ -185,3 +185,66 @@ def test_the_fused_path_evaluates_each_edge_kernel_exactly_once():
         "分开调energy/gradient/hessian会是3倍边数（decisions/0026实测）"
     )
     assert energies is not None
+
+
+# ---------------------------------------------------------------------------
+# 台账的`measured`字段：**此前没有生产者也没有门**
+# ---------------------------------------------------------------------------
+
+#: `measured`允许的陈旧度。取5%不是保守也不是宽松，是**让它会响**：
+#: 2026-08-06对抗审核实测`source_bytes`台账475269、实际528363，**差11.2%**，
+#: 而没有任何门看着它——同期spec/13第18行还在引那个数当现在时。
+#:
+#: 5%意味着源码每涨5%就要回来记一次账，与`source_bytes_ceiling_history`那条
+#: "**增长必须是一次被记录的决定**"是同一条纪律，只是那条守上限、这条守读数。
+MEASURED_DRIFT_TOLERANCE = 0.05
+
+
+def test_the_recorded_source_bytes_is_not_stale(baseline):
+    """台账里的`measured`必须跟得上实际——**否则文档会引用一个没人测过的数**。
+
+    这道门补的是一个具体的空洞：`tools/bench.py`只产三项墙钟
+    （import、validate、check-collisions），**从不产`source_bytes`**；
+    而既有的那道门只判`measured <= ceiling`，所以`measured`本身可以永远漂着。
+    """
+
+    recorded = baseline["deterministic_gates"]["source_bytes"]["measured"]
+    actual = sum(
+        path.stat().st_size for path in sorted((ROOT / "src/physics_engine").rglob("*.py"))
+    )
+    drift = abs(actual / recorded - 1.0)
+    assert drift <= MEASURED_DRIFT_TOLERANCE, (
+        f"台账记的source_bytes是{recorded}，实际{actual}，漂了{drift:.1%}——"
+        f"超过{MEASURED_DRIFT_TOLERANCE:.0%}就该回来记一次账。"
+        "**没有门的数字会被文档当成现在时引用**（spec/13第18行就在引它）"
+    )
+
+
+def test_the_recorded_accept_timing_is_not_wildly_out_of_date(baseline):
+    """`accept_full.measured_median_s`必须与最近一次回执同量级。
+
+    **这不是墙钟门**——0018裁过墙钟不进门（共享runner CV=2.66%、2%阈值假阳率45%），
+    那条仍然成立。本条判的是**记账义务**：容差取3倍，远在任何噪声之上。
+
+    实测（2026-08-06对抗审核）：台账写0.5秒、实际21.5秒，**差43倍**，
+    而README、plans/01、spec/13三处还在以现在时引"验收full 3.4s"。
+    **三个数互不相同，没有一个有生产者。**
+    """
+
+    import json
+
+    receipt_path = ROOT / "work" / "acceptance" / "full-latest.json"
+    if not receipt_path.is_file():
+        import pytest
+
+        pytest.skip("还没跑过full档；本门判的是记账不是性能，没有回执就没有可比对象")
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    elapsed = receipt.get("elapsed_s")
+    assert elapsed is not None, "回执里没有elapsed_s——回执形制变了，本门要跟着改"
+
+    recorded = baseline["wall_clock_budgets"]["accept_full"]["measured_median_s"]
+    ratio = elapsed / recorded if recorded > 0 else float("inf")
+    assert 1 / 3 <= ratio <= 3, (
+        f"台账记的accept_full是{recorded}s，最近一次回执{elapsed}s，差{ratio:.1f}倍——"
+        "**3倍容差远在墙钟噪声之上，这是记账过期不是性能波动**"
+    )

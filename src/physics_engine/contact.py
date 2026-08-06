@@ -279,8 +279,12 @@ class PenaltyNormalContact:
     平衡时``k·δ = N_理论``，于是：
 
     * **法向力是精确的**，与``k``无关——``δ = N/k``，``N = k·δ = N``恒成立；
-    * **穿透不为零**，``δ = N/k``是``O(1/k)``。**这是模型不是缺陷**，
-      但它必须被声明：刚度是**输入**，不是代码里的魔数。
+    * **穿透不为零**。**准静态**下``δ = N/k``是``O(1/k)``；
+      **瞬态冲击下不是这条**——那时``δ_max = v_in·sqrt(m/k)``即``O(k^(−1/2))``
+      （实测``k = 1e5``时准静态式差**1010倍**，见research/13第五节）。
+      **两条律各管各的域，瞬态案例的判据不许照抄准静态那条**，
+      否则刚度提100倍时判据会松100倍而不是10000倍。
+      穿透本身**是模型不是缺陷**，但刚度必须是**输入**不是代码里的魔数。
 
     换句话说：**位置有``O(1/k)``的误差，力没有误差。**
     这条性质决定了判据该判什么——`cases/`里的门判力与阈值，不判位置。
@@ -491,6 +495,11 @@ def coulomb_return_map(
     "分离"与"在滑"是两件事，混起来会让案例分不清"飞出去了"和"在蹭着走"。
     """
 
+    #: **试探力此前完全不校验**，而同一函数对``N``/``μ``/``k_t``都很严
+    #: （2026-08-06对抗审核）：nan进来会原样变成锚点修正**写进状态向量**，
+    #: 而状态是复现契约；长度2或4的元组会被原样返回。
+    if len(trial_force_n) != 3 or not all(math.isfinite(v) for v in trial_force_n):
+        raise ContactError(f"trial force must be a finite 3-vector: {trial_force_n!r}")
     if normal_force_n < 0.0 or not math.isfinite(normal_force_n):
         raise ContactError(f"normal force must be finite and nonnegative: {normal_force_n!r}")
     if friction_coefficient < 0.0 or not math.isfinite(friction_coefficient):
@@ -562,6 +571,11 @@ class TangentialStickSpring:
                 raise ContactError(f"stick node index must be a nonnegative int: {node!r}")
             if len(anchor) != 3 or not all(math.isfinite(value) for value in anchor):
                 raise ContactError(f"anchor must be a finite 3-vector: {anchor!r}")
+            #: **单位矢量那道门挡不住nan**：``abs(nan − 1.0) > tol``是``False``，
+            #: 于是nan法向一路通过、能量与梯度全变nan（2026-08-06对抗审核实测）。
+            #: 同门的`PenaltyNormalContact`有这两条检查，这里此前没有。
+            if len(normal) != 3 or not all(math.isfinite(value) for value in normal):
+                raise ContactError(f"stick normal must be a finite 3-vector: {normal!r}")
             norm = math.sqrt(sum(component * component for component in normal))
             if abs(norm - 1.0) > NORMAL_UNIT_TOLERANCE:
                 raise ContactError(f"stick normal must be a unit vector (|n| = {norm!r})")
@@ -755,13 +769,33 @@ def advance_contact_quasistatic(
     stick_term = solved = outcome = None
     normal_force = 0.0
     passes = 0
+    #: **分离时不许接粘着项**（2026-08-06对抗审核抓到的静默错值）。
+    #:
+    #: `TangentialStickSpring`**没有间隙判据**——它只有锚点、法向、刚度，
+    #: 看不见接触还在不在。此前本函数**无条件**把它接进注册表，后果实测：
+    #: 节点抬到面上方500 mm，法向力正确归零、regime正确报SEPARATED、
+    #: 报告的切向力也是0，**而平衡位置仍被一根不存在的摩擦弹簧顶在``T/k_t``上**。
+    #:
+    #: 更难看的是**正确的活动集会失败关闭**：把粘着项拿掉，
+    #: 切向没有任何刚度，`solve_equilibrium`当场报奇异——
+    #: **也就是说正确的做法炸，而错误的做法静默给答案**，
+    #: 且切线刚度照样正定，求解器那张"欠约束即失败关闭"的网罩不到切向。
+    #:
+    #: 判据用**上一趟的法向力**（第一趟用入参状态算），
+    #: 因为活动集必须在装配之前定——这正是罚接触"活动集变化处不可微"的那条边界。
+    engaged = normal_force_of(State(layout=contact_layout.layout, vector=current)) > 0.0
     for _ in range(max_passes):
         passes += 1
         direction = normal_of(current)
         stick_term = TangentialStickSpring(
             springs=((node, anchor, direction, tangential_stiffness_n_per_mm),)
         )
-        registry = EnergyRegistry(terms=(*registry_without_stick.terms, stick_term))
+        terms = (
+            (*registry_without_stick.terms, stick_term)
+            if engaged
+            else registry_without_stick.terms
+        )
+        registry = EnergyRegistry(terms=terms)
         solved = solve_equilibrium(
             registry,
             context,
@@ -776,7 +810,8 @@ def advance_contact_quasistatic(
         current = solved.state.vector
 
         normal_force = normal_force_of(solved.state)
-        trial = stick_term.tangential_force_n(solved.state)[0]
+        engaged = normal_force > 0.0
+        trial = stick_term.tangential_force_n(solved.state)[0] if engaged else (0.0,) * 3
         outcome = coulomb_return_map(
             trial_force_n=trial,
             normal_force_n=normal_force,
@@ -797,6 +832,17 @@ def advance_contact_quasistatic(
 
 
     updated = list(solved.state.vector)
+    #: **分离时清切向历史**（同一次对抗审核的第二条静默错值）。
+    #:
+    #: ``N = 0``时return-map返回零修正、锚点纹丝不动，而此前**没有任何地方
+    #: 在再接触时重置它**。实测的后果：贴地拖到2 mm、抬到空中横移到50 mm、
+    #: 再放回地面——那一步报出``slip_increment_mm = 48``，
+    #: **凭空记了282.5 N·mm的摩擦功，而那48 mm是在空中走的**。
+    #: 同一个洞的另一面：空中把切向放开，幽灵弹簧在50 mm处出力1.5e6 N。
+    #:
+    #: 同行的罚摩擦实现（Chrono DEM、LAMMPS granular）在失去接触时一律清切向历史。
+    if not engaged:
+        anchor = (0.0, 0.0, 0.0)
     for axis in range(3):
         updated[slot.anchor_base + axis] = anchor[axis]
     updated[slot.active_index] = 0.0 if normal_force == 0.0 else 1.0
@@ -804,8 +850,12 @@ def advance_contact_quasistatic(
     #: **整步的总滑移，不是最后一趟的修正量。** 多趟时锚点是逐趟累加的，
     #: 取最后一趟等于把前面几趟滑掉的距离丢掉——而那正是这一步的不可逆位移。
     origin = vector[slot.anchor_base : slot.anchor_base + 3]
-    slip = math.sqrt(
-        sum((anchor[axis] - origin[axis]) ** 2 for axis in range(3))
+    #: 分离那一步的滑移是**零**，不是"锚点从旧值归零"的那段距离——
+    #: 后者会把清历史这个动作本身记成一次滑移。
+    slip = (
+        0.0
+        if not engaged
+        else math.sqrt(sum((anchor[axis] - origin[axis]) ** 2 for axis in range(3)))
     )
     return ContactStep(
         state=State(layout=contact_layout.layout, vector=tuple(updated)),
@@ -852,6 +902,17 @@ class PenaltySphereContact:
         if not self.pairs:
             raise ContactError("sphere_contact needs at least one pair")
         for i, j, radii_sum, stiffness in self.pairs:
+            for index in (i, j):
+                #: **两个同门（半空间、粘着）都校验了，只有这里漏了。**
+                #: 2026-08-06对抗审核实测：``node = -1``被接受、``node_index_bound()``
+                #: 返回1所以装配门放行，而``vector[-3:]``读的正是**接触锚点槽**——
+                #: 算出316681 N·mm的能量，全部由历史值来。
+                #: **这逐字就是`EnergyRegistry.assert_within_nodes`docstring描述的
+                #: 那个失败模式，而那道门只挡上界。**
+                if isinstance(index, bool) or not isinstance(index, int) or index < 0:
+                    raise ContactError(
+                        f"sphere contact node index must be a nonnegative int: {index!r}"
+                    )
             if i == j:
                 raise ContactError(f"a sphere cannot contact itself: node {i}")
             if not (radii_sum > 0.0 and math.isfinite(radii_sum)):
