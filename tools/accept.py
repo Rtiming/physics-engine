@@ -94,6 +94,10 @@ REQUIRED_TOOL_COMMANDS: tuple[tuple[str, ...], ...] = (
     #: 实测机理：共享`.venv`的editable `.pth`是主仓`src`的绝对路径，
     #: 于是worktree里import到的是主仓的包——**代理可以全绿交差而验的是别人的代码**。
     (".venv/bin/python", "tools/check_worktree_env.py"),
+    #: 能力位清单的计数门（决策0056，落地0052第二节的裁决）：
+    #: 两个分子**从清单里长出来，不从散文里来**。它关掉的是plans/07第四节
+    #: 第一行那笔账——"没有门看着分子"，而那个分子实测被多算过一条。
+    (".venv/bin/python", "tools/check_capability_ledger.py"),
 )
 
 #: 旧名保留一版，指向新元组。破坏性改名要留缓冲（AGENTS.md「API两档」）。
@@ -110,7 +114,18 @@ EMPTY_SELECTION_RETURNCODE = 5
 #: 允许为空的命令白名单。**只有申报过的档位可以空**——交互级绝不许为空，
 #: 那说明marker写错或测试没被收集，必须红（否则一个marker笔误就能让整档
 #: 静默不跑而验收照绿，这正是"零执行命令→BLOCKED"要挡的那类事）。
-MAY_BE_EMPTY: frozenset[tuple[str, ...]] = frozenset(BATCH_COMMANDS)
+#:
+#: **2026-08-12清空**（决策0056第五节，兑现plans/09第七节第2条）：
+#: 这里原本钉着``BATCH_COMMANDS``。立那条豁免时本机批级确实一条测试都没有，
+#: **而它今天装着40条**——豁免的理由早已消失，豁免却被钉死，
+#: 元测试还正面断言"这条豁免必须在"，于是**一个`batch` marker笔误可以让40条
+#: 测试静默不跑而验收照绿**。
+#:
+#: 机制本身保留（``classify``仍收``may_be_empty``参数，将来`serverclass`
+#: 真进两档时要用），**但今天没有任何档位配得上它**。
+#: 治理测试把这条从"钉死"改成"有条件"：**在名单里的档位必须实测收集到0条**——
+#: 理由消失，豁免自动红。
+MAY_BE_EMPTY: frozenset[tuple[str, ...]] = frozenset()
 
 #: 活性护栏倍数：真正杀进程的超时=预算×本倍数，**不是SLA**。
 #: 直接拿30/120当杀进程线，会让宿主负载改变**功能**结论（0014法则2禁止）；

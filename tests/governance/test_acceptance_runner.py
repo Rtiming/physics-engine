@@ -1,5 +1,6 @@
 """验收器的元门禁——轴6规则6在本仓的落地：判据本身也要被验。"""
 
+import os
 import subprocess
 import sys
 import time
@@ -190,11 +191,58 @@ def test_a_declared_empty_tier_passes_but_an_undeclared_one_must_be_red():
     )[:2] == ("FAIL", "FAIL")
 
 
-def test_only_the_batch_tier_is_allowed_to_be_empty():
-    """交互级绝不许为空——它为空说明测试没被收集，是事故不是状态。"""
+def _collects_nothing(argv: tuple[str, ...]) -> bool:
+    """这条命令今天真的一条测试都收集不到吗？
 
-    assert accept.MAY_BE_EMPTY == frozenset(accept.BATCH_COMMANDS)
-    assert not (accept.MAY_BE_EMPTY & set(accept.QUICK_COMMANDS))
+    只加``--collect-only``，其余照抄验收器要跑的那条命令——**判的是同一条命令，
+    不是一条长得像的**。实测0.3秒，够便宜到常驻交互级。
+    """
+
+    environment = dict(os.environ, PYTHONPATH=str(accept.ROOT / "src"))
+    completed = subprocess.run(
+        [*argv, "--collect-only"],
+        cwd=accept.ROOT,
+        capture_output=True,
+        env=environment,
+        check=False,
+    )
+    return completed.returncode == accept.EMPTY_SELECTION_RETURNCODE
+
+
+def test_no_tier_is_exempt_today_because_no_tier_is_empty_today():
+    """**理由消失的豁免必须自动失效**（plans/09第七节第2条，决策0056第五节）。
+
+    这里原本正面断言"`batch`档的豁免必须在"，**而batch今天装着40条测试**——
+    立豁免时它确实是空的，理由早已消失而豁免被钉死。后果不是理论上的：
+    一个`batch` marker笔误会让那40条静默不跑，退出码5被当成"申报过的空档"，
+    **验收照绿**。
+
+    改法不是删掉就算：**判据从"名单必须等于某个常量"改成"名单里的每一档
+    今天必须实测收集到0条"**。理由还在，豁免就还在；理由没了，当场红。
+    """
+
+    assert not (accept.MAY_BE_EMPTY & set(accept.QUICK_COMMANDS)), (
+        "交互级绝不许为空——它为空说明测试没被收集，是事故不是状态"
+    )
+    for argv in sorted(accept.MAY_BE_EMPTY):
+        assert _collects_nothing(argv), (
+            f"{' '.join(argv)}今天收集得到测试，却还挂着「可以为空」的豁免——"
+            "理由消失的豁免等于把marker笔误变成静默通过"
+        )
+
+
+def test_the_batch_tier_is_not_empty_which_is_why_its_exemption_was_removed():
+    """**上一条的红分支**：如果`batch`还在豁免名单里，它现在就该红。
+
+    没有这一条，上面那个循环在名单为空时是**零次迭代**——
+    一条从没被执行过的分支，正是教训三里域隔离门的形态。
+    这里正面把同一个判据跑在`batch`上，**实测它不为空**。
+    """
+
+    for argv in accept.BATCH_COMMANDS:
+        assert not _collects_nothing(argv), (
+            f"{' '.join(argv)}真的收集不到测试了——那本条与上一条都要重新裁"
+        )
 
 
 def test_hard_timeout_is_a_liveness_guard_not_the_sla():
@@ -261,7 +309,7 @@ def test_repository_identity_survives_untracked_symlinks_and_tracks_their_target
 
 
 def test_required_tool_commands_are_all_armed_in_full():
-    """四个工具命令必须**无条件**出现在full档里。
+    """工具命令必须**无条件**出现在full档里。
 
     旧行为是"文件在就上膛，不在就记一条`absent`然后照样PASS"。
     那在单人开发下是诚实的，**在多代理并行下是致命的**：
@@ -271,6 +319,21 @@ def test_required_tool_commands_are_all_armed_in_full():
     commands, _ = accept.resolve_commands("full", accept.ROOT)
     for argv in accept.REQUIRED_TOOL_COMMANDS:
         assert argv in commands, f"必需工具没上膛：{argv}"
+
+
+def test_the_capability_ledger_gate_is_one_of_the_required_tools():
+    """计数门（决策0056）必须在必需工具里，且它的文件真的在。
+
+    单独立一条而不是靠上一条的循环：上一条遍历的是元组本身，
+    **元组里少一行它一样绿**——那正是"门认得自己写的东西"的老毛病。
+    这一条把工具名写死在断言里，少一行当场红。
+    """
+
+    argv = (".venv/bin/python", "tools/check_capability_ledger.py")
+    assert argv in accept.REQUIRED_TOOL_COMMANDS, (
+        "计数门没挂进验收器——两个分子就又回到散文里了（0052第二节）"
+    )
+    assert (accept.ROOT / argv[-1]).is_file()
 
 
 def test_required_tools_stay_out_of_quick():
