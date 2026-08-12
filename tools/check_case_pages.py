@@ -20,8 +20,26 @@
 那是该轨道最贵的一条发现——逼它为了凑编号删掉，是把形式看得比证据重。
 
 外加三条结构校验：案例目录必须被`cases/README.md`索引到（新案例不许悄悄进仓）；
-有`oracle.json`就必须能过`physics_engine.oracles`的严格加载器；
-清单的`case_id`与`load_tier`必须在案例页里出现（页与清单不许各说各话）。
+判据清单必须在（`oracle.json`或案例自带的判据正本），且`oracle.json`必须能过
+`physics_engine.oracles`的严格加载器；清单的`case_id`与`load_tier`必须在案例页里
+出现（页与清单不许各说各话）。
+
+## 那三条结构校验各自补过的洞（2026-08-12，决策0056第六节）
+
+plans/09第七节记着"`check_case_pages`三条结构校验各有一个洞"，逐条兑现：
+
+1. **判据表全空单元格照过**。原判据只数行数、只认表头有没有"理由"二字，
+   于是`| | | |`是一行合法的判据。现在数据行的**第一格（量）与最后一格（理由）
+   都必须非空**——一张判据表的价值全在第三列，空着等于没有；
+2. **删掉`oracle.json`等于关掉两条校验**。原代码是"有`oracle.json`才校验
+   `case_id`与`load_tier`"，于是**删掉清单反而变干净**。现在每个案例必须有
+   判据正本（`oracle.json`，或`peer_fcl_distance`那样的`criteria.json`），
+   一个都没有当场红；
+3. **案例只在散文里被提到就算登记**。原判据是`case_dir.name not in index_text`
+   ——名字出现在索引页任何一句话里都算。这正是决策0049第六节记的那个形态
+   （`peer_fcl_distance`长期挂在"在建"那句话里）。现在**必须是索引表格某一行的
+   第一个单元格**："被提到"进不了第一格，"被登记"才进得去；
+   判法与`check_gap_register.py`同源。
 
 退出码：0=全绿；2=有案例不合格（与`pe-scene`的非法输入口径一致）。
 用法：`.venv/bin/python tools/check_case_pages.py [cases目录]`
@@ -53,6 +71,11 @@ REQUIRED_FIELDS: tuple[str, ...] = (
 
 CRITERIA_FIELD = "判据表"
 TIER_FIELD = "档位与负载级"
+
+#: 判据正本可以叫哪几个名字。``oracle.json``是常态；``criteria.json``是
+#: `peer_fcl_distance`那种同行库对拍的正本（2700组，页上写不下）。
+#: **一个都没有是红**——原代码"有清单才校验"让删清单成了最省事的过门方式。
+MANIFEST_NAMES: tuple[str, ...] = ("oracle.json", "criteria.json")
 
 #: 中文序号前缀：`## 三、判据表` → `判据表`。
 _ORDINAL = re.compile(r"^##\s*[一二三四五六七八九十]+、\s*")
@@ -97,7 +120,90 @@ def _sections(text: str) -> dict[str, list[str]]:
     return sections
 
 
-def check_case(case_dir: Path, index_text: str) -> list[str]:
+def table_cells(row: str) -> list[str]:
+    """一行Markdown表格 → 去掉首尾竖线后的单元格文本。"""
+
+    return [cell.strip() for cell in row.strip().strip("|").split("|")]
+
+
+def indexed_case_names(index_text: str) -> set[str]:
+    """索引页表格里**作为第一个单元格**登记的案例名。
+
+    只认第一格是这条校验的全部要害：案例名写在正文的任何一句话里都不算登记。
+    决策0049第六节记的形态——`peer_fcl_distance`落地后长期挂在"在建"那句话里，
+    而门只要求名字"出现在页上"，于是**门认得"被提到"，认不得"被登记"**。
+    第一格里通常是``[`名字`](名字/case.md)``，所以按非标识符字符切开再收词。
+    """
+
+    names: set[str] = set()
+    for line in index_text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        cells = table_cells(stripped)
+        if len(cells) < 2:
+            continue
+        names.update(re.findall(r"[A-Za-z0-9_]+", cells[0]))
+    return names
+
+
+def is_separator_row(row: str) -> bool:
+    """``|---|---|``这样的分隔行。它是"下一张表从这里开始"的结构标记。"""
+
+    cells = table_cells(row)
+    return bool(cells) and all(cell and set(cell) <= set("-: ") for cell in cells)
+
+
+def first_table(rows: list[str]) -> list[str]:
+    """一节里的**第一张表**。
+
+    判据表那一节允许有第二第三张表——实测`generator_determinism`在那里放了
+    一张实测偏差表、`mutual_inductance_coaxial`放了一张十二行的必红矩阵，
+    两张都不是判据表，**列数与语义都不同**。拿"本节所有以竖线开头的行"
+    当判据行会把它们一起判，那是门在管不该它管的事。
+    第二张表的起点认**分隔行**这个结构标记，不认空行（分节时空行已被丢掉）。
+    """
+
+    if len(rows) < 3:
+        return rows
+    for index in range(2, len(rows)):
+        if is_separator_row(rows[index]):
+            return rows[: index - 1]
+    return rows
+
+
+def criteria_table_problems(page: Path, section_rows: list[str]) -> list[str]:
+    """判据表的结构校验：**表头、分隔行、以及每一行数据都要真的有内容**。
+
+    原判据只数行数与表头，于是``| | | |``是一行合法的判据——
+    **一张判据表的价值全在第三列（理由），空着等于没有**。
+    """
+
+    rows = first_table(section_rows)
+    if len(rows) < 3:
+        return [
+            f"{page}: 判据表至少要有表头、分隔行与一行判据（量→rel/abs→理由），"
+            f"现在只有{len(rows)}行"
+        ]
+    if "理由" not in rows[0]:
+        return [f"{page}: 判据表缺『理由』列——第三列是这张表存在的原因"]
+    problems: list[str] = []
+    for number, row in enumerate(rows[2:], start=1):
+        cells = table_cells(row)
+        if len(cells) < 3:
+            problems.append(f"{page}: 判据表第{number}行只有{len(cells)}格，判据表要三列")
+            continue
+        if not cells[0]:
+            problems.append(f"{page}: 判据表第{number}行没写是哪个量——空的第一格不是判据")
+        if not cells[-1]:
+            problems.append(
+                f"{page}: 判据表第{number}行的『理由』是空的——"
+                "容差没有理由就是拍脑袋，那正是这一列存在的原因"
+            )
+    return problems
+
+
+def check_case(case_dir: Path, indexed: set[str]) -> list[str]:
     """校验一个案例目录，返回问题列表（空=合格）。"""
 
     problems: list[str] = []
@@ -123,17 +229,18 @@ def check_case(case_dir: Path, index_text: str) -> list[str]:
         problems.append(f"{page}: 六必填字段的先后顺序与规定不符：{order}")
 
     rows = [line for line in by_field.get(CRITERIA_FIELD, []) if line.startswith("|")]
-    if len(rows) < 3:
-        problems.append(
-            f"{page}: 判据表至少要有表头、分隔行与一行判据（量→rel/abs→理由），"
-            f"现在只有{len(rows)}行"
-        )
-    elif "理由" not in rows[0]:
-        problems.append(f"{page}: 判据表缺『理由』列——第三列是这张表存在的原因")
+    problems.extend(criteria_table_problems(page, rows))
 
-    if case_dir.name not in index_text:
+    if case_dir.name not in indexed:
         problems.append(
-            f"{case_dir.name}: 没有被 cases/README.md 索引到——新案例不许悄悄进仓"
+            f"{case_dir.name}: 没有被 cases/README.md 的索引**表格**登记到"
+            "——在正文里被提一句不算登记（决策0049第六节的形态）"
+        )
+
+    if not any((case_dir / name).is_file() for name in MANIFEST_NAMES):
+        problems.append(
+            f"{case_dir.name}: 一份判据正本都没有（要{list(MANIFEST_NAMES)}之一）"
+            "——**删掉清单不是过门的办法**，那会连带关掉case_id与负载级两条校验"
         )
 
     manifest_path = case_dir / "oracle.json"
@@ -164,7 +271,7 @@ def main(argv: list[str] | None = None) -> int:
     if not index.is_file():
         print(f"FAIL {index}: 案例套件缺中央索引")
         return 2
-    index_text = index.read_text(encoding="utf-8")
+    indexed = indexed_case_names(index.read_text(encoding="utf-8"))
 
     directories = _case_directories(cases_root)
     if not directories:
@@ -173,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
 
     problems: list[str] = []
     for case_dir in directories:
-        problems.extend(check_case(case_dir, index_text))
+        problems.extend(check_case(case_dir, indexed))
     for problem in problems:
         print(f"FAIL {problem}")
     print(f"case pages: {len(directories)} checked, {len(problems)} problems")

@@ -233,21 +233,27 @@
         {
           "id": "S3.8",
           "label": "恢复系数与碰撞耗散",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": true,
-          "evidence": [],
-          "why": "落体撞漏斗壁会弹，弹多高是这个场景肉眼可见的量。",
-          "missing": "线性弹簧-阻尼器的dashpot未实现（plans/08阶段2）。约定已由0052第一节裁定为**截断**（判据是合力归零不是重叠归零），代价两条：反解式不能照抄同行三家、可声明的e有下界exp(−2)=0.1353。"
+          "evidence": [
+            "case:bouncing_ball_restitution",
+            "test:tests/cases/test_bouncing_ball_restitution.py::test_undamped_restitution_is_one"
+          ],
+          "why": "无阻尼那一端已经是被声明的能力：保守力场下e=1，且它与入射速度无关（罚接触期间是简谐半周期）。",
+          "missing": "**e<1的任何情形一个字都没验**——线性弹簧-阻尼器的dashpot未实现（plans/08阶段2）。约定已由0052第一节裁为**截断**（判据是合力归零不是重叠归零），代价两条：反解式不能照抄同行三家、可声明的e有下界exp(−2)=0.1353。案例页第六节自己写明「不验阻尼、不验恢复系数小于1的任何情形」。"
         },
         {
           "id": "S3.9",
           "label": "动态接触流水线（时间推进 + 由broad/narrow搜出接触对）",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": true,
-          "evidence": [],
+          "evidence": [
+            "case:bouncing_ball_restitution",
+            "test:tests/cases/test_bouncing_ball_restitution.py::test_contact_duration_matches_the_half_period"
+          ],
           "shared_gap": "接触",
-          "why": "落体是动力学问题，不是准静态平衡问题——这一位与S3.4、S3.6判的不是同一件事。",
-          "missing": "今天接触对是`ContactDeclaration`**声明**的，`collision.py`的broad/narrow phase不参与任何接触案例；接触走的是准静态能量求解，没有时间推进、没有碰撞检测流水线。"
+          "why": "时间推进下的接触已经跑通并被判据守住：接触时长t_c=π/ω对闭式，步长由`advise_step()`算不是魔数。此前罚接触+显式积分跑得通只是调研顺手测出来的，仓里没有一条判据守着。",
+          "missing": "接触对仍是`ContactDeclaration`**声明**的，`collision.py`的broad/narrow phase不参与任何接触案例；且案例是单质点撞半空间，没有多体的检测—分派—响应流水线。"
         },
         {
           "id": "S3.10",
@@ -596,11 +602,14 @@
       "family": "接触族",
       "label": "恢复系数弹跳",
       "criterion": "e' == e；总弹跳时间闭式",
-      "status": "todo",
+      "status": "partial",
       "exercises_physics": true,
-      "evidence": [],
-      "why": "cases/README已推翻旧判词「要隐式积分族」——DEM就是罚接触+显式积分，本仓三个显式积分器与能量→加速度的桥都在，无阻尼弹跳e=1已实测跑通。",
-      "missing": "一个dashpot（plans/08阶段2）。约定由0052第一节裁为**截断**；值域下界exp(−2)=0.1353，低于它必须先推过阻尼分支ζ≥1（0052登记的欠账）。research/13第六节另记：罚接触下存在临界入射速度，低于它接触不结束，「弹跳次数无穷」不可达，拿总弹跳时间当判据要写明这条截断。"
+      "evidence": [
+        "case:bouncing_ball_restitution",
+        "test:tests/cases/test_bouncing_ball_restitution.py::test_max_penetration_matches_the_transient_amplitude"
+      ],
+      "why": "2026-08-12轨道A落地`bouncing_ball_restitution`：瞬态罚接触的三条闭式（t_c=π/ω、δ_max=v_in/ω、无阻尼e=1），并带一条专防口径混用的必红——把δ_max写成准静态的N/k，刚度换一档比值从sqrt(10)=3.162跳到10当场红。",
+      "missing": "**判据的两半都还没到**：`e' == e`要求e<1，而阻尼一个字没验；总弹跳时间闭式要重力，而案例把重力刻意设为零（带重力时「e与入射速度无关」不再成立）。案例页第六节自己写明「它不是弹跳球，它是一次撞击」「从本案例推不出任何关于连续多次弹跳的结论」。research/13第六节另记：罚接触下存在临界入射速度，低于它接触不结束，「弹跳次数无穷」不可达，拿总弹跳时间当判据要写明这条截断。"
     },
     {
       "index": 10,
