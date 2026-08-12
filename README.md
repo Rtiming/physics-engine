@@ -6,10 +6,23 @@ rtime的**物理引擎**：多域物理（力学、光学、电磁，将来热�
 
 创始消费方：`winding-deviation-sim`（力学，绕制偏差）与`fts-digital-twin`
 （光学，傅里叶光谱仪）；潜在第三个消费方`case2-digital-twin`（专利装置数字样机）。
-**用户级定位（decisions/0014）**：目标机器状态永远未知——单机冷启动性能是第一指标（import 110ms、场景校验0.22s、验收full约21s（**随案例增长，正本是`benchmarks/engine_budgets.baseline.json`的`measured_median_s`，有门守着不许陈旧**）、wheel单文件离线装）、功能操作不因宿主负载拒绝或变形、零设施假设是承诺。
+**用户级定位（decisions/0014）**：目标机器状态永远未知——单机冷启动性能是第一指标
+（import、场景校验、quick/full验收与wheel体积的预算/实测正本都在
+`benchmarks/engine_budgets.baseline.json`，有门守着陈旧度，不在README复制易漂移墙钟）、
+功能操作不因宿主负载拒绝或变形、零设施假设是承诺。
 **wheel体积随版本记账不写死数**（正本`benchmarks/engine_budgets.baseline.json`）：0.5.0实测**193066字节**，是0.4.0的6.24倍——三个物理域进来了，而同期源码涨了7.88倍，**wheel涨得比源码慢**。此前写的"30KB离线装"在0.5.0已不成立，见spec/13第一条。
 
 目标模块图与各能力现居地见[docs/spec/01_模块地图与域划分_v0.md](docs/spec/01_模块地图与域划分_v0.md)。
+仓内依赖图与产品级工程设计/计算平台拓扑要同时看：入口见
+[docs/architecture.md](docs/architecture.md)。
+这段时间跨GCW、WII、WDS、FTS形成的上位目标已集中到
+[docs/platform/README.md](docs/platform/README.md)：建设自有的工程模型、工作流/计算
+运行时、视觉交互内核、产品设计系统和Engineering Studio；物理仿真只是平台能力之一，
+Blender、OCCT、Three.js、VTK等只是可替换适配器。四项目的
+多表示模型、固定场景、硬件适配与提速专项见
+[research/14](docs/research/14_多表示模型资产与硬件适配架构_20260809.md)，候选实施路线见
+[plans/10](docs/plans/10_模型资产与呈现架构演进计划_20260809.md)。这些页面当前都是提案，
+不表示平台、Studio、模型资产系统、Blender桥接或新facet已经实现。
 
 ## 能力边界（诚实条款）
 
@@ -98,6 +111,10 @@ rtime的**物理引擎**：多域物理（力学、光学、电磁，将来热�
   + 内核接口草案（10，场景装配与六接口，v0）+ 形状表示草案（11，模拟形状
   非制造实体，v0）+ 消费方登记（90）
 - `docs/research/` — 调研正本（01：成熟引擎与五仓形状表示盘点）
+- `docs/architecture.md` — 仓内依赖图与产品级工程设计/计算平台拓扑的总入口，不覆盖spec正本
+- `docs/platform/` — RTime工程设计与计算平台愿景；工程模型、科学计算、工程工作流、
+  视觉交互四个内核+Engineering Studio，设计系统、资产、插件、部署、仓库迁移与纵切路线；
+  均为候选架构，未声明已实现
 - `docs/plans/00_引擎开发路线_v0.md` — 继续开发从哪下手（M-E1契约基座→
   M-E2溯源→M-E3场景与接口）
 - `docs/migration/` — 两个消费方的迁移操作单（各自会话自足执行）
@@ -113,7 +130,7 @@ rtime的**物理引擎**：多域物理（力学、光学、电磁，将来热�
 |---|---|---|
 | 0 | 建仓、章程、统一接口规范总纲v0、远程与包骨架 | 2026-08-04完成 |
 | 1 | 规范逐轴冻结——七轴全部v1.0：轴1版本冻结制、轴2稳定ID与单位量、轴3内容寻址、轴4 run package布局与生命周期、轴5原子发布与严格复读、轴6验收预算与元门禁、轴7 oracle纪律 | **2026-08-04完成** |
-| 2 | 新代码先行：M-E1契约基座已落地（facets/canonical/identity+自吃药验收器，52测试全绿）；M-E2溯源、M-E3接口待需求牵引 | **进行中** |
+| 2 | 新代码先行：M-E1契约基座、M-E2溯源/run package、M-E3首轮形状/碰撞/场景/运动/执行器/传感接口均已落地；当前不再按旧M-E编号猜下一手，而以plans/09→plans/08阶段1的真实场景主线为准 | **进行中** |
 | 3 | 存量迁移：消费方把既有引擎层改为依赖本仓，各自附逐字节不变证据；操作单在`docs/migration/` | **进行中**——`winding-deviation-sim`批次B已切换（2026-08-05凌晨，其design/29：钉`v0.4.0`、vendor相对路径+uv.lock哈希绑定、常驻切换门`test_support_engine_parity`；批次B余项逐块可回退）；`fts-digital-twin`闸门0已过（其ADR 0036）但引擎层未切换。逐行事实以[spec/90消费方登记](docs/spec/90_消费方登记.md)为正本 |
 
 ## 消费方采纳的治理前提

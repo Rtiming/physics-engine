@@ -11,13 +11,20 @@
 - 开发设备：Windows+macOS平级，直接在本仓工作；**重计算上master，不占本机Mac**（内部开发约定，非产品假设——产品定位见0014）。
 - git远程：`ts-orangepi:physics-engine.git`（舰队主远程，/home/orangepi/，与fts-digital-twin.git同处）+ `github.com/Rtiming/physics-engine`（公开镜像，MIT）。发版脚本自动双推。 <!-- rtime-project: allow-abs -->
 
-## 开工三读（顺序）
+## 开工必读（顺序）
 
 0. **[`docs/plans/09_交接_20260806`](docs/plans/09_交接_20260806.md)——最新交接页，
    先读它**：今天在哪、下一步做什么、三条教训、已知的坑、没做完的逐条；
 1. `docs/plans/01_总执行计划与审核清单`——置顶首要目标+五波状态；
 2. `docs/plans/00_引擎开发路线`——M-E里程碑到哪了；
 3. 动哪个模块读哪份spec（`docs/spec/`地图在README）。
+4. 动跨项目平台、前端运行时、Studio、多表示模型、资产转换、Blender或硬件适配时，另读
+   [`docs/platform/README`](docs/platform/README.md)与
+   [`docs/architecture`](docs/architecture.md)，再按任务读platform/00—05、
+   [`research/14`](docs/research/14_多表示模型资产与硬件适配架构_20260809.md)与
+   [`plans/10`](docs/plans/10_模型资产与呈现架构演进计划_20260809.md)；platform是上位
+   产品提案，research/14与plans/10是资产/端点子系统资料，均不自动改写plans/08—09的
+   当前物理主线或冻结spec。
 
 ## 开发循环（快慢分层，服务"开发提速"首要目标）
 
