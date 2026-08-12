@@ -118,3 +118,205 @@ def test_the_default_backend_is_pure_python_and_never_requires_numpy():
     # ½·a·h² = 0.01；写approx而不是写死0.01——`0.5*0.1*0.1*2`的双精度结果是
     # 0.010000000000000002，把朴素十进制值当期望是**测试写错**不是内核错。
     assert x[0] == pytest.approx(0.01, rel=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# 步长顾问（决策0052第五节）——把`step_bound`那个字符串变成可计算的数
+# ---------------------------------------------------------------------------
+
+import math  # noqa: E402
+
+from physics_engine.integrate import (  # noqa: E402
+    DEFAULT_STEPS_PER_CONTACT,
+    MIN_MEANINGFUL_STEPS_PER_CONTACT,
+    PRODUCTION_READY_CONDITIONS,
+    advise_step,
+)
+
+VERLET_COEFFICIENT = VELOCITY_VERLET.declaration.oscillatory_step_coefficient
+
+
+def _oscillator_energy_ratio(integrator, h_omega: float, cycles: int = 40) -> float:
+    """线性振子跑`cycles`周期的能量比。`ω=1`故`h = h·ω`。
+
+    这是`oscillatory_step_coefficient`那几个数的**生产者**——
+    声明里写的数必须能被这个函数重新测出来，否则它就只是个断言。
+    """
+
+    omega = 1.0
+    steps = max(int(round(cycles * 2 * math.pi / h_omega)), 1)
+    x, v, _ = integrate(
+        integrator,
+        x0=(1.0,),
+        v0=(0.0,),
+        dt_s=h_omega,
+        steps=steps,
+        acceleration=lambda x, v, t: (-omega * omega * x[0],),
+    )
+    return (0.5 * v[0] ** 2 + 0.5 * omega * omega * x[0] ** 2) / 0.5
+
+
+@pytest.mark.parametrize("integrator", [SYMPLECTIC_EULER, VELOCITY_VERLET])
+def test_the_declared_coefficient_is_where_the_oscillator_actually_breaks(integrator):
+    """声明的系数**必须是可证伪的**：在它上面有界，越过它就发散。
+
+    这条守的不是顾问，是**声明的诚实度**。一个写在docstring里的数
+    没有生产者就会漂——`source_bytes`台账漂过0.81%，`accept full`的记账
+    漂过43倍，两次都是"没有门看着的数字被文档当成现在时引用"。
+    """
+
+    coefficient = integrator.declaration.oscillatory_step_coefficient
+    assert coefficient is not None
+
+    inside = _oscillator_energy_ratio(integrator, coefficient * 0.995)
+    outside = _oscillator_energy_ratio(integrator, coefficient * 1.005)
+    assert inside < 1e3, f"声明的界内侧就已经发散了：能量比{inside:.3e}"
+    assert outside > 1e6, f"越过声明的界却没有发散：能量比{outside:.3e}——这个系数偏小"
+
+
+def test_explicit_euler_has_no_usable_step_bound_and_says_so():
+    """**实测把一条声明打脸了**：`explicit_euler`在任何步长下都发散。
+
+    它此前那格写的是"h < 2/ω_max（线性振子）"，读起来像个可用的界。
+    2/ω是**实轴**稳定区半径，而线性振子的特征值在**虚轴**上，
+    放大因子恒为`sqrt(1+h²ω²) > 1`。
+
+    2026-08-12实测：`h·ω=0.1`跑40周期能量已涨到**7.2e10倍**。
+    """
+
+    assert EXPLICIT_EULER.declaration.oscillatory_step_coefficient is None
+    assert _oscillator_energy_ratio(EXPLICIT_EULER, 0.1) > 1e6, (
+        "如果它在h·ω=0.1时不发散了，说明积分器被改过——回来重定这条声明"
+    )
+
+
+def test_advise_step_matches_the_closed_form():
+    """两个界都是闭式，顾问不许算错。"""
+
+    omega = 3162.277660168379  # sqrt(1e4 / 1e-3)
+    advice = advise_step(omega, oscillatory_step_coefficient=VERLET_COEFFICIENT)
+
+    assert advice.stability_bound_s == pytest.approx(VERLET_COEFFICIENT / omega, rel=1e-15)
+    assert advice.contact_resolution_bound_s == pytest.approx(
+        math.pi / (DEFAULT_STEPS_PER_CONTACT * omega), rel=1e-15
+    )
+    assert advice.advised_step_s == min(
+        advice.stability_bound_s, advice.contact_resolution_bound_s
+    )
+
+
+def test_contact_resolution_is_the_binding_bound_not_stability():
+    """**这是整条阶段1的要害**：管事的是分辨界，不是稳定界。
+
+    两者的失败方式完全不同——撞稳定界是**爆掉**（看得见），
+    撞分辨界是**静默地算出一个错的恢复系数**（看不见）。
+    plans/08实测：在声明的稳定界内侧0.785倍处，恢复系数已经错**14.3%**。
+    """
+
+    advice = advise_step(1000.0, oscillatory_step_coefficient=VERLET_COEFFICIENT)
+    assert advice.binding == "contact_resolution"
+    assert advice.contact_resolution_bound_s < advice.stability_bound_s
+
+
+def test_stability_margin_is_pi_over_two_n():
+    """`建议/稳定界 = π/(2N)`——这条闭式让plans/08那张实测表对得上。
+
+    N=2 → 0.785（plans/08那一行实测恢复系数1.1433，错14.3%）；
+    N=20 → 0.0785（实测0.99984）；N=40 → 0.0393（实测0.99999）。
+    """
+
+    for n in (4, 20, 40):
+        advice = advise_step(
+            500.0, oscillatory_step_coefficient=2.0, steps_per_contact=n
+        )
+        assert advice.stability_margin == pytest.approx(math.pi / (2 * n), rel=1e-14)
+
+
+def test_advisor_refuses_an_integrator_with_no_usable_bound():
+    """**必红**：`explicit_euler`没有可用的界，顾问必须拒绝而不是给个数。
+
+    给个数才是最坏的——使用者会照着用。
+    """
+
+    with pytest.raises(IntegrateError, match="没有可用的步长上界"):
+        advise_step(
+            100.0,
+            oscillatory_step_coefficient=EXPLICIT_EULER.declaration.oscillatory_step_coefficient,
+        )
+
+
+@pytest.mark.parametrize("omega", [0.0, -1.0, float("nan"), float("inf")])
+def test_advisor_fails_closed_on_bad_omega(omega):
+    """**必红**：零频/负频/非有限频不是"不限步长"，是没有定义。
+
+    这条是顾问唯一能挡的——`ω_max`由调用方自己算，**算错了顾问看不出来**
+    （0052第五节如实登记的代价）。
+    """
+
+    with pytest.raises(IntegrateError):
+        advise_step(omega, oscillatory_step_coefficient=2.0)
+
+
+def test_advisor_fails_closed_below_the_meaningful_step_count():
+    """**必红**：步数太少不只是不准，是**定性错**。
+
+    plans/08实测2步/接触时恢复系数是1.1433——**大于1**，
+    积分误差把能量喂进了碰撞。一个能算出`e > 1`的配置不该被建议出来。
+    """
+
+    with pytest.raises(IntegrateError, match="定性错"):
+        advise_step(
+            100.0,
+            oscillatory_step_coefficient=2.0,
+            steps_per_contact=MIN_MEANINGFUL_STEPS_PER_CONTACT - 1,
+        )
+
+
+def test_integrate_module_still_imports_nothing_from_the_package():
+    """**结构断言（0052第五节的裁决前提）**：`integrate.py`包内import为0。
+
+    这条独立性意味着积分器可以被单独拿走用。步长顾问放进本模块的**唯一条件**
+    就是它只吃纯数字——顾问不该是破掉这条的那个。
+    """
+
+    from pathlib import Path
+
+    import physics_engine.integrate as integrate_module
+
+    source = Path(integrate_module.__file__).read_text(encoding="utf-8")
+    offenders = [
+        line
+        for line in source.splitlines()
+        if line.startswith(("from physics_engine", "import physics_engine", "from ."))
+    ]
+    assert offenders == [], f"integrate.py开始import包内东西了：{offenders}"
+
+
+def test_production_ready_conditions_are_written_down_and_nothing_is_flipped_yet():
+    """`production_ready`翻转条件必须写死（0052第六节），而这一轮**不翻**。
+
+    不定条件，它就是个永远翻不了的死字段——0039写过同源的规矩：
+    "绊线一旦长期不响就等于被拆了"。
+    """
+
+    assert len(PRODUCTION_READY_CONDITIONS) == 4
+    for integrator in INTEGRATORS.values():
+        assert integrator.declaration.production_ready is False
+
+
+def test_a_nonpositive_coefficient_is_rejected_at_declaration_time():
+    """**必红**：系数是`h·ω`的上界，必须为正；"没有可用的界"要写None。"""
+
+    with pytest.raises(IntegrateError, match="必须为正"):
+        IntegratorDeclaration(
+            name="bad",
+            scope_excludes="x",
+            formal_order=1,
+            measured_order="1",
+            stability="symplectic",
+            step_bound="h < 2/ω",
+            dissipation_accounting="none",
+            failure_ladder="none",
+            production_ready=False,
+            oscillatory_step_coefficient=0.0,
+        )

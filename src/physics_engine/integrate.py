@@ -19,6 +19,7 @@ generalized-α）随WDS内核搬迁进来，不在本片。二阶系统专用：
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol
@@ -117,6 +118,18 @@ class IntegratorDeclaration:
     #: 有没有步长拒绝/二分；没有就写没有（失败关闭v1也要说出来）。
     failure_ladder: str
     production_ready: bool
+    #: `step_bound`的**可计算部分**：让线性振子能量保持有界的最大``h·ω``。
+    #:
+    #: 立它的理由（决策0052第五节）：`step_bound`是**字符串**，
+    #: 而步长顾问要算数。**一个字段同时干两件事，结果是两件都干不好**——
+    #: 在它之前，"这个积分器的步长上界是多少"只能靠人读一句话。
+    #:
+    #: **``None``表示顾问拒绝为这个积分器建议步长**，理由写在`step_bound`里。
+    #: 它不是"忘了填"——`explicit_euler`就是`None`，因为**实测它在任何步长下都发散**。
+    #:
+    #: 值取自**本仓实测**，不取自文献：2026-08-12在线性振子上跑40个周期，
+    #: 逐档量能量比。见`OSCILLATORY_COEFFICIENT_EVIDENCE`。
+    oscillatory_step_coefficient: float | None = None
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -132,6 +145,12 @@ class IntegratorDeclaration:
             raise IntegrateError(
                 f"{self.name!r} is conditionally stable but declares no step bound "
                 "— 显式积分器不写步长上界就是埋雷"
+            )
+        coefficient = self.oscillatory_step_coefficient
+        if coefficient is not None and not (coefficient > 0.0):
+            raise IntegrateError(
+                f"{self.name!r} declares oscillatory_step_coefficient={coefficient!r} "
+                "— 它是`h·ω`的上界，必须为正；'没有可用的界'请写None并在step_bound说明"
             )
 
 
@@ -178,10 +197,19 @@ EXPLICIT_EULER = Integrator(
         formal_order=1,
         measured_order="1（本仓B档实测，常加速度误差恰为−a·T·h/2）",
         stability="explicit_conditional",
-        step_bound="h < 2/ω_max（线性振子）；一般系统由最高频模态定",
+        step_bound=(
+            "**振荡问题上没有可用的步长上界**。2/ω_max是实轴稳定区半径，"
+            "而线性振子的特征值在虚轴上，显式Euler的放大因子恒为"
+            "sqrt(1+h²ω²) > 1——**任何h都增长**。"
+            "本仓实测（2026-08-12，40个周期）：h·ω=0.1时能量已涨到7.2e10倍，"
+            "h·ω=2.0时1.2e88倍。**此前这一格写的是"
+            "'h < 2/ω_max（线性振子）'，读起来像个可用的界，那是误导**"
+        ),
         dissipation_accounting="无算法耗散；能量**单调增长**（反耗散），这是它被排除在生产之外的原因",
         failure_ladder="无步长拒绝阶梯",
         production_ready=False,
+        #: None不是忘了填：实测任何步长都发散，顾问必须拒绝为它建议步长。
+        oscillatory_step_coefficient=None,
     ),
     step=_explicit_euler_step,
 )
@@ -193,10 +221,19 @@ SYMPLECTIC_EULER = Integrator(
         formal_order=1,
         measured_order="1（常加速度误差恰为+a·T·h/2，与显式同幅反号）",
         stability="symplectic",
-        step_bound="h < 2/ω_max（辛但仍条件稳定）",
+        step_bound=(
+            "**稳定界**：h < 2/ω_max（辛但仍条件稳定）。"
+            "本仓实测（2026-08-12，40个周期）h·ω=2.00时能量比1.28e5、"
+            "2.01时2.8e23——边界在2.0上。"
+            "**接触分辨界比稳定界紧一个数量级**：要分辨接触时长t_c=π/ω需"
+            "h ≤ π/(N·ω)，N=20时约为稳定界的1/12.7。"
+            "plans/08实测N=2（h·ω≈1.57）时恢复系数已错14.3%，N=20时降到1.6e-4。"
+            "**用`advise_step()`算，不要读这句话估**"
+        ),
         dissipation_accounting="无算法耗散；能量有界振荡不漂移",
         failure_ladder="无步长拒绝阶梯",
         production_ready=False,
+        oscillatory_step_coefficient=2.0,
     ),
     step=_symplectic_euler_step,
 )
@@ -208,10 +245,17 @@ VELOCITY_VERLET = Integrator(
         formal_order=2,
         measured_order="2（本仓B档实测cos(ωT)误差比3.9985与3.9996，渐近趋4）",
         stability="symplectic",
-        step_bound="h < 2/ω_max",
+        step_bound=(
+            "**稳定界**：h < 2/ω_max。本仓实测（2026-08-12，40个周期）"
+            "h·ω=2.00时能量比1.0000（临界有界）、2.01时1.3e21。"
+            "**接触分辨界比稳定界紧一个数量级**：h ≤ π/(N·ω)，"
+            "N=20时约为稳定界的1/12.7。plans/08实测N=2时恢复系数错14.3%。"
+            "**用`advise_step()`算，不要读这句话估**"
+        ),
         dissipation_accounting="无算法耗散；长时间能量有界",
         failure_ladder="无步长拒绝阶梯",
         production_ready=False,
+        oscillatory_step_coefficient=2.0,
     ),
     step=_velocity_verlet_step,
 )
@@ -220,6 +264,148 @@ INTEGRATORS: dict[str, Integrator] = {
     integrator.declaration.name: integrator
     for integrator in (EXPLICIT_EULER, SYMPLECTIC_EULER, VELOCITY_VERLET)
 }
+
+
+# ---------------------------------------------------------------------------
+# 步长顾问（决策0052第五节）
+# ---------------------------------------------------------------------------
+
+#: `oscillatory_step_coefficient`各值的出处——**本仓实测，不是引文**。
+#:
+#: 方法：线性振子`ẍ = −ω²x`，`ω=1`，初条件`x=1, v=0`，跑40个周期，
+#: 量末态与初态的能量比。2026-08-12实测：
+#:
+#: | 积分器 | h·ω=0.1 | h·ω=1.99 | h·ω=2.00 | h·ω=2.01 |
+#: |---|---|---|---|---|
+#: | `explicit_euler` | **7.2e10** | 4.3e87 | 1.2e88 | 6.4e87 |
+#: | `symplectic_euler` | 0.992 | 3.74 | **1.3e5** | 2.8e23 |
+#: | `velocity_verlet` | 1.000 | 0.994 | **1.0000** | 1.3e21 |
+#:
+#: 两条读出来的结论：
+#:
+#: 1. 辛的两个边界**正好在2.0**（2.00有界、2.01发散）；
+#: 2. `explicit_euler`**在任何步长下都发散**——`h·ω=0.1`就已经涨到7.2e10倍。
+#:    2/ω是**实轴**稳定区半径，而线性振子的特征值在**虚轴**上，
+#:    显式Euler的放大因子恒为`sqrt(1+h²ω²) > 1`。
+#:    **它此前那句`h < 2/ω_max（线性振子）`读起来像个可用的界，那是误导。**
+OSCILLATORY_COEFFICIENT_EVIDENCE = (
+    "2026-08-12本仓实测：线性振子40周期能量比。"
+    "symplectic_euler与velocity_verlet在h·ω=2.00有界、2.01发散；"
+    "explicit_euler在h·ω=0.1已发散（7.2e10倍），故其系数为None。"
+)
+
+#: 默认每次接触要走的步数。
+#:
+#: 取20不是取整：plans/08实测**2步/接触时恢复系数错14.3%**、20步时1.6e-4、
+#: 40步时8.0e-6；而O'Sullivan & Bray 2004的`Δt ≤ 0.17·sqrt(m/K)`换算过来
+#: 约18.5步/接触——**同行经验数与本仓实测落在同一格**。
+DEFAULT_STEPS_PER_CONTACT = 20
+
+#: 低于这个步数就不只是"不准"，是**定性错**：plans/08实测2步/接触时
+#: 恢复系数是1.1433（理论1），**大于1**——积分误差把能量喂进了碰撞。
+MIN_MEANINGFUL_STEPS_PER_CONTACT = 4
+
+
+@dataclass(frozen=True)
+class StepAdvice:
+    """步长建议。**两个界并排给出，并说明哪个在管事**。
+
+    只给一个数会让使用者不知道"再放松一点会先撞上什么"——
+    而这两个界的失败方式完全不同：撞稳定界是**爆掉**，
+    撞分辨界是**静默地算出一个错的恢复系数**。
+    """
+
+    #: 稳定界：`coefficient / ω_max`。超过它数值解发散。
+    stability_bound_s: float
+    #: 接触分辨界：`π / (steps_per_contact · ω_max)`。超过它恢复系数静默错。
+    contact_resolution_bound_s: float
+    #: 建议值 = 两者取小。
+    advised_step_s: float
+    #: 哪一条在管事。
+    binding: Literal["stability", "contact_resolution"]
+    steps_per_contact: int
+    omega_max_rad_per_s: float
+    #: 建议值相对稳定界的倍数——用来一眼看出"离爆掉还有多远"。
+    stability_margin: float
+
+
+def advise_step(
+    omega_max_rad_per_s: float,
+    *,
+    oscillatory_step_coefficient: float,
+    steps_per_contact: int = DEFAULT_STEPS_PER_CONTACT,
+) -> StepAdvice:
+    """把`step_bound`那个**字符串**变成可计算的数。
+
+    **只吃纯数字**（决策0052第五节）：不收接触对象、不收场景、
+    不import包内任何东西。本模块今天的包内import是**0**，
+    而那条独立性意味着积分器可以被单独拿走用——顾问不该是破它的那个。
+
+    代价如实登记：`ω_max`由调用方自己算，**算错了顾问看不出来**。
+    缓解只有一条——对非正/非有限的入参失败关闭。
+    算`ω_max`的辅助放在接触那边，不放这里。
+
+    参数
+    ----
+    omega_max_rad_per_s
+        系统最高频模态的角频率。接触上是`sqrt(k_eff/m_eff)`。
+    oscillatory_step_coefficient
+        取自`integrator.declaration.oscillatory_step_coefficient`。
+        该字段为``None``的积分器**不能被建议步长**——
+        `explicit_euler`就是这种，实测它在任何步长下都发散。
+    steps_per_contact
+        每次接触要走的步数，默认20（见`DEFAULT_STEPS_PER_CONTACT`）。
+    """
+
+    if not math.isfinite(omega_max_rad_per_s) or omega_max_rad_per_s <= 0.0:
+        raise IntegrateError(
+            f"omega_max_rad_per_s must be finite and positive, got "
+            f"{omega_max_rad_per_s!r} — 零频或非有限频不是'不限步长'，是没有定义"
+        )
+    if oscillatory_step_coefficient is None:
+        raise IntegrateError(
+            "这个积分器的oscillatory_step_coefficient是None——"
+            "**它没有可用的步长上界**，顾问拒绝建议。理由见它的step_bound。"
+            "（`explicit_euler`就是这种：实测h·ω=0.1时40周期能量已涨7.2e10倍）"
+        )
+    if not math.isfinite(oscillatory_step_coefficient) or oscillatory_step_coefficient <= 0.0:
+        raise IntegrateError(
+            f"oscillatory_step_coefficient must be finite and positive, got "
+            f"{oscillatory_step_coefficient!r}"
+        )
+    if steps_per_contact < MIN_MEANINGFUL_STEPS_PER_CONTACT:
+        raise IntegrateError(
+            f"steps_per_contact={steps_per_contact} < {MIN_MEANINGFUL_STEPS_PER_CONTACT} "
+            "— 低于这个数不只是不准，是定性错：plans/08实测2步/接触时"
+            "恢复系数1.1433（理论1），**大于1**，积分误差把能量喂进了碰撞"
+        )
+
+    stability = oscillatory_step_coefficient / omega_max_rad_per_s
+    resolution = math.pi / (steps_per_contact * omega_max_rad_per_s)
+    advised = min(stability, resolution)
+    return StepAdvice(
+        stability_bound_s=stability,
+        contact_resolution_bound_s=resolution,
+        advised_step_s=advised,
+        binding="stability" if stability <= resolution else "contact_resolution",
+        steps_per_contact=steps_per_contact,
+        omega_max_rad_per_s=omega_max_rad_per_s,
+        stability_margin=advised / stability,
+    )
+
+
+#: `production_ready`翻成True的**四条条件，全中才翻**（决策0052第六节）。
+#:
+#: 立它的理由：不定条件，它就是个**永远翻不了的死字段**。
+#: 本仓立过同源的规矩（0039："绊线一旦长期不响就等于被拆了"）。
+#: 定了条件而2026-08-12这一轮不翻，是因为四条今天**一条都没全中**。
+PRODUCTION_READY_CONDITIONS = (
+    "实测阶与声明阶一致（有case，不是有注释）",
+    "step_bound已是可计算的数（oscillatory_step_coefficient非None），且步长顾问覆盖它",
+    "至少一个第1档解析判据案例走完state→energies→solve或state→integrate",
+    "能量行为已被测过并如实声明——罚接触+显式积分会涨能量（Acary ZAMM 2016），"
+    "**不许把'没测'写成'守恒'**",
+)
 
 
 def integrate(
@@ -254,6 +440,7 @@ def integrate(
 
 
 __all__ = [
+    "DEFAULT_STEPS_PER_CONTACT",
     "EXPLICIT_EULER",
     "INTEGRATORS",
     "SYMPLECTIC_EULER",
@@ -262,9 +449,14 @@ __all__ = [
     "IntegrateError",
     "Integrator",
     "IntegratorDeclaration",
+    "MIN_MEANINGFUL_STEPS_PER_CONTACT",
     "NumpyOps",
+    "OSCILLATORY_COEFFICIENT_EVIDENCE",
+    "PRODUCTION_READY_CONDITIONS",
     "PurePythonOps",
+    "StepAdvice",
     "VectorOps",
+    "advise_step",
     "default_ops",
     "integrate",
 ]
