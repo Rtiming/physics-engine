@@ -252,3 +252,62 @@ def test_repository_identity_survives_untracked_symlinks_and_tracks_their_target
     assert first.working_tree_sha256 != second.working_tree_sha256, (
         "改了符号链接指向却没进指纹——那是一次真实的工作区变化"
     )
+
+
+# ---------------------------------------------------------------------------
+# 工具门：**2026-08-12由"可选位"升为必需**（决策0053第二节）
+# 立本节前，这个行为**一条治理测试都没有**——一个没有门看着的门。
+# ---------------------------------------------------------------------------
+
+
+def test_required_tool_commands_are_all_armed_in_full():
+    """四个工具命令必须**无条件**出现在full档里。
+
+    旧行为是"文件在就上膛，不在就记一条`absent`然后照样PASS"。
+    那在单人开发下是诚实的，**在多代理并行下是致命的**：
+    一个代理漏带工具文件，全队的门变虚而验收仍报PASS。
+    """
+
+    commands, _ = accept.resolve_commands("full", accept.ROOT)
+    for argv in accept.REQUIRED_TOOL_COMMANDS:
+        assert argv in commands, f"必需工具没上膛：{argv}"
+
+
+def test_required_tools_stay_out_of_quick():
+    """quick档不挂工具门——它是交互级（30秒预算），工具门属批末。"""
+
+    commands, absent = accept.resolve_commands("quick", accept.ROOT)
+    for argv in accept.REQUIRED_TOOL_COMMANDS:
+        assert argv not in commands
+    assert absent == ()
+
+
+def test_a_missing_tool_file_still_gets_armed_so_the_run_fails(tmp_path):
+    """**必红**：工具文件不在时，命令仍然上膛（于是它会失败），并被记进第二个返回值。
+
+    这条守的是升级本身：**旧代码在这里会把命令从列表里拿掉**，
+    于是文件不在=少跑一条=照样PASS。新代码必须相反。
+    """
+
+    commands, absent = accept.resolve_commands("full", tmp_path)
+    for argv in accept.REQUIRED_TOOL_COMMANDS:
+        assert argv in commands, "文件不在也必须上膛，让它自己失败"
+        assert argv in absent, "文件不在必须被点名"
+
+
+def test_the_receipt_field_keeps_its_registered_byte_shape():
+    """回执是登记过的面：`absent_optional_commands`这个键**不许改名或消失**。
+
+    语义从"可以缺席的位"变成"哪几个必需工具不见了"，**字节形制不动**——
+    改面要走面清册与版本号，而这次升级不值得破一个已发布的面。
+    """
+
+    _, absent = accept.resolve_commands("full", accept.ROOT)
+    assert absent == (), "主仓四个工具应当齐全"
+    assert isinstance([list(argv) for argv in absent], list)
+
+
+def test_the_old_name_still_resolves_for_one_version():
+    """改名要留一版缓冲（AGENTS.md「API两档」）。"""
+
+    assert accept.OPTIONAL_FULL_COMMANDS is accept.REQUIRED_TOOL_COMMANDS

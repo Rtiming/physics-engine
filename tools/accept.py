@@ -70,10 +70,19 @@ COMMANDS: dict[str, tuple[tuple[str, ...], ...]] = {
     "full": QUICK_COMMANDS + BATCH_COMMANDS,
 }
 
-#: 案例页校验位（plans/02第四节"配``tools/check_case_pages.py``，缺一即红，进accept"）。
-#: 该工具属T3轨道，本轨道只留位不占文件：**文件在就自动上膛**，不在就在回执里
-#: 如实记一条``absent_optional_commands``——不假装绿，也不冒充红。
-OPTIONAL_FULL_COMMANDS: tuple[tuple[str, ...], ...] = (
+#: 工具门（**2026-08-12由"可选位"升为必需**，决策0053第二节）。
+#:
+#: 立它们时是"留位不占文件"：文件在就自动上膛，不在就在回执里如实记一条
+#: ``absent_optional_commands``然后照样PASS——**不假装绿，也不冒充红**。
+#: 那个设计在单人开发下是诚实的，**在多代理并行下是致命的**：
+#: 一个代理漏带或删掉工具文件，全队的门当场变虚，而验收仍然报PASS。
+#:
+#: 现在四个全部**无条件上膛**。文件不在，命令就会以非零码失败，
+#: 于是功能轴FAIL——**缺工具从"如实记一笔"变成"验收不通过"**。
+#: ``absent_optional_commands``字段保留（回执是登记过的面，字节形制不动），
+#: 语义变成"**哪几个必需工具不见了**"，正常情况恒为空。
+REQUIRED_TOOL_COMMANDS: tuple[tuple[str, ...], ...] = (
+    #: 案例页校验（plans/02第四节"配``tools/check_case_pages.py``，缺一即红，进accept"）。
     (".venv/bin/python", "tools/check_case_pages.py"),
     #: 冲突标记门（决策0049第二节）。它同时挂在`pre-commit`上，**两处都要**：
     #: 钩子可能没装（那次事故里就没装），而批末这道跑不掉。
@@ -81,7 +90,14 @@ OPTIONAL_FULL_COMMANDS: tuple[tuple[str, ...], ...] = (
     #: 缺口清册的防过期门（plans/07第七节）：登记了欠账的决策记录必须被汇总。
     #: **散着的欠账各自都写得很清楚，合起来没人看得见。**
     (".venv/bin/python", "tools/check_gap_register.py"),
+    #: 开工自检（决策0053第三节）：**证明这棵树验的是它自己的代码**。
+    #: 实测机理：共享`.venv`的editable `.pth`是主仓`src`的绝对路径，
+    #: 于是worktree里import到的是主仓的包——**代理可以全绿交差而验的是别人的代码**。
+    (".venv/bin/python", "tools/check_worktree_env.py"),
 )
+
+#: 旧名保留一版，指向新元组。破坏性改名要留缓冲（AGENTS.md「API两档」）。
+OPTIONAL_FULL_COMMANDS = REQUIRED_TOOL_COMMANDS
 
 TIMEOUT_RETURNCODE = 124
 
@@ -227,15 +243,19 @@ def observe_resources() -> ResourceObservation:
 def resolve_commands(
     profile: str, root: Path
 ) -> tuple[tuple[tuple[str, ...], ...], tuple[tuple[str, ...], ...]]:
-    """返回``(要跑的命令, 缺席的可选命令)``。可选位只在full档考虑。"""
+    """返回``(要跑的命令, 缺席的必需工具)``。工具门只在full档挂。
+
+    **2026-08-12改**：工具命令**无条件加进要跑的列表**，不再"文件在才上膛"。
+    文件不在时，命令自身会以非零码失败 → 功能轴FAIL。
+    第二个返回值只用来打一句看得懂的话，**不再是"可以缺席"的白名单**。
+    """
 
     commands = list(COMMANDS[profile])
     absent: list[tuple[str, ...]] = []
     if profile == "full":
-        for argv in OPTIONAL_FULL_COMMANDS:
-            if (root / argv[-1]).is_file():
-                commands.append(argv)
-            else:
+        for argv in REQUIRED_TOOL_COMMANDS:
+            commands.append(argv)
+            if not (root / argv[-1]).is_file():
                 absent.append(argv)
     return tuple(commands), tuple(absent)
 
@@ -516,7 +536,10 @@ def run_profile(profile: str, timing_mode: str) -> int:
         f"elapsed={total_elapsed:.1f}s/{budget:.0f}s repo_stable={not repo_changed}"
     )
     for argv in absent:
-        print(f"absent optional slot (not armed yet): {' '.join(argv)}")
+        print(
+            f"MISSING REQUIRED TOOL: {' '.join(argv)} —— "
+            "这不再是可以缺席的位（决策0053第二节），验收因此不通过"
+        )
     for entry in receipt["empty_selection_commands"]:
         print(f"declared-empty tier (no tests carry this marker yet): {' '.join(entry)}")
     print(f"receipt: {out_path}")
