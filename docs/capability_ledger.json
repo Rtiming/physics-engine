@@ -1,0 +1,660 @@
+{
+  "schema": "capability_ledger/1",
+  "why_this_file_is_data": "决策0052第二节：六个场景各拆成若干可核对的能力位，做到哪位报哪位，计数从清单里长出来不从散文里来。清单里**没有任何一个总数字段**——加载器的键集是严格的，写不进去，所以分子只能由tools/check_capability_ledger.py算。",
+  "sources": {
+    "scenarios": "docs/plans/04_真实使用场景与能力差距_20260805.md",
+    "scenario_verdicts": "docs/plans/05_什么才算真实的完成_20260805.md",
+    "peer_tier_c": "docs/research/05_同行引擎典型案例与验证套件调研_20260805.md",
+    "peer_tier_c_denominator": "docs/decisions/0040_成功标准就是案例阶梯_20260805.md",
+    "ruling": "docs/decisions/0052_阶段1至3开工前的七条裁决_20260812.md",
+    "ledger_decision": "docs/decisions/0056_能力位清单与计数门_20260812.md"
+  },
+  "structural_gaps": {
+    "体积与厚度": "docs/plans/06_四条结构性缺口_20260805.md",
+    "接触": "docs/plans/06_四条结构性缺口_20260805.md",
+    "耦合": "docs/plans/06_四条结构性缺口_20260805.md",
+    "历史": "docs/plans/06_四条结构性缺口_20260805.md"
+  },
+  "scenarios": [
+    {
+      "id": "S1",
+      "ordinal": "①",
+      "label": "超导带绕一圈的电流分布",
+      "dominant_domain": "电磁",
+      "bits": [
+        {
+          "id": "S1.1",
+          "label": "直薄带临界态的自场电流分布（Norris 1970闭式）",
+          "status": "done",
+          "exercises_physics": false,
+          "evidence": [
+            "case:norris_thin_strip",
+            "test:tests/cases/test_norris_thin_strip.py::test_the_sheet_current_profile_matches_a_fifty_digit_reference"
+          ],
+          "why": "conformal mapping闭式对50位十进制参考rel 1e-12，含电流守恒两条求积与损耗渐近i⁴/3、i³/3。**它是闭式计算器，不穿引擎任何一层**（cases/README第一之二节的分类），所以exercises_physics为false。"
+        },
+        {
+          "id": "S1.2",
+          "label": "带材截面上的场自由度（电流可以放在截面上）",
+          "status": "todo",
+          "exercises_physics": false,
+          "evidence": [],
+          "shared_gap": "体积与厚度",
+          "why": "用户定位的第一句就是三维带厚度，而这一位是那句话在电磁侧的落点。",
+          "missing": "力学内核是中心线杆（DER，节点是三维点），**截面上根本没有自由度可放**。HTS带材典型厚宽比差三到四个数量级，是最难画网格的那种厚度。"
+        },
+        {
+          "id": "S1.3",
+          "label": "带材绕成一匝之后的曲线几何",
+          "status": "todo",
+          "exercises_physics": false,
+          "evidence": [],
+          "why": "plans/05对场景①的判词原文是「绕成一匝几何就变了」——S1.1那条闭式只对直薄带成立。",
+          "missing": "`shapes`里没有「带材沿曲线」这个词汇；`superconductor.py`的入参是宽度与临界电流，没有走向。"
+        },
+        {
+          "id": "S1.4",
+          "label": "幂律本构 E=Ec·(J/Jc)^n 的非线性求解",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "why": "幂次二三十的非线性，牛顿法在这里的收敛行为与本仓做过的任何问题都不同。",
+          "missing": "无信赖域、无载荷步自适应（0029登记的脆点）；`_solve_dense`遇奇异失败关闭。**注**：n典型20—30这个数research/12核不到权威出处，标未核实。"
+        },
+        {
+          "id": "S1.5",
+          "label": "屏蔽电流与磁滞的历史内变量",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "shared_gap": "历史",
+          "why": "电流分布依赖外场怎么加上去的，与0033裁的摩擦锚点是同一类问题。",
+          "missing": "摩擦侧那条路已通（0050把锚点放进状态），**电磁侧零**；且它要先有S1.2才有地方放。"
+        },
+        {
+          "id": "S1.6",
+          "label": "电磁场求解器（静磁/涡流，不是闭式）",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "why": "闭式只覆盖直薄带与同轴圆环两种构型，一匝带材两个都不是。",
+          "missing": "`electromagnetics/`今天只有闭式互感、椭圆积分与Norris薄带；无场求解、无网格、无单元库。判据源是TEAM族，**按轴7只能当对拍源不能当oracle**。"
+        },
+        {
+          "id": "S1.7",
+          "label": "力与电磁的耦合（应变改变Jc、电流产生洛伦兹力）",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "shared_gap": "耦合",
+          "why": "plans/05第四节的原话是「场景①本质就是耦合」。",
+          "missing": "`src/physics_engine/couplings/`**目录不存在**（spec/15只留了模块位；2026-08-12实测复核目录确实不在）。"
+        }
+      ]
+    },
+    {
+      "id": "S2",
+      "ordinal": "②",
+      "label": "多线圈之间的互感与电容",
+      "dominant_domain": "电磁",
+      "bits": [
+        {
+          "id": "S2.1",
+          "label": "同轴理想细丝圆环的互感闭式（Maxwell式+完全椭圆积分）",
+          "status": "done",
+          "exercises_physics": false,
+          "evidence": [
+            "case:mutual_inductance_coaxial",
+            "test:tests/cases/test_mutual_inductance_coaxial.py::test_closed_form_matches_an_independent_neumann_quadrature"
+          ],
+          "why": "闭式对Neumann双回路积分rel 1e-12（7组构型含d=0与k=0.002的极远场），远场退化到偶极子收敛阶实测1.9806→1.9999，互易零容差。"
+        },
+        {
+          "id": "S2.2",
+          "label": "一般位形的互感（倾斜、偏心、非共轴）",
+          "status": "todo",
+          "exercises_physics": false,
+          "evidence": [],
+          "why": "真线圈组不共轴，而共轴闭式在那里直接失效——这是场景②从「一半」走到「整条」的那一步。",
+          "missing": "`inductance.mutual_inductance_h`只吃共轴`CircularLoop`（模块docstring第五节明写「不做一般位形」）；Neumann双回路积分**只活在案例的金标生成器里**（`cases/mutual_inductance_coaxial/generate_oracle.py`），引擎侧零。"
+        },
+        {
+          "id": "S2.3",
+          "label": "多匝线圈的几何",
+          "status": "partial",
+          "exercises_physics": false,
+          "evidence": [
+            "case:mutual_inductance_coaxial",
+            "test:tests/cases/test_mutual_inductance_coaxial.py::test_turns_multiply_the_single_turn_value_exactly"
+          ],
+          "why": "匝数确实进了模型，且`M = N_a·N_b·M₁`逐位精确、对交换逐位对称。",
+          "missing": "匝数今天只是一个**倍率**——所有匝被当成同一条理想细丝。真多匝有层与列的排布，每一匝的半径与轴向位置都不同，那个几何引擎侧为零。"
+        },
+        {
+          "id": "S2.4",
+          "label": "有截面的真实线圈（不是理想细丝）",
+          "status": "todo",
+          "exercises_physics": false,
+          "evidence": [],
+          "shared_gap": "体积与厚度",
+          "why": "plans/05对场景②的判词原文是「真线圈有截面、有多匝」。",
+          "missing": "`CircularLoop`是半径+匝数的细丝；导体截面上的电流分布无处安放（与S1.2同源，但问的量不同：那里是带材内的电流密度，这里是导体截面的邻近效应）。"
+        },
+        {
+          "id": "S2.5",
+          "label": "电容提取（静电Laplace求解）",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "why": "plans/05对场景②的判词原文是「电容零」。",
+          "missing": "除同轴、平行板、球形几个闭式构型外要网格；引擎无静电求解器。plans/04第二节已裁「互感先做、电容等网格」。"
+        }
+      ]
+    },
+    {
+      "id": "S3",
+      "ordinal": "③",
+      "label": "不规则体自由落体落进漏斗",
+      "dominant_domain": "刚体+接触",
+      "bits": [
+        {
+          "id": "S3.1",
+          "label": "刚体六自由度状态与转动积分（自由飞行）",
+          "status": "done",
+          "exercises_physics": true,
+          "evidence": [
+            "case:rigid_body_free_flight",
+            "test:tests/cases/test_rigid_body_free_flight.py::test_axisymmetric_precession_matches_the_closed_form"
+          ],
+          "why": "四层判据：无力矩下惯性系角动量与转动动能漂移随步长降16倍、轴对称进动率带符号rel 1e-8、中间轴增长率闭式与翻转数2/0/0、四元数范数归一化前偏离≤1e-11。"
+        },
+        {
+          "id": "S3.2",
+          "label": "不规则体的网格碰撞窄相",
+          "status": "todo",
+          "exercises_physics": false,
+          "evidence": [],
+          "why": "「不规则体」这三个字的碰撞侧落点。",
+          "missing": "`collision.py`只有球/胶囊族窄相；**圆柱/盒/网格窄相为零**（plans/07第三节）。plans/08阶段7的EPA还是MPR是0052第八节明写「今天裁会是猜」的待裁项。"
+        },
+        {
+          "id": "S3.3",
+          "label": "不规则体的质量属性（从三角网格算质量、质心、惯量张量）",
+          "status": "todo",
+          "exercises_physics": false,
+          "evidence": [],
+          "why": "落体是不规则的，惯量张量就不能再从解析原语取——而S3.1的转动积分吃的正是这个张量。",
+          "missing": "`geometry.py`只有四种解析原语的惯量（0022）；`mesh_asset_integrity`只验资产哈希与包盒，不算质量属性。0020登记的「引擎自己算网格包盒」是同一族欠账的邻居。"
+        },
+        {
+          "id": "S3.4",
+          "label": "法向罚接触与库仑摩擦（单点、准静态）",
+          "status": "done",
+          "exercises_physics": true,
+          "evidence": [
+            "case:incline_slide_threshold",
+            "test:tests/cases/test_incline_slide_threshold.py::test_the_stick_slip_threshold_is_arctan_mu"
+          ],
+          "why": "斜面滑动阈值θc=arctan(μs)阈值两侧行为定性相反（零容差），重力分解五档倾角实测偏差≤1 ulp，且阈值与两个罚刚度、与质量全部无关各自一道门。"
+        },
+        {
+          "id": "S3.5",
+          "label": "摩擦的历史内变量（锚点进状态、迟滞环）",
+          "status": "done",
+          "exercises_physics": true,
+          "evidence": [
+            "case:friction_hysteresis_loop",
+            "test:tests/cases/test_friction_hysteresis_loop.py::test_the_anchor_actually_lives_in_the_state_vector"
+          ],
+          "why": "引擎第一次记住历史：整循环耗散对闭式4μN(u_max−u_y)三个幅值实测偏差0；路径相关那条**验的是形制不是公式**——锚点若可从位形导出则前一个接触案例照样全绿。"
+        },
+        {
+          "id": "S3.6",
+          "label": "多点同时接触",
+          "status": "partial",
+          "exercises_physics": true,
+          "evidence": [
+            "case:three_sphere_pyramid",
+            "test:tests/cases/test_three_sphere_pyramid.py::test_the_pyramid_holds_above_the_critical_friction_and_collapses_below"
+          ],
+          "why": "球-球接触两端都是自由度，切线刚度里第一次出现跨节点耦合块——这是多体接触与单体接触的真正分界，且Chrono形制的两侧判据（只改μ，一边撑住一边塌）零容差复现了。",
+          "missing": "**步进器一次只处理一个槽位**（0050登记的「多槽位同时迭代」）；本案例的球-球接触被设成无摩擦以换取静定与闭式μc；迭代发散时没有载荷步回退（实测横载2.0N时内层牛顿第8趟失败，今天是抛错）。"
+        },
+        {
+          "id": "S3.7",
+          "label": "转动自由度参与接触（力矩平衡、翻倒、无滑滚动）",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "shared_gap": "接触",
+          "why": "0051裁定这是`max_points > 1`的真前置，不是网格窄相。落进漏斗的东西会翻会滚。",
+          "missing": "接触体今天是质点+半径。对金字塔底球球心取矩得M_y=−(√3/6)·W·r≠0——即那个构型对**可转动的**刚体球根本不是平衡态。"
+        },
+        {
+          "id": "S3.8",
+          "label": "恢复系数与碰撞耗散",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "why": "落体撞漏斗壁会弹，弹多高是这个场景肉眼可见的量。",
+          "missing": "线性弹簧-阻尼器的dashpot未实现（plans/08阶段2）。约定已由0052第一节裁定为**截断**（判据是合力归零不是重叠归零），代价两条：反解式不能照抄同行三家、可声明的e有下界exp(−2)=0.1353。"
+        },
+        {
+          "id": "S3.9",
+          "label": "动态接触流水线（时间推进 + 由broad/narrow搜出接触对）",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "shared_gap": "接触",
+          "why": "落体是动力学问题，不是准静态平衡问题——这一位与S3.4、S3.6判的不是同一件事。",
+          "missing": "今天接触对是`ContactDeclaration`**声明**的，`collision.py`的broad/narrow phase不参与任何接触案例；接触走的是准静态能量求解，没有时间推进、没有碰撞检测流水线。"
+        },
+        {
+          "id": "S3.10",
+          "label": "漏斗容器与多体落料",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "why": "这是场景③本身——前九位都做完了，还要有一个漏斗和一把料。",
+          "missing": "plans/08阶段3才做「平面围成的漏斗+一个球」，0052第七节裁定先用10—20个球、落在哪一级就报哪一级。**把那个报成「场景③做完了」是虚报**——0052第二节立本清单的直接理由。"
+        }
+      ]
+    },
+    {
+      "id": "S4",
+      "ordinal": "④",
+      "label": "光学的散射、干涉、衍射",
+      "dominant_domain": "光学",
+      "bits": [
+        {
+          "id": "S4.1",
+          "label": "圆孔夫琅禾费衍射闭式（艾里斑）",
+          "status": "done",
+          "exercises_physics": false,
+          "evidence": [
+            "case:scalar_diffraction_airy",
+            "test:tests/cases/test_scalar_diffraction_airy.py::test_first_zero_and_the_unit_round_trip"
+          ],
+          "why": "E(x)=2·J1(x)/x对贝塞尔积分的独立求值abs 1e-12（**判绝对不判相对：J1有零点**），首零3.8317059702，角度↔空间频率↔半径的单位往返。"
+        },
+        {
+          "id": "S4.2",
+          "label": "双光束干涉闭式（杨氏双缝与迈克尔逊）",
+          "status": "done",
+          "exercises_physics": false,
+          "evidence": [
+            "case:two_beam_interference",
+            "test:tests/cases/test_two_beam_interference.py::test_young_fringe_spacing_against_the_exact_two_point_source_geometry"
+          ],
+          "why": "I=I1+I2+2√(I1I2)|γ|cosΔφ对60位Decimal参考；杨氏Δx=λL/d对精确两点源几何（傍轴偏差3.209e-6可算可断言）；条纹平均恒为I1+I2四构型残差恰为0。"
+        },
+        {
+          "id": "S4.3",
+          "label": "FTS仪器线型与Norton-Beer切趾",
+          "status": "done",
+          "exercises_physics": false,
+          "evidence": [
+            "case:fts_instrument_line_shape",
+            "test:tests/cases/test_fts_instrument_line_shape.py::test_unapodised_line_shape_is_a_sinc_of_the_declared_width"
+          ],
+          "why": "无切趾ILS半宽1.2067091288/(2L)对独立求根、半高点上ILS恰为0.5；三组Norton-Beer系数ΣCi=1实测残差恰为0。它是干涉在仪器面的落点，与S4.2判的不是同一件事（那里是条纹，这里是线型）。"
+        },
+        {
+          "id": "S4.4",
+          "label": "二维复数场网格",
+          "status": "todo",
+          "exercises_physics": false,
+          "evidence": [],
+          "why": "S4.5—S4.7三位共同的前置，0031已声明为光学下一块。",
+          "missing": "复数怎么落盘**未裁**（0052第八节：它定的是全仓所有复数量的约定，而今天只有一个候选消费方）；场要不要登记面同样未裁。"
+        },
+        {
+          "id": "S4.5",
+          "label": "场传播（角谱／菲涅耳／夫琅禾费，要FFT）",
+          "status": "todo",
+          "exercises_physics": false,
+          "evidence": [],
+          "why": "plans/05对场景④的判词原文是「一般衍射零」——本仓今天所有光学量都是闭式代入，没有一个是传播出来的。",
+          "missing": "纯Python的Cooley-Tukey可写（约30行），但512²网格上会很慢——这正是0016加速档该出场的地方，而0052第七节实测`accel`档在能量装配之外只值1.00—1.02倍。"
+        },
+        {
+          "id": "S4.6",
+          "label": "一般孔径的衍射（单缝／双缝／矩孔，由传播算出而非闭式代入）",
+          "status": "todo",
+          "exercises_physics": false,
+          "evidence": [],
+          "why": "有它才谈得上「一般孔径」；菲涅耳数极限退化到艾里斑（S4.1）是它现成的自洽门。",
+          "missing": "要S4.4与S4.5。"
+        },
+        {
+          "id": "S4.7",
+          "label": "Mie散射的严格级数解",
+          "status": "todo",
+          "exercises_physics": false,
+          "evidence": [],
+          "why": "plans/05对场景④的判词原文是「散射零」。Mie对均匀球是**严格级数解**不是近似，小球极限退化到瑞利∝1/λ⁴是独立自洽门，判据强度是本仓能拿到的光学案例里最高的之一。",
+          "missing": "要复数与球贝塞尔函数（j_n、y_n、h_n^(1)），纯Python可写但要小心小宗量相消（0031已在J1上处理过同类问题）。"
+        }
+      ]
+    },
+    {
+      "id": "S5",
+      "ordinal": "⑤",
+      "label": "平面带材（有厚度）绕上线圈盘十几匝",
+      "dominant_domain": "力学+自接触",
+      "bits": [
+        {
+          "id": "S5.1",
+          "label": "带材宽厚方向的力学自由度",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "shared_gap": "体积与厚度",
+          "why": "与S1.2同一条结构性缺口，但问的量不同：那里要在截面上放电流，这里要在截面上放弯扭与压扁。",
+          "missing": "中心线杆表示不了带材的宽与厚；至少要「带宽方向」的自由度或截面。"
+        },
+        {
+          "id": "S5.2",
+          "label": "自接触（匝碰匝）",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "shared_gap": "接触",
+          "why": "plans/04第八节明写这是本场景的核心难点：新绕上去的一匝要压在已绕的匝上。",
+          "missing": "自接触要先有网格/连续体窄相（S3.2）与多点同时接触（S3.6），两条今天都不齐。"
+        },
+        {
+          "id": "S5.3",
+          "label": "线圈盘几何与半径随匝数生长",
+          "status": "partial",
+          "exercises_physics": false,
+          "evidence": [
+            "case:generator_determinism",
+            "test:tests/cases/test_generator_determinism.py::test_the_spool_products_are_real_shapes_with_closed_form_mass_properties"
+          ],
+          "why": "`modelgen.generate_spool`产出的是真形状，质量属性对圆柱/胶囊教科书闭式rel 1e-15，且同参数逐字节相同。",
+          "missing": "**只做了静态几何**。有效半径随层数生长引擎侧为零（WDS有`WindingSurface`可搬）。"
+        },
+        {
+          "id": "S5.4",
+          "label": "喂料与移动前沿",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "why": "十几匝不是一次装配出来的，是一匝一匝喂出来的——自由度数在过程中变。",
+          "missing": "WDS有`feed_turn`，引擎侧零。且它与0033/0050那条「状态布局固定而数量随构型变」是同一类问题。"
+        },
+        {
+          "id": "S5.5",
+          "label": "带-带与带-盘的接触与摩擦",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "shared_gap": "接触",
+          "why": "叠上去的匝要被摩擦拿住，否则整卷会滑。",
+          "missing": "今天的接触是质点对半空间、球对球；连续体对连续体的接触斑块怎么表示**未裁**（0051登记，排在转动自由度之后）。"
+        },
+        {
+          "id": "S5.6",
+          "label": "卷绕张力沿带材的传递",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "why": "plans/04第八节把「张力怎么传递」与「怎么叠、半径怎么长」并列为本场景的三问。",
+          "missing": "要S5.5（摩擦传力）与S6.3（张力从执行器进来）两条都齐。"
+        }
+      ]
+    },
+    {
+      "id": "S6",
+      "ordinal": "⑥",
+      "label": "完整放线—导向—张力—收线链路",
+      "dominant_domain": "力学+接触+控制",
+      "bits": [
+        {
+          "id": "S6.1",
+          "label": "多体装配容器（按对声明接触 + finalize统一校验）",
+          "status": "done",
+          "exercises_physics": false,
+          "evidence": [
+            "test:tests/test_scene_assembly.py::test_a_minimal_assembly_finalizes_and_keeps_declaration_order"
+          ],
+          "why": "0045落地。装配是接触的前置，也是「各轮上的偏移/未对中」这一要素的落点。**它不碰物理**（plans/05第二节把场景装配划为「前置，不是物理」），所以exercises_physics为false。**这一位没有案例目录，只有测试**——清单允许证据只是测试。"
+        },
+        {
+          "id": "S6.2",
+          "label": "位姿时间线运动源（放线盘转动、收线盘排线横动）",
+          "status": "done",
+          "exercises_physics": false,
+          "evidence": [
+            "test:tests/test_motion.py::test_a_wii_shaped_timeline_is_accepted_and_answers_the_three_methods",
+            "test:tests/test_motion.py::test_clamping_extrapolation_holds_the_endpoints"
+          ],
+          "why": "0038落地`SampledPoseTimeline`与`AnalyticPose`；采样时刻逐字节相同，slerp与nlerp在真实角度上可测地不同，外推钳制守住端点。"
+        },
+        {
+          "id": "S6.3",
+          "label": "执行器的物理（张力轮的控制量变成力）",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "why": "张力轮是这条链路唯一的控制环节，`Actuator`接口就是从它蒸馏来的。",
+          "missing": "0038只落了**声明层**（时延线、下发与生效时刻），`apply`的物理未实现。0038登记：落地那天它会import `state`，域登记要同批改。"
+        },
+        {
+          "id": "S6.4",
+          "label": "传感器读出",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "why": "闭环要测量。spec/10六接口里它与`Actuator`成对。",
+          "missing": "只有声明层（观测维度不随场景规模变、点名状态自由度必须拒收）；`read`的物理未实现。"
+        },
+        {
+          "id": "S6.5",
+          "label": "带材过导向轮的接触",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "shared_gap": "接触",
+          "why": "两个导向轮是链路里最基本的接触对，几何已经有了。",
+          "missing": "`modelgen.generate_roller`产出真圆柱，但连续体绕过圆柱的接触为零——要S3.2的窄相与S5.5的连续体接触。"
+        },
+        {
+          "id": "S6.6",
+          "label": "蹭边：带材碰法兰",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "why": "用户原话点名了「模拟实际蹭边的情况」。plans/04第九节明写：本场景一旦真做，0034第四节自动重开。",
+          "missing": "接触无；且**法兰轴向尺寸是spec/11的已知缺口**，0032/0034维持失败关闭，触发条件正是本位。"
+        },
+        {
+          "id": "S6.7",
+          "label": "端到端跑通一次（放线→导向→张力→收线，含各轮偏移）",
+          "status": "todo",
+          "exercises_physics": true,
+          "evidence": [],
+          "why": "这是场景⑥本身，也是plans/05第一节那句「端到端能跑通的是零」的度量点。",
+          "missing": "前六位里有四位未做。这条场景把spec/10六接口里的五个同时用上（Scene/MotionSource/Actuator/Sensor/CollisionQuery），其中两个只有声明层。"
+        }
+      ]
+    }
+  ],
+  "peer_tier_c": [
+    {
+      "index": 1,
+      "id": "C1",
+      "family": "杆梁族",
+      "label": "自重悬臂",
+      "criterion": "δ_tip = qL⁴/(8EI)",
+      "status": "done",
+      "exercises_physics": true,
+      "evidence": [
+        "case:cantilever_self_weight",
+        "test:tests/cases/test_cantilever_self_weight.py::test_tip_deflection_converges_to_the_closed_form_at_second_order"
+      ],
+      "why": "二阶收敛实测比恰为4.000，牛顿一步收敛。"
+    },
+    {
+      "index": 2,
+      "id": "C2",
+      "family": "杆梁族",
+      "label": "大挠度悬臂对椭圆积分",
+      "criterion": "Bisshopp-Drucker 1945闭式",
+      "status": "done",
+      "exercises_physics": true,
+      "evidence": [
+        "case:large_deflection_cantilever",
+        "test:tests/cases/test_large_deflection_cantilever.py::test_the_tip_converges_to_the_elliptic_integral_closed_form_at_second_order"
+      ],
+      "why": "二阶收敛实测比3.9612/4.0512/4.0600；几何精确项比小挠度理论准1519倍。"
+    },
+    {
+      "index": 3,
+      "id": "C3",
+      "family": "杆梁族",
+      "label": "Euler屈曲",
+      "criterion": "Fc = π²EI/(bL)²",
+      "status": "done",
+      "exercises_physics": true,
+      "evidence": [
+        "case:euler_buckling",
+        "test:tests/cases/test_euler_buckling.py::test_the_critical_load_matches_the_euler_closed_form_for_three_boundary_conditions"
+      ],
+      "why": "b=1/2/0.5三种边界条件由特征方程求根而非抄表；对铰接刚性链的精确特征值命中到2e-6。0046打钩。"
+    },
+    {
+      "index": 4,
+      "id": "C4",
+      "family": "杆梁族",
+      "label": "Timoshenko悬臂",
+      "criterion": "αc = 4/3，L∞与L1一阶收敛",
+      "status": "todo",
+      "exercises_physics": true,
+      "evidence": [],
+      "why": "0040第三节排的解锁顺序里它排在扭转之前、复数场之后。",
+      "missing": "剪切刚度（可剪切变形梁）。"
+    },
+    {
+      "index": 5,
+      "id": "C5",
+      "family": "杆梁族",
+      "label": "Michell失稳临界扭转",
+      "criterion": "Φc = 2√3·π·α/β",
+      "status": "todo",
+      "exercises_physics": true,
+      "evidence": [],
+      "why": "与C6同一把钥匙。",
+      "missing": "扭转——要先在状态里加每边扭转角γ（0029登记）。"
+    },
+    {
+      "index": 6,
+      "id": "C6",
+      "family": "杆梁族",
+      "label": "局部螺旋屈曲包络",
+      "criterion": "Gazzola 2018 §3.4.1",
+      "status": "todo",
+      "exercises_physics": true,
+      "evidence": [],
+      "why": "与C5同一把钥匙。",
+      "missing": "扭转，同C5。"
+    },
+    {
+      "index": 7,
+      "id": "C7",
+      "family": "接触族",
+      "label": "三球金字塔双向摩擦",
+      "criterion": "同一模型只改摩擦系数，一边必须撑住、一边必须塌",
+      "status": "partial",
+      "exercises_physics": true,
+      "evidence": [
+        "case:three_sphere_pyramid",
+        "test:tests/cases/test_three_sphere_pyramid.py::test_the_static_decomposition_matches_the_closed_form"
+      ],
+      "why": "定性判据（只改μ、一边撑住一边塌）零容差复现，静力分解F=W/√3、N=3W/2、T=W/(2√3)。",
+      "missing": "Chrono原版**所有接触都有摩擦**（静不定）；本仓做的是球-球无摩擦的**静定变体**，闭式μc=1/(3√3)是本变体的。含力矩平衡的刚体解疑似静定且μc=2−√3（本变体那个数的1.392倍），**本仓未独立复核**。案例页第六节自己写明「不是C档第7条的完整兑现，按半条记不进位」。"
+    },
+    {
+      "index": 8,
+      "id": "C8",
+      "family": "接触族",
+      "label": "斜面滑动阈值与无滑滚球",
+      "criterion": "θc = arctan(μs)；a = (5/7)g·sinθ",
+      "status": "partial",
+      "exercises_physics": true,
+      "evidence": [
+        "case:incline_slide_threshold",
+        "test:tests/cases/test_incline_slide_threshold.py::test_the_threshold_does_not_move_when_the_penalty_stiffnesses_change"
+      ],
+      "why": "滑动阈值那一半已过：阈值两侧定性相反零容差，且阈值与罚刚度、与质量无关各自一道门。",
+      "missing": "**无滑滚球 a=(5/7)g·sinθ 那一半未做**——它要转动自由度参与接触（S3.7 / 0051）。案例页第六节自己写明「不是C档第8条的完整兑现，按半条记」。"
+    },
+    {
+      "index": 9,
+      "id": "C9",
+      "family": "接触族",
+      "label": "恢复系数弹跳",
+      "criterion": "e' == e；总弹跳时间闭式",
+      "status": "todo",
+      "exercises_physics": true,
+      "evidence": [],
+      "why": "cases/README已推翻旧判词「要隐式积分族」——DEM就是罚接触+显式积分，本仓三个显式积分器与能量→加速度的桥都在，无阻尼弹跳e=1已实测跑通。",
+      "missing": "一个dashpot（plans/08阶段2）。约定由0052第一节裁为**截断**；值域下界exp(−2)=0.1353，低于它必须先推过阻尼分支ζ≥1（0052登记的欠账）。research/13第六节另记：罚接触下存在临界入射速度，低于它接触不结束，「弹跳次数无穷」不可达，拿总弹跳时间当判据要写明这条截断。"
+    },
+    {
+      "index": 10,
+      "id": "C10",
+      "family": "光学族",
+      "label": "艾里斑",
+      "criterion": "E(x)=2·J1(x)/x，首零3.8317059702",
+      "status": "done",
+      "exercises_physics": false,
+      "evidence": [
+        "case:scalar_diffraction_airy",
+        "test:tests/cases/test_scalar_diffraction_airy.py::test_bessel_j1_matches_an_independent_integral_evaluation"
+      ],
+      "why": "对贝塞尔积分的独立求值abs 1e-12（判绝对不判相对：J1有零点）。"
+    },
+    {
+      "index": 11,
+      "id": "C11",
+      "family": "光学族",
+      "label": "FTS仪器线型",
+      "criterion": "FWHM = 1.20671/(2·OPD_max)",
+      "status": "done",
+      "exercises_physics": false,
+      "evidence": [
+        "case:fts_instrument_line_shape",
+        "test:tests/cases/test_fts_instrument_line_shape.py::test_unapodised_line_shape_is_a_sinc_of_the_declared_width"
+      ],
+      "why": "半宽对独立求根，半高点上ILS恰为0.5。**与C12同住一个案例目录，但判据与测试函数各自独立**。"
+    },
+    {
+      "index": 12,
+      "id": "C12",
+      "family": "光学族",
+      "label": "Norton-Beer切趾",
+      "criterion": "各组 Σ Ci = 1",
+      "status": "done",
+      "exercises_physics": false,
+      "evidence": [
+        "case:fts_instrument_line_shape",
+        "test:tests/cases/test_fts_instrument_line_shape.py::test_norton_beer_windows_sum_to_one_and_cost_throughput_in_order"
+      ],
+      "why": "三组系数残差实测恰为0；通量代价闭式对Simpson，排序弱>中>强。一个案例文件顶两条C档，**证据集不同所以不是同一位**。"
+    },
+    {
+      "index": 13,
+      "id": "C13",
+      "family": "光学族",
+      "label": "变换层自洽三件套",
+      "criterion": "通量守恒／MFT-FFT等价／往返可逆",
+      "status": "todo",
+      "exercises_physics": false,
+      "evidence": [],
+      "why": "三件套全是标量判据，等FFT真落地时才有真实约束（0052第八节）。",
+      "missing": "二维复数场 + FFT（S4.4与S4.5）。"
+    }
+  ]
+}

@@ -261,7 +261,7 @@ def test_repository_identity_survives_untracked_symlinks_and_tracks_their_target
 
 
 def test_required_tool_commands_are_all_armed_in_full():
-    """四个工具命令必须**无条件**出现在full档里。
+    """工具命令必须**无条件**出现在full档里。
 
     旧行为是"文件在就上膛，不在就记一条`absent`然后照样PASS"。
     那在单人开发下是诚实的，**在多代理并行下是致命的**：
@@ -271,6 +271,21 @@ def test_required_tool_commands_are_all_armed_in_full():
     commands, _ = accept.resolve_commands("full", accept.ROOT)
     for argv in accept.REQUIRED_TOOL_COMMANDS:
         assert argv in commands, f"必需工具没上膛：{argv}"
+
+
+def test_the_capability_ledger_gate_is_one_of_the_required_tools():
+    """计数门（决策0056）必须在必需工具里，且它的文件真的在。
+
+    单独立一条而不是靠上一条的循环：上一条遍历的是元组本身，
+    **元组里少一行它一样绿**——那正是"门认得自己写的东西"的老毛病。
+    这一条把工具名写死在断言里，少一行当场红。
+    """
+
+    argv = (".venv/bin/python", "tools/check_capability_ledger.py")
+    assert argv in accept.REQUIRED_TOOL_COMMANDS, (
+        "计数门没挂进验收器——两个分子就又回到散文里了（0052第二节）"
+    )
+    assert (accept.ROOT / argv[-1]).is_file()
 
 
 def test_required_tools_stay_out_of_quick():

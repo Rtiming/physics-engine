@@ -94,6 +94,10 @@ REQUIRED_TOOL_COMMANDS: tuple[tuple[str, ...], ...] = (
     #: 实测机理：共享`.venv`的editable `.pth`是主仓`src`的绝对路径，
     #: 于是worktree里import到的是主仓的包——**代理可以全绿交差而验的是别人的代码**。
     (".venv/bin/python", "tools/check_worktree_env.py"),
+    #: 能力位清单的计数门（决策0056，落地0052第二节的裁决）：
+    #: 两个分子**从清单里长出来，不从散文里来**。它关掉的是plans/07第四节
+    #: 第一行那笔账——"没有门看着分子"，而那个分子实测被多算过一条。
+    (".venv/bin/python", "tools/check_capability_ledger.py"),
 )
 
 #: 旧名保留一版，指向新元组。破坏性改名要留缓冲（AGENTS.md「API两档」）。
