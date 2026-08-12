@@ -1,0 +1,147 @@
+{
+  "arrays": {},
+  "case_id": "case/bouncing_ball_restitution",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/bouncing_ball_restitution",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/bouncing_ball_restitution/generate_oracle.py",
+    "sha256": "96aeb66a1ff14cc088e03aa1c4ac2fd2ad8f61170a24e0d69d878f0389206de9"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "cba9183aeb96e030801b561fd2e01e3959cfb3d3a1f810f2ccd15226f951a808",
+  "oracles": [
+    {
+      "expected": {
+        "contact_duration_s": 3.141592653589793e-05,
+        "omega_rad_per_s": 100000.0
+      },
+      "id": "oracle:bounce/contact_duration",
+      "inputs": {
+        "incident_speed_mm_s": 500.0,
+        "kind": "contact_duration",
+        "mass_kg": 0.001,
+        "radius_mm": 0.0,
+        "stiffness_n_per_mm": 10000.0
+      },
+      "tolerances": {
+        "contact_duration_s": {
+          "abs": 0.0,
+          "reason": "引擎逐步推进，接触起止落在步长格点上，故分辨误差约1步/接触=1/N。N=200时5e-3——**取1e-6是因为实测比值恒为1.000000**：接触时长与入射速度无关，起止对称，格点误差首阶相消",
+          "rel": 1e-06
+        },
+        "omega_rad_per_s": {
+          "abs": 0.0,
+          "reason": "闭式对闭式，只留浮点噪声；sqrt与除法各一次舍入",
+          "rel": 1e-14
+        }
+      }
+    },
+    {
+      "expected": {
+        "max_penetration_mm": 0.005,
+        "quasistatic_formula_is_wrong_here": true
+      },
+      "id": "oracle:bounce/max_penetration",
+      "inputs": {
+        "incident_speed_mm_s": 500.0,
+        "kind": "max_penetration",
+        "mass_kg": 0.001,
+        "stiffness_n_per_mm": 10000.0
+      },
+      "tolerances": {
+        "max_penetration_mm": {
+          "abs": 0.0,
+          "reason": "N=20时实测比值1.003097（3.1e-3），N=200时1.000031。**容差按最粗档定**，留约1.6倍余量；细档的收敛由下面那条阶数判据管",
+          "rel": 0.005
+        },
+        "quasistatic_formula_is_wrong_here": {
+          "abs": 0.0,
+          "reason": "布尔前置：这条金标声明'δ = N/k'在本案例域外。零容差——它不是数值量",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "restitution": 1.0
+      },
+      "id": "oracle:bounce/restitution_undamped",
+      "inputs": {
+        "damping": null,
+        "incident_speed_mm_s": 500.0,
+        "kind": "restitution",
+        "mass_kg": 0.001,
+        "stiffness_n_per_mm": 10000.0
+      },
+      "tolerances": {
+        "restitution": {
+          "abs": 0.0003,
+          "reason": "保守力场理论值恰为1。**用abs不用rel**：期望值是1，两者数值相同但abs表达的是'离1有多远'这个物理量。3e-4按N=20实测（2.5e-4）留约1.2倍余量。**注意误差是单侧的：实测e恒>1**——积分误差往碰撞里喂能量，不往外抽",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "penetration_ratio_per_decade": 3.1622776601683795,
+        "quasistatic_would_predict": 10.0
+      },
+      "id": "oracle:bounce/penetration_scales_as_inverse_sqrt_k",
+      "inputs": {
+        "incident_speed_mm_s": 500.0,
+        "kind": "stiffness_scaling",
+        "mass_kg": 0.001,
+        "stiffness_sweep_n_per_mm": [
+          1000.0,
+          10000.0,
+          100000.0
+        ]
+      },
+      "tolerances": {
+        "penetration_ratio_per_decade": {
+          "abs": 0.0,
+          "reason": "**这条是必红的判据本体**：两个预测差sqrt(10)≈3.16倍，远在1%之外。容差取1%是为了让'照抄准静态律'必红，同时容得下最粗档的离散误差（3.1e-3）",
+          "rel": 0.01
+        },
+        "quasistatic_would_predict": {
+          "abs": 0.0,
+          "reason": "记录用，不参与断言——写在这里是为了让读金标的人看见错的那条律长什么样",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "all_errors_positive": true,
+        "monotonically_decreasing": true
+      },
+      "id": "oracle:bounce/restitution_converges_monotonically",
+      "inputs": {
+        "incident_speed_mm_s": 500.0,
+        "kind": "steps_per_contact_sweep",
+        "mass_kg": 0.001,
+        "steps_per_contact": [
+          20,
+          200,
+          2000
+        ],
+        "stiffness_n_per_mm": 10000.0
+      },
+      "tolerances": {
+        "all_errors_positive": {
+          "abs": 0.0,
+          "reason": "前置断言，防三档全为0时单调性假通过（MuJoCo `EXPECT_NE`形制，spec/12第6.2节）。**同时它本身是个物理断言**：实测e恒大于1",
+          "rel": 0.0
+        },
+        "monotonically_decreasing": {
+          "abs": 0.0,
+          "reason": "非数值量（单调性）零容差。判**相对优劣**不判绝对值，与`harmonic_oscillator`的漂移排序同形制",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
