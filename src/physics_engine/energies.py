@@ -1199,6 +1199,14 @@ class EnergyRegistry:
         那道门守着），而这里是同一条纪律在积分侧的另一半。
         """
 
+        quasistatic_only = tuple(
+            term.name for term in self.terms if getattr(term, "supports_dynamics", True) is False
+        )
+        if quasistatic_only:
+            raise EnergyError(
+                f"energy terms {quasistatic_only!r} are quasistatic-only — "
+                "其标量是含材料耗散的增量势，不是可用于瞬态能量账的可恢复势能"
+            )
         has_dissipation = any(term.kind == DISSIPATION for term in self.terms)
 
         def acceleration_of(x: Sequence[float], v: Sequence[float], t: float):

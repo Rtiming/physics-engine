@@ -49,6 +49,10 @@ general/full/actual→更新design/26与本仓spec/90→提交**。
 
 ## 明确不在本单内的
 
-- 力学域（model/solve/contact/dynamic）进不进引擎——远期分岔，用户裁决
+- 力学域（model/solve/contact/dynamic）进不进引擎——远期分岔，用户裁决。0060只在
+  引擎侧完成一个easy-axis三节点截面站点的源级兼容，并以WDS提交`c1b8fe6`的两份
+  物理源SHA作只读夹具；**没有改WDS、没有更新wheel、没有签产物不变回执**。用户授权
+  且WDS工作树可冻结后，才在WDS独立会话把“单站替换→回执重签→general/full/actual”
+  写成新的力学迁移批次，不能把本仓案例当成已迁移证据
 - V3-R真实发布门——固定由用户手工
 - FTS侧任何操作——见20_FTS迁移操作单

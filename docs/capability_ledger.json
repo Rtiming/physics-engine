@@ -357,11 +357,14 @@
           "exercises_physics": true,
           "evidence": [
             "case:rectangular_section_springback",
-            "test:tests/cases/test_rectangular_section_springback.py::test_free_springback_solves_equilibrium_without_hiding_or_polluting_history"
+            "test:tests/cases/test_rectangular_section_springback.py::test_free_springback_solves_equilibrium_without_hiding_or_polluting_history",
+            "case:kirchhoff_section_vertex_springback",
+            "test:tests/cases/test_kirchhoff_section_vertex_springback.py::test_prescribed_loading_reaches_the_fraction_global_force_and_tangent_oracle",
+            "test:tests/cases/test_kirchhoff_section_vertex_springback.py::test_global_newton_springback_commits_only_the_converged_history"
           ],
           "shared_gap": "体积与厚度",
-          "why": "与S1.2同一条结构性缺口，但问的量不同：那里要在截面上放电流，这里要在截面上放弯扭与压扁。0059已落矩形纤维截面的第一片：广义轴向应变/曲率驱动逐点弹塑性应力与显式材料历史，N/M求积和自由回弹局部平衡对解析基准。",
-          "missing": "当前截面点是本构/求积点，不是独立宽厚运动学自由度；只有矩形厚度方向中点纤维，尚无宽度方向分辨、剪切/扭转、翘曲、压扁、局部屈曲，也未与全局带材/梁节点装配。故只能partial，不能用状态槽数量冒充运动自由度。"
+          "why": "与S1.2同一条结构性缺口，但问的量不同：那里要在截面上放电流，这里要在截面上放弯扭与压扁。0059已落矩形纤维局部本构；0060又把easy-axis曲率从一个WDS式三节点/两边扭角站点生成，把M与一致切线装入全局残差/Hessian，并以独立Fraction金标和WDS固定源SHA夹具验证。",
+          "missing": "当前截面点仍是本构/求积点，不是独立宽厚运动学自由度；全局路径只有固定轴向应变的easy-axis单站，WDS也尚未实际采纳。仍无整杆多站、轴向N联立、宽度方向分辨、剪切/hard-axis/扭转、翘曲、压扁或局部屈曲。故只能partial，不能用139个状态槽或11个杆运动学坐标冒充宽厚场自由度。"
         },
         {
           "id": "S5.2",

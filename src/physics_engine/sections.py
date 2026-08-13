@@ -274,8 +274,15 @@ class SectionPointResponse:
 
 @dataclass(frozen=True)
 class SectionResponse:
-    """截面内力、算法一致切线、点分布与可提交的新状态。"""
+    """截面增量势、内力、算法一致切线、点分布与可提交的新状态。
 
+    ``incremental_potential_n``是**每单位梁长**的增量势：应力对应的一维材料势
+    （N/mm²）乘纤维面积（mm²）后求和，单位为N。外层梁站点再乘对偶长度mm，
+    得到能进``EnergyRegistry``的N·mm。它的曲率一阶导恰是
+    ``bending_moment_n_mm``，二阶导恰是``bending_tangent_n_mm2``。
+    """
+
+    incremental_potential_n: float
     axial_force_n: float
     bending_moment_n_mm: float
     axial_tangent_n: float
@@ -325,6 +332,30 @@ def _material_trial(
     )
 
 
+def _material_incremental_potential(
+    material: ElasticPerfectlyPlastic1D,
+    *,
+    strain: float,
+    previous_plastic_strain: float,
+) -> float:
+    """理想弹塑性的闭式增量势；对应``_material_trial``的同一条应力曲线。
+
+    这是
+    ``min_ep 0.5*E*(epsilon-ep)^2 + sigma_y*|ep-ep_old|``
+    消去``ep``后的标量函数。它在屈服点连续且一阶连续，导数是clip后的应力；
+    塑性耗散已经包含在增量项里，不能只拿弹性储能给Newton线搜索。
+    """
+
+    young = float(material.young_modulus_n_mm2)
+    yield_stress = float(material.yield_stress_n_mm2)
+    elastic_trial_strain = strain - previous_plastic_strain
+    yield_strain = yield_stress / young
+    magnitude = abs(elastic_trial_strain)
+    if magnitude <= yield_strain:
+        return 0.5 * young * elastic_trial_strain * elastic_trial_strain
+    return yield_stress * magnitude - 0.5 * yield_stress * yield_strain
+
+
 def evaluate_section_response(
     *,
     section_layout: RectangularSectionLayout,
@@ -353,6 +384,7 @@ def evaluate_section_response(
     axial_tangent_terms: list[float] = []
     coupling_terms: list[float] = []
     bending_tangent_terms: list[float] = []
+    potential_terms: list[float] = []
 
     for point in section_layout.section.integration_points:
         strain = axial + curvature * point.y_mm
@@ -382,12 +414,21 @@ def evaluate_section_response(
         axial_tangent_terms.append(tangent * point.area_mm2)
         coupling_terms.append(tangent * point.area_mm2 * point.y_mm)
         bending_tangent_terms.append(tangent * point.area_mm2 * point.y_mm**2)
+        potential_terms.append(
+            _material_incremental_potential(
+                material,
+                strain=strain,
+                previous_plastic_strain=previous_plastic[point.index],
+            )
+            * point.area_mm2
+        )
 
     next_state = State(
         layout=section_layout.layout,
         vector=(axial, curvature, *plastic, *accumulated),
     )
     return SectionResponse(
+        incremental_potential_n=math.fsum(potential_terms),
         axial_force_n=math.fsum(axial_terms),
         bending_moment_n_mm=math.fsum(moment_terms),
         axial_tangent_n=math.fsum(axial_tangent_terms),

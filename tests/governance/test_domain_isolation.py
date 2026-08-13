@@ -80,12 +80,15 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
     #: 再调用力学域`contact`/`energies`/`state`；依赖仍只向下，没有基座反向import它。
     #: `sections`归力学（2026-08-13，决策0059）：它import`state`保存逐积分点塑性历史，
     #: 本构与N/M截面合力也都是力学语义；不是域中立的通用求积器。
+    #: `section_beam`归力学（2026-08-13，决策0060）：它把`sections`的本构响应经
+    #: WDS式杆运动学装进`energies`/`solve`，全部依赖都留在同一力学域。
     "mechanics": (
         "contact",
         "contact_pipeline",
         "energies",
         "integrate",
         "rigidbody",
+        "section_beam",
         "sections",
         "sensors",
         "solve",
