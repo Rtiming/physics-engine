@@ -209,3 +209,74 @@ def test_bare_separator_counts_when_paired() -> None:
 def test_near_misses_do_not_trip_the_gate(line: str) -> None:
     """边界：只有**行首的七连**算数。差一个字符、差一层缩进都不算。"""
     assert find_conflict_markers("\n".join(["前文", line, "后文"])) == []
+
+
+# ---------------------------------------------------------------------------
+# 加长标记（plans/09第七节第5条，2026-08-12实测确认属实并修掉）
+# ---------------------------------------------------------------------------
+
+#: git默认写7个标记字符，**但那是可配的**：`conflict-marker-size`是gitattributes
+#: 属性，而把它调大**正是为了避开内容里恰好有7连的情况**——也就是说，
+#: 越是内容复杂的仓，越可能用加长标记，**而那正是这道门最需要管用的时候**。
+LONGER_RUNS = (8, 10, 20)
+
+
+@pytest.mark.parametrize("run", LONGER_RUNS)
+def test_longer_markers_are_caught_too(run):
+    """**必红**：加长标记必须照样红。
+
+    **注错方式**：把7连换成8/10/20连。旧判据是
+    `stripped == marker`或`startswith(marker + " ")`——对``<<<<<<<<<<``
+    **两条都不成立**（第8个字符是`<`不是空格），于是它一路绿。
+    """
+
+    text = (
+        "<" * run + " HEAD\nours\n"
+        + "=" * run + "\ntheirs\n"
+        + ">" * run + " other\n"
+    )
+    hits = checker.find_conflict_markers(text)
+    assert len(hits) == 3, f"{run}连标记只抓到{len(hits)}处：{hits}"
+
+
+@pytest.mark.parametrize("run", LONGER_RUNS)
+def test_longer_bare_markers_without_labels_are_caught(run):
+    """**必红**（同判据的第二个分支）：手工mangle过的裸标记没有标签。"""
+
+    text = "<" * run + "\nours\n" + ">" * run + "\n"
+    assert len(checker.find_conflict_markers(text)) == 2
+
+
+def test_a_longer_diff3_base_marker_is_caught():
+    """**必红**（第三个分支）：diff3的共同祖先段`|||||||`加长也要抓。"""
+
+    text = "<" * 9 + " a\nx\n" + "|" * 9 + " base\ny\n" + ">" * 9 + " b\n"
+    assert len(checker.find_conflict_markers(text)) == 3
+
+
+@pytest.mark.parametrize("run", (7, 20, 40))
+def test_a_setext_heading_of_any_length_still_does_not_false_red(run):
+    """**反向必红**：判据放宽后**不许**开始对合法markdown误红。
+
+    setext式一级标题的下划线就是一串`=`，本仓文档里真的有。
+    分隔线仍是**条件**判据——同文件里没有无条件标记就不算数。
+    **一道会对合法文档误红的门，最终会被加豁免、然后被拆掉。**
+    """
+
+    assert checker.find_conflict_markers(f"标题\n{'=' * run}\n正文\n") == []
+
+
+def test_a_marker_run_immediately_followed_by_text_is_not_a_marker():
+    """**反向必红**：`<<<<<<<abc`既不是git写的也不像标记，不许红。
+
+    这一条守的是判据放宽时**没有顺手放宽掉"其后必须是空格或行尾"**。
+    """
+
+    assert checker.find_conflict_markers("<" * 7 + "abc\n") == []
+    assert checker.find_conflict_markers("<" * 12 + "abc\n") == []
+
+
+def test_six_characters_is_below_the_floor():
+    """**边界**：6连不是标记。下限是7，不是"任意多个"。"""
+
+    assert checker.find_conflict_markers("<" * 6 + " HEAD\n") == []

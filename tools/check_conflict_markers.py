@@ -45,12 +45,57 @@ SEPARATOR = "=" * 7
 #: git写的形态是"标记+空格+标签"，手工mangle过的可能只剩裸标记，两种都收。
 UNCONDITIONAL = (OURS, BASE, THEIRS)
 
+#: 标记的**最短**长度。git默认写7个，**但那是可配的**——
+#: `conflict-marker-size`（gitattributes属性）与`merge.conflictStyle`
+#: 都能让git写出更长的标记，而更长正是为了避开内容里恰好有7连的情况。
+#:
+#: **2026-08-12修**：此前判据是`stripped == marker`或`startswith(marker + " ")`，
+#: 两条对10连的``<<<<<<<<<<``**都不成立**——第8个字符是`<`不是空格，
+#: 于是一份用加长标记的冲突可以一路绿着进仓。
+#: 这正是plans/09第七节第5条登记的洞，**实测确认属实**。
+MIN_MARKER_RUN = 7
+
+
+def _leading_run(text: str, char: str) -> int:
+    """``text``开头连续多少个``char``。"""
+
+    count = 0
+    for value in text:
+        if value != char:
+            break
+        count += 1
+    return count
+
 
 def _is_unconditional_marker(line: str) -> bool:
+    """行首**≥7个**同一标记字符，其后要么到行尾、要么是空格+标签。
+
+    **不是"恰好7个"**——见`MIN_MARKER_RUN`。
+    要求"其后是空格或行尾"仍然保留：它挡的是``<<<<<<<abc``这种
+    既不是git写的、也不像标记的东西。
+    """
+
     stripped = line.rstrip("\r\n")
-    return any(
-        stripped == marker or stripped.startswith(marker + " ") for marker in UNCONDITIONAL
-    )
+    for marker in UNCONDITIONAL:
+        run = _leading_run(stripped, marker[0])
+        if run < MIN_MARKER_RUN:
+            continue
+        rest = stripped[run:]
+        if rest == "" or rest.startswith(" "):
+            return True
+    return False
+
+
+def _is_separator(line: str) -> bool:
+    """裸分隔线：**≥7个**``=``且整行只有它们。
+
+    仍然是**条件**判据——只有同一份文本里先扫到无条件标记才算数。
+    理由没变：setext式一级标题的下划线就是一串`=`，
+    **而那是合法markdown**（本仓文档里就有）。
+    """
+
+    stripped = line.rstrip("\r\n")
+    return len(stripped) >= MIN_MARKER_RUN and set(stripped) == {"="}
 
 
 def find_conflict_markers(text: str) -> list[tuple[int, str]]:
@@ -71,7 +116,7 @@ def find_conflict_markers(text: str) -> list[tuple[int, str]]:
     hits.extend(
         (number, line)
         for number, line in enumerate(lines, start=1)
-        if line.rstrip("\r\n") == SEPARATOR
+        if _is_separator(line)
     )
     return sorted(hits)
 

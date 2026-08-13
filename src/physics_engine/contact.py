@@ -726,6 +726,7 @@ def advance_contact_quasistatic(
     max_iterations: int = 60,
     max_passes: int = 1,
     yield_tol_n: float = 0.0,
+    require_pass_convergence: bool = False,
 ) -> ContactStep:
     """走一步准静态接触：**弹性预测 → 求解 → return-map修正 → 锚点写回状态**。
 
@@ -773,6 +774,41 @@ def advance_contact_quasistatic(
 
     if max_passes < 1:
         raise ContactError(f"max_passes must be at least 1: {max_passes!r}")
+
+    #: **`slot`与`node`的落位校验**（plans/09第七节第7条，2026-08-12补）。
+    #:
+    #: 这两个参数各说各的：`node`指节点块里的第几个节点，`slot`指锚点块里的一个槽，
+    #: 而**`ContactSlot`不带node、`ContactDeclaration`也不带**——
+    #: 两者之间今天没有任何东西把它们绑在一起。
+    #:
+    #: 完整的对应校验要改0050的布局承重设计（让声明带上节点），**本轮不做**。
+    #: 能证明的这一半先做掉——它挡的是两种会静默写坏状态的混淆：
+    #:
+    #: * 把槽下标当节点号传 → 锚点写进节点块，**位形被悄悄改掉**；
+    #: * 节点号越过节点块 → 写进锚点块，**改的是别人的历史**。
+    #:
+    #: 这两种都不会抛`IndexError`——负下标与越界写在元组切片上是静默的，
+    #: 而那正是决策0050落地时`PenaltySphereContact`吃过的亏
+    #: （``node = -1``被接受、``vector[-3:]``读的正是锚点槽）。
+    node_dof_count = contact_layout.layout.node_dof_count
+    if not isinstance(node, int) or isinstance(node, bool) or node < 0:
+        raise ContactError(f"contact node index must be a nonnegative int: {node!r}")
+    if 3 * node + 3 > node_dof_count:
+        raise ContactError(
+            f"node {node} 落在节点块之外（节点块只有{node_dof_count}个自由度）"
+            "——**再往后是锚点槽，写进去就是改别人的历史**"
+        )
+    if slot.base < node_dof_count:
+        raise ContactError(
+            f"slot.base={slot.base} 落在节点块之内（节点块{node_dof_count}个自由度）"
+            "——**锚点槽必须在节点块之后，写进节点块就是悄悄改位形**"
+        )
+    if slot.regime_index >= len(vector):
+        raise ContactError(
+            f"slot {slot.pair_id!r} 点{slot.point_index}的槽越过了状态向量末尾"
+            f"（需要下标{slot.regime_index}，向量只有{len(vector)}个）"
+        )
+
     normal_of = normal if callable(normal) else (lambda _v, fixed=normal: fixed)
 
     anchor = tuple(vector[slot.anchor_base : slot.anchor_base + 3])
@@ -840,7 +876,29 @@ def advance_contact_quasistatic(
         )
         if excess <= yield_tol_n:
             break
-
+    else:
+        #: **趟数用尽而屈服残差仍超标**（plans/09第七节第6条，2026-08-12补）。
+        #:
+        #: 同一个函数里，**内层牛顿不收敛是`raise`**，而外层趟数用尽此前
+        #: 什么都不做——两种不收敛，两种待遇。
+        #:
+        #: 但直接改成无条件抛**会打断所有既有调用方**：`excess`量的是
+        #: **修正前**的试探力，而`max_passes=1`（默认）加滑移时
+        #: "用尽且excess>0"正是**正常且正确**的情形——
+        #: 理想塑性的修正让屈服条件在**修正后**成立，本判据看不到那一步。
+        #:
+        #: 所以做成**选择进入**：默认`False`保持既有行为逐字节不变。
+        #: 这条依据是本函数docstring自己写过的原则——
+        #: **默认值不该替既有调用方改变行为，那是把一次能力扩展偷偷变成一次行为变更**。
+        #:
+        #: 观测量一直都在（`ContactStep.yield_excess_n`），缺的只是"要不要当错"。
+        if require_pass_convergence:
+            raise ContactError(
+                f"预测-修正走满{max_passes}趟仍未收敛："
+                f"屈服残差{excess:.6g} N > 容差{yield_tol_n:.6g} N。"
+                "**加大max_passes，或按yield_excess_n自己判**——"
+                "实测法向随位形转时每趟压缩因子约1/2（0050第五节）"
+            )
 
     updated = list(solved.state.vector)
     #: **分离时清切向历史**（同一次对抗审核的第二条静默错值）。

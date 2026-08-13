@@ -393,3 +393,175 @@ def test_lifting_and_moving_in_the_air_invents_no_slip():
     anchor = step.state.vector[slot.anchor_base : slot.anchor_base + 3]
     assert anchor == (0.0, 0.0, 0.0), f"分离后旧锚点还留着：{anchor}——再接触时会凭空滑一次"
     assert step.state.vector[slot.active_index] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# 趟数用尽的失败关闭（plans/09第七节第6条，2026-08-12补）
+#
+# 同一个函数里**内层牛顿不收敛是`raise`**，而外层趟数用尽此前什么都不做——
+# 两种不收敛，两种待遇。
+# ---------------------------------------------------------------------------
+
+
+def _step_requiring_convergence(
+    lateral_load_n: float, max_passes: int, yield_tol_n: float = 1.0e-9
+):
+    contact_layout, context, spheres, registry, slot, vector = _groove(lateral_load_n)
+    return advance_contact_quasistatic(
+        registry_without_stick=registry,
+        context=context,
+        contact_layout=contact_layout,
+        slot=slot,
+        vector=vector,
+        node=2,
+        normal=lambda current: spheres._pair_state(current, spheres.pairs[0])[2],
+        normal_force_of=lambda state: spheres.contact_force_n(state)[0],
+        tangential_stiffness_n_per_mm=STIFFNESS_N_PER_MM,
+        friction_coefficient=FRICTION,
+        fixed_indices=frozenset(
+            set(range(0, 6)) | {7} | set(range(9, contact_layout.layout.dof_count))
+        ),
+        residual_tol_n=RESIDUAL_TOL_N,
+        max_iterations=300,
+        max_passes=max_passes,
+        yield_tol_n=yield_tol_n,
+        require_pass_convergence=True,
+    )
+
+
+def test_exhausting_the_pass_budget_can_now_fail_closed():
+    """**必红**：要求收敛时，趟数不够必须抛，不许静默返回一个没收敛的结果。
+
+    **注错方式**：法向随位形转（实测每趟压缩因子约1.43），只给1趟。
+    """
+
+    with pytest.raises(ContactError, match="仍未收敛"):
+        _step_requiring_convergence(2.0, max_passes=1)
+
+
+def test_the_default_still_returns_quietly_because_changing_it_would_break_callers():
+    """**反向必红**：默认值下**行为一个字节不变**。
+
+    这条守的是本模块docstring自己写过的原则——
+    **默认值不该替既有调用方改变行为，那是把一次能力扩展偷偷变成一次行为变更**。
+
+    而且这里的"没收敛"多半是**正常且正确**的：`yield_excess_n`量的是
+    **修正前**的试探力，理想塑性的修正让屈服条件在**修正后**成立，
+    本判据看不到那一步。
+    """
+
+    step = _step(2.0, max_passes=1)
+    assert step.passes == 1
+    assert step.yield_excess_n > 0.0, "这个构型本该是滑移且残差为正，否则本组用例失效"
+
+
+def test_enough_passes_converge_and_do_not_raise():
+    """**绿分支**：趟数够、容差够，就不该抛。
+
+    **构型是量出来的，不是猜的**（2026-08-12）：横载1.5 N时
+    8趟残差2.478e-02、16趟1.441e-03——压缩因子与本文件第2条实测的1.43一致。
+    """
+
+    step = _step_requiring_convergence(1.5, max_passes=16, yield_tol_n=1.0e-2)
+    assert step.yield_excess_n <= 1.0e-2
+    assert step.passes > 1, "绿分支要走多趟，否则它验的是粘着的一趟即停"
+
+
+def test_there_is_no_pass_budget_that_reaches_a_tight_tolerance_here():
+    """**实测记录**：这个构型下**不存在**能到1e-9的趟数预算。
+
+    外层每趟压缩约1.43（16趟到1.441e-03），**而内层牛顿在32趟左右先死**
+    （线搜索40次回溯后仍无法降低能量）。要到1e-9还需约48趟。
+
+    这正是plans/07第六节登记的"**迭代发散时的兜底**"那笔账——
+    今天两种失败**都会抛**，所以没有静默错值；但**没有载荷步回退**，
+    使用者除了调小载荷或放松容差之外无路可走。
+
+    本用例把这条钉住：**它红了说明求解器变强了或变弱了，两种都该有人来看。**
+    """
+
+    with pytest.raises(ContactError):
+        _step_requiring_convergence(1.5, max_passes=64, yield_tol_n=1.0e-9)
+
+
+# ---------------------------------------------------------------------------
+# slot与node的落位校验（plans/09第七节第7条，2026-08-12补）
+#
+# `ContactSlot`不带node、`ContactDeclaration`也不带——两者之间今天没有任何
+# 东西把它们绑在一起。完整对应要改0050的布局承重设计，本轮只做能证明的一半。
+# ---------------------------------------------------------------------------
+
+
+def _stepper_kwargs_with(**overrides):
+    contact_layout, context, spheres, registry, slot, vector = _groove(1.0)
+    call = {
+        "registry_without_stick": registry,
+        "context": context,
+        "contact_layout": contact_layout,
+        "slot": slot,
+        "vector": vector,
+        "node": 2,
+        "normal": lambda current: spheres._pair_state(current, spheres.pairs[0])[2],
+        "normal_force_of": lambda state: spheres.contact_force_n(state)[0],
+        "tangential_stiffness_n_per_mm": STIFFNESS_N_PER_MM,
+        "friction_coefficient": FRICTION,
+        "fixed_indices": frozenset(
+            set(range(0, 6)) | {7} | set(range(9, contact_layout.layout.dof_count))
+        ),
+        "residual_tol_n": RESIDUAL_TOL_N,
+        "max_iterations": 300,
+    }
+    call.update(overrides)
+    return call, contact_layout
+
+
+def test_a_node_past_the_node_block_fails_closed():
+    """**必红**：节点号越过节点块 → 再往后是锚点槽，**写进去就是改别人的历史**。
+
+    **注错方式**：布局有3个节点（9个自由度），传`node=3`。
+    此前它不会抛——元组切片越界是静默的。
+    """
+
+    call, _ = _stepper_kwargs_with(node=3)
+    with pytest.raises(ContactError, match="落在节点块之外"):
+        advance_contact_quasistatic(**call)
+
+
+def test_a_negative_node_fails_closed():
+    """**必红**（同判据第二个分支）：``node = -1``。
+
+    这不是假想——决策0050落地时`PenaltySphereContact`吃过这个亏：
+    ``node = -1``被接受、``vector[-3:]``读的**正是锚点槽**，
+    于是算出316681 N·mm能量，全部由历史值来。
+    """
+
+    call, _ = _stepper_kwargs_with(node=-1)
+    with pytest.raises(ContactError, match="nonnegative"):
+        advance_contact_quasistatic(**call)
+
+
+def test_a_slot_pointing_into_the_node_block_fails_closed():
+    """**必红**（第三个分支）：把槽下标指进节点块 → **锚点写进节点块就是悄悄改位形**。
+
+    **注错方式**：造一个`base=0`的槽（节点块的第一个自由度）。
+    """
+
+    from physics_engine.contact import ContactSlot
+
+    call, _ = _stepper_kwargs_with()
+    call["slot"] = ContactSlot(pair_id="fake", point_index=0, base=0)
+    with pytest.raises(ContactError, match="落在节点块之内"):
+        advance_contact_quasistatic(**call)
+
+
+def test_a_slot_past_the_vector_end_fails_closed():
+    """**必红**（第四个分支）：槽越过状态向量末尾。"""
+
+    from physics_engine.contact import ContactSlot
+
+    call, layout = _stepper_kwargs_with()
+    call["slot"] = ContactSlot(
+        pair_id="fake", point_index=0, base=len(call["vector"])
+    )
+    with pytest.raises(ContactError, match="越过了状态向量末尾"):
+        advance_contact_quasistatic(**call)
