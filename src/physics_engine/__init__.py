@@ -3,11 +3,11 @@
 安装（舰队wheelhouse链路，decisions/0010）：
 
     git clone ts-orangepi:wheelhouse.git ~/wheelhouse   # 每台机器一次
-    uv add "physics-engine==0.5.0" --find-links ~/wheelhouse
-    # 或 pip install "physics-engine==0.5.0" --find-links ~/wheelhouse
+    uv add "physics-engine==0.6.0" --find-links ~/wheelhouse
+    # 或 pip install "physics-engine==0.6.0" --find-links ~/wheelhouse
 
-0.5.0是wheelhouse当前最新已发布版；源码中的0.6.0仍是本地候选，只能由消费方
-相对``vendor/``候选wheel验证，不得据源码版本号宣称wheelhouse已发布。
+0.6.0是wheelhouse当前最新已发布版；旧版字节永久共存，消费方必须钉精确版本并经
+自己的回归门升级，不能因wheelhouse出现新版本而被动漂移。
 
 **0.x语义**：仓库处于快速演进期（模块地图spec/01大半尚空），minor跳变可以
 破坏兼容。消费方必须**钉精确版本**并经自己的门禁自觉升级；升级永远不是
@@ -74,8 +74,8 @@
 **截面积分点有了两片，但边界要说清**（决策0059—0061）：矩形截面可从轴向应变与曲率
 得到逐点弹塑性应力，逐点塑性历史显式进`State`，并积分出轴力/弯矩、反解自由回弹。
 其中easy-axis曲率已由一个WDS式三节点/两边扭角站点生成，弯矩与一致切线进入全局
-`EnergyRegistry`/Newton；WDS另有默认关闭、准静态线弹性的本地单站采纳候选，但0.6.0
-尚未发布、候选未合入或过master门，轴向N也未进全局装配。
+`EnergyRegistry`/Newton；WDS另有默认关闭、准静态线弹性的本地单站采纳候选。0.6.0
+已经发布，但消费方候选在合入main并过其正式门之前仍不算迁移完成；轴向N也未进全局装配。
 积分点是本构/求积点，**不增加全局运动学未知量**；它们也不是S1.2所需的独立电磁场
 自由度。尚无整杆多站、hard-axis、截面翘曲、压扁、剪切/扭转或二维任意截面。
 

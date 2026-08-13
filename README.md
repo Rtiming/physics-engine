@@ -10,7 +10,9 @@ rtime的**物理引擎**：多域物理（力学、光学、电磁，将来热�
 （import、场景校验、quick/full验收与wheel体积的预算/实测正本都在
 `benchmarks/engine_budgets.baseline.json`，有门守着陈旧度，不在README复制易漂移墙钟）、
 功能操作不因宿主负载拒绝或变形、零设施假设是承诺。
-**wheel体积随版本记账不写死数**（正本`benchmarks/engine_budgets.baseline.json`）：0.5.0实测**193066字节**，是0.4.0的6.24倍——三个物理域进来了，而同期源码涨了7.88倍，**wheel涨得比源码慢**。0.6.0当前只是本地候选，未进入wheelhouse；此前写的"30KB离线装"在0.5.0已不成立，见spec/13第一条。
+**wheel体积随版本记账不写死数**（正本`benchmarks/engine_budgets.baseline.json`）：
+0.5.0实测193066字节；0.6.0正式wheel的体积与SHA随发布提交记入同一账本。此前写的
+"30KB离线装"在0.5.0已经不成立，见spec/13第一条。
 
 目标模块图与各能力现居地见[docs/spec/01_模块地图与域划分_v0.md](docs/spec/01_模块地图与域划分_v0.md)。
 仓内依赖图与产品级工程设计/计算平台拓扑要同时看：入口见
@@ -163,11 +165,11 @@ Blender、OCCT、Three.js、VTK等只是可替换适配器。四项目的
 
 ```bash
 git clone ts-orangepi:wheelhouse.git ~/wheelhouse   # 每台机器一次，更新=git pull
-uv add "physics-engine==0.5.0" --find-links ~/wheelhouse
+uv add "physics-engine==0.6.0" --find-links ~/wheelhouse
 ```
 
-上面是**最新已发布版**；0.6.0目前只在候选分支构建，不得从源码版本号外推成wheelhouse
-已经可装。正式发布后再同批更新这条安装命令。
+上面是**最新已发布版**。已发布版本在wheelhouse中永久共存；更新依赖时仍须钉精确版本
+并由消费方自己的回归门验证，不能仅因存在新版本就被动漂移。
 
 调用示例：
 
@@ -194,7 +196,7 @@ patch只含兼容修复且不回port；消费方钉精确版本、经自己门�
 ```python
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["physics-engine==0.5.0"]
+# dependencies = ["physics-engine==0.6.0"]
 # ///
 ```
 
