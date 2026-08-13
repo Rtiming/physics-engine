@@ -67,7 +67,9 @@ def test_verified_snapshot_roundtrips(tmp_path: Path):
 
 def test_mid_verify_mutation_is_rejected(tmp_path: Path, monkeypatch):
     (tmp_path / "a.json").write_bytes(b'{"a":1}')
-    (tmp_path / "b.json").write_bytes(b'{"b":2}')
+    target = tmp_path / "b.json"
+    target.write_bytes(b'{"b":2}')
+    target_before = provenance.file_signature(target.stat())
     original = provenance.read_protected_file
     state = {"fired": False}
 
@@ -75,7 +77,12 @@ def test_mid_verify_mutation_is_rejected(tmp_path: Path, monkeypatch):
         payload = original(path)
         if not state["fired"]:
             state["fired"] = True
-            os.utime(tmp_path / "b.json")  # 观察窗口内被人碰了一下
+            metadata = target.stat()
+            os.utime(
+                target,
+                ns=(metadata.st_atime_ns, metadata.st_mtime_ns + 2_000_000_000),
+            )
+            assert provenance.file_signature(target.stat()) != target_before
         return payload
 
     monkeypatch.setattr(provenance, "read_protected_file", mutate_then_read)
