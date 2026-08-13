@@ -12,12 +12,15 @@ import math
 import pytest
 
 from physics_engine.energies import (
+    DISSIPATION,
+    POTENTIAL,
     AxialStretch,
     DiscreteElasticBending,
     EnergyContext,
     EnergyError,
     EnergyRegistry,
     UniformGravity,
+    clamped_chain_bending_stencils,
 )
 from physics_engine.state import State, StateField, StateLayout
 
@@ -86,6 +89,82 @@ def test_a_zero_length_edge_is_refused_rather_than_guessed():
 def test_the_registry_refuses_duplicate_term_names():
     with pytest.raises(EnergyError, match="duplicate"):
         EnergyRegistry(terms=(UniformGravity(), UniformGravity()))
+
+
+def test_every_existing_energy_term_self_identifies_as_potential():
+    """阶段2标签门：既有五项不能靠注册表猜类型。"""
+
+    from physics_engine.energies import LinearBending, PointLoad
+
+    terms = (
+        UniformGravity(),
+        AxialStretch(edges=((0, 1, 1.0, 1.0),)),
+        LinearBending(stencils=clamped_chain_bending_stencils(3, 1.0, 1.0)),
+        DiscreteElasticBending(vertices=((0, 1, 2, 1.0, 1.0),)),
+        PointLoad(loads=((0, (1.0, 0.0, 0.0)),)),
+    )
+    assert {term.kind for term in terms} == {POTENTIAL}
+
+
+def test_the_registry_rejects_an_untyped_or_unknown_term():
+    """必须红：耗散与势能不能靠有没有``quantities``之类的鸭子猜。"""
+
+    class _Unknown:
+        name = "unknown"
+        kind = "maybe"
+
+    with pytest.raises(EnergyError, match="kind"):
+        EnergyRegistry(terms=(_Unknown(),))
+
+
+class _LinearDragForRegistryTest:
+    name = "linear_drag_for_test"
+    kind = DISSIPATION
+
+    def node_index_bound(self):
+        return 1
+
+    def force_and_power(self, state, velocity, context):
+        coefficient = 0.2  # N·s/mm
+        force = tuple(-coefficient * value for value in velocity)
+        power = coefficient * sum(value * value for value in velocity)
+        return force, power
+
+
+def test_mixing_dissipation_does_not_change_the_potential_sum_or_its_order():
+    """必须红：新增耗散项不得重排或改写既有势能求和的任何一位。"""
+
+    before = EnergyRegistry(terms=(UniformGravity(), STRETCH))
+    after = EnergyRegistry(terms=(UniformGravity(), _LinearDragForRegistryTest(), STRETCH))
+
+    assert after.order == ("uniform_gravity", "linear_drag_for_test", "axial_stretch")
+    assert after.total(STATE, CONTEXT, need_gradient=True, need_hessian=True) == before.total(
+        STATE, CONTEXT, need_gradient=True, need_hessian=True
+    )
+
+
+def test_dissipative_force_and_power_use_the_same_registry():
+    """耗散不生第二套注册表：同一实例既给动力学力，也给非负功率账。"""
+
+    layout = _layout(1)
+    context = EnergyContext(
+        context_id="context/drag", node_masses_kg=(2.0,),
+        gravity_mm_s2=(0.0, 0.0, 0.0),
+    )
+    registry = EnergyRegistry(terms=(UniformGravity(), _LinearDragForRegistryTest()))
+    x = (0.0, 0.0, 0.0)
+    v = (2.0, -3.0, 0.0)
+
+    acceleration = registry.acceleration(context, layout)(x, v, 0.0)
+    accounting = registry.dissipation_quantities(
+        State(layout=layout, vector=x), v, context
+    )
+
+    assert acceleration == pytest.approx((-200.0, 300.0, 0.0), rel=1e-15)
+    assert accounting.force_n == pytest.approx((-0.4, 0.6, 0.0), rel=1e-15)
+    assert accounting.rate_nmm_per_s == pytest.approx(2.6, rel=1e-15)
+    assert accounting.by_term == (("linear_drag_for_test", 2.6),)
+    assert registry.dissipation_rate(context, layout)(x, v, 0.0) == accounting.rate_nmm_per_s
 
 
 def test_an_empty_registry_is_refused():
@@ -1167,6 +1246,7 @@ def test_the_bridge_does_not_lean_on_the_gradient_being_zero_there():
         """一个**违规**的项：往锚点自由度上写梯度。只在本门里存在。"""
 
         name = "rogue"
+        kind = POTENTIAL
 
         def node_index_bound(self) -> int:
             return 0

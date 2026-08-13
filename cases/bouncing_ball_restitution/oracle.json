@@ -5,12 +5,12 @@
   "facet_version": "0.1",
   "generator": {
     "algorithm_id": "algorithm:oracle/bouncing_ball_restitution",
-    "algorithm_version": "1.0.0",
+    "algorithm_version": "2.0.0",
     "path_relative": "cases/bouncing_ball_restitution/generate_oracle.py",
-    "sha256": "96aeb66a1ff14cc088e03aa1c4ac2fd2ad8f61170a24e0d69d878f0389206de9"
+    "sha256": "d2e15daaa3cd1615e937214a81b754f02d65d6ddf3140c35f8504a9e75c12c24"
   },
   "load_tier": "interactive",
-  "manifest_self_sha256": "cba9183aeb96e030801b561fd2e01e3959cfb3d3a1f810f2ccd15226f951a808",
+  "manifest_self_sha256": "860704c4e850ef366acb185e7879063743fc635a3374272e09697d21da51c0fa",
   "oracles": [
     {
       "expected": {
@@ -141,7 +141,111 @@
           "rel": 0.0
         }
       }
+    },
+    {
+      "expected": {
+        "damping_ratio": 0.07435509709764057,
+        "dissipated_energy_nmm": 0.044999999999999984,
+        "energy_balance_residual_nmm": 0.0,
+        "force_zero_contact_duration_s": 3.00105251723611e-05,
+        "restitution": 0.8,
+        "stability_rate_per_s": 100000.0
+      },
+      "id": "oracle:bounce/restitution_damped_underdamped",
+      "inputs": {
+        "branch": "underdamped",
+        "incident_speed_mm_s": 500.0,
+        "kind": "damped_restitution",
+        "mass_kg": 0.001,
+        "steps_per_contact": 1000,
+        "stiffness_n_per_mm": 10000.0,
+        "target_restitution": 0.8
+      },
+      "tolerances": {
+        "damping_ratio": {
+          "abs": 0.0,
+          "reason": "生产侧与金标侧各自二分同一单调闭式，固定迭代次数；只留浮点噪声",
+          "rel": 2e-13
+        },
+        "dissipated_energy_nmm": {
+          "abs": 4e-05,
+          "reason": "解析账为K0(1-e²)；e的端点离散误差传播到该量，N=1000最坏约3.6e-5 N·mm，取4e-5",
+          "rel": 0.0
+        },
+        "energy_balance_residual_nmm": {
+          "abs": 3e-06,
+          "reason": "独立判初始机械能-末态机械能-积分耗散；N=1000两档最大1.20e-6 N·mm，取2.5倍余量",
+          "rel": 0.0
+        },
+        "force_zero_contact_duration_s": {
+          "abs": 0.0,
+          "reason": "事件只在步长端点观测，N=1000时天然约1e-3；取2倍余量",
+          "rel": 0.002
+        },
+        "restitution": {
+          "abs": 0.0002,
+          "reason": "N=1000实测e=0.8档偏1.78e-4、e=0.05档偏1.50e-4；按最坏值留约1.12倍，且两档跨过ζ=1",
+          "rel": 0.0
+        },
+        "stability_rate_per_s": {
+          "abs": 0.0,
+          "reason": "ζ≤1取ω0，ζ>1取快根；闭式对闭式，只留反解与sqrt舍入",
+          "rel": 2e-13
+        }
+      }
+    },
+    {
+      "expected": {
+        "damping_ratio": 1.9453461844077076,
+        "dissipated_energy_nmm": 0.1246875,
+        "energy_balance_residual_nmm": 0.0,
+        "force_zero_contact_duration_s": 1.5399481581043587e-05,
+        "restitution": 0.05,
+        "stability_rate_per_s": 361398.9878306925
+      },
+      "id": "oracle:bounce/restitution_damped_overdamped",
+      "inputs": {
+        "branch": "overdamped",
+        "incident_speed_mm_s": 500.0,
+        "kind": "damped_restitution",
+        "mass_kg": 0.001,
+        "steps_per_contact": 1000,
+        "stiffness_n_per_mm": 10000.0,
+        "target_restitution": 0.05
+      },
+      "tolerances": {
+        "damping_ratio": {
+          "abs": 0.0,
+          "reason": "生产侧与金标侧各自二分同一单调闭式，固定迭代次数；只留浮点噪声",
+          "rel": 2e-13
+        },
+        "dissipated_energy_nmm": {
+          "abs": 4e-05,
+          "reason": "解析账为K0(1-e²)；e的端点离散误差传播到该量，N=1000最坏约3.6e-5 N·mm，取4e-5",
+          "rel": 0.0
+        },
+        "energy_balance_residual_nmm": {
+          "abs": 3e-06,
+          "reason": "独立判初始机械能-末态机械能-积分耗散；N=1000两档最大1.20e-6 N·mm，取2.5倍余量",
+          "rel": 0.0
+        },
+        "force_zero_contact_duration_s": {
+          "abs": 0.0,
+          "reason": "事件只在步长端点观测，N=1000时天然约1e-3；取2倍余量",
+          "rel": 0.002
+        },
+        "restitution": {
+          "abs": 0.0002,
+          "reason": "N=1000实测e=0.8档偏1.78e-4、e=0.05档偏1.50e-4；按最坏值留约1.12倍，且两档跨过ζ=1",
+          "rel": 0.0
+        },
+        "stability_rate_per_s": {
+          "abs": 0.0,
+          "reason": "ζ≤1取ω0，ζ>1取快根；闭式对闭式，只留反解与sqrt舍入",
+          "rel": 2e-13
+        }
+      }
     }
   ],
-  "regenerated_by": null
+  "regenerated_by": "docs/decisions/0055_阶段2耗散装配与阻尼接触_20260813.md"
 }

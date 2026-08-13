@@ -1,0 +1,41 @@
+{
+  "case_id": "case/ten_ball_funnel",
+  "load_tier": "local_batch",
+  "parameters": {
+    "ball_count": 10,
+    "radius_mm": 2.0,
+    "mass_kg": 0.002,
+    "gravity_mm_s2": 9810.0,
+    "stiffness_n_per_mm": 10.0,
+    "wall_restitution": 0.3,
+    "sphere_restitution": 0.5,
+    "bottom_half_width_mm": 3.0,
+    "wall_slope_dx_per_dz": 0.5,
+    "steps_per_contact": 15,
+    "duration_s": 0.3,
+    "initial_centres_mm": [
+      [-6.6, 0.0, 24.0],
+      [-2.2, 0.0, 24.0],
+      [2.2, 0.0, 24.0],
+      [6.6, 0.0, 24.0],
+      [-4.4, 0.0, 29.0],
+      [0.0, 0.0, 29.0],
+      [4.4, 0.0, 29.0],
+      [-4.4, 0.0, 34.0],
+      [0.0, 0.0, 34.0],
+      [4.4, 0.0, 34.0]
+    ]
+  },
+  "criteria": {
+    "final_center_of_mass_z_mm_max": 10.0,
+    "final_rms_speed_mm_s_max": 1.0,
+    "max_plane_penetration_mm": 0.05,
+    "max_sphere_penetration_mm": 0.05,
+    "active_wall_contacts_min": 1,
+    "active_sphere_contacts_min": 1,
+    "dissipated_energy_nmm_min": 3.0,
+    "relative_energy_balance_residual_max": 0.02,
+    "out_of_plane_abs_mm_max": 1e-12
+  },
+  "why_these_are_thresholds_not_oracles": "十球多接触没有闭式末态；这里只判结构不变量、进入并留在漏斗、两类接触都真实出力、耗散为正和能量账在声明误差内。不得把本实现的逐位末态反抄成金标。"
+}

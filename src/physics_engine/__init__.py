@@ -29,12 +29,12 @@
 - `physics_engine.materials` —— 材料记录：多域字段+证据分级+单位边界（spec/14）
 - `physics_engine.oracles` —— oracle清单面：expected/tolerances/双哈希（轴7）
 - `physics_engine.state` —— 状态形制与打包次序契约（spec/12）
-- `physics_engine.integrate` —— 时间推进：三个积分器与五项出生声明（spec/12）
+- `physics_engine.integrate` —— 时间推进：四个平动积分器与耗散累计（spec/12）
 - `physics_engine.energies` —— 能量项四方法协议与五个能量项（spec/12第三节）
 - `physics_engine.solve` —— 准静态平衡：牛顿+回溯线搜索+带状求解（spec/12第4.1节）
 - `physics_engine.rigidbody` —— 刚体姿态与自由飞行（力学域，spec/12）
 - `physics_engine.contact` —— 接触：锚点布局、罚法向（半空间/球-球）、粘着弹簧、
-  库仑return-map、准静态步进器（力学域，决策0050）
+  库仑return-map、线性法向dashpot、准静态步进器（力学域，决策0050、0055）
 - `physics_engine.motion` —— 位姿时间线（spec/10 `MotionSource`）
 - `physics_engine.actuators` —— 驱动器声明层（spec/10 `Actuator`；**`apply`的物理未实现**）
 - `physics_engine.sensors` —— 传感器声明层（spec/10 `Sensor`）
@@ -48,15 +48,16 @@
 后者按用户六场景逐条写在`README.md`同名小节与`docs/plans/04`，
 **今天是0/6端到端**（同行C档13条标准案例6/13，两条分母必须并排报，见0048第二节）。
 
-`integrate`能推进二阶系统；`rigidbody`能推姿态与自由飞行
-（五个积分器`production_ready`全为`False`）。能量项有均匀重力、轴向拉伸、
+`integrate`能推进二阶系统并用独立入口累计声明的物理耗散；`rigidbody`能推姿态与自由飞行
+（六个积分器`production_ready`全为`False`）。能量项有均匀重力、轴向拉伸、
 小挠度弯曲、几何精确（DER）弯曲、点载荷；准静态平衡可解并可判是不是极小。
 光学与电磁**全是闭式解**——没有网格、没有复数场、没有FFT。
 
-**接触有了，但要说清有到哪**（决策0050，六片）：罚法向（半空间与球-球）、
-粘着弹簧、库仑return-map、准静态步进器；**多体接触成立**（球-球两端都是自由度）；
-锚点是**真历史**、写回状态。**瞬态接触也通了**（罚接触+显式积分，即DEM形制）。
-**仍缺**：网格窄相、恢复系数（缺一个dashpot）、载荷控制的真迭代、
+**接触有了，但要说清有到哪**（决策0050、0055）：罚法向（半空间与球-球）、
+粘着弹簧、库仑return-map、线性法向dashpot、准静态步进器；**多体接触成立**
+（球-球两端都是自由度）；锚点是**真历史**、写回状态。欠阻尼与过阻尼的单次碰撞、
+以及10球平面漏斗最小组合已走真实时间推进与耗散账。
+**仍缺**：网格窄相、动态检测到响应的接线、载荷控制失败后的真回退、
 接触体的**转动自由度**（今天是质点+半径，**没有力矩**，故多点接触无意义）。
 
 **没有隐式时间积分族、没有扭转、没有约束、没有跨域耦合

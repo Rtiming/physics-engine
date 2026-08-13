@@ -44,6 +44,7 @@ import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
+from zipfile import BadZipFile, ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -83,7 +84,13 @@ PROFILE_INTEGRATION_STEPS = 10
 PROFILE_TOP = 15
 
 
-def _time_subprocess(argv: list[str], repeat: int) -> dict[str, float]:
+class BenchmarkError(RuntimeError):
+    """测量链失效——这种失败不得被包装成一份正常的性能报告。"""
+
+
+def _time_subprocess(
+    argv: list[str], repeat: int, *, accepted_returncodes: tuple[int, ...] = (0,)
+) -> dict[str, float]:
     """冷进程计时：每次都是新解释器，取中位数与最小值。
 
     报最小值是有意的——最小值最接近"无干扰时的真实成本"，中位数受负载影响。
@@ -93,13 +100,86 @@ def _time_subprocess(argv: list[str], repeat: int) -> dict[str, float]:
     samples = []
     for _ in range(repeat):
         started = time.perf_counter()
-        subprocess.run(argv, cwd=ROOT, capture_output=True, check=False)
+        completed = subprocess.run(argv, cwd=ROOT, capture_output=True, check=False)
+        if completed.returncode not in accepted_returncodes:
+            stderr = completed.stderr.decode("utf-8", errors="replace").strip()
+            detail = f"; stderr={stderr!r}" if stderr else ""
+            raise BenchmarkError(
+                f"timed subprocess failed with exit code {completed.returncode}: "
+                f"{argv!r}{detail}"
+            )
         samples.append(time.perf_counter() - started)
     return {
         "median_s": round(statistics.median(samples), 4),
         "min_s": round(min(samples), 4),
         "max_s": round(max(samples), 4),
         "repeat": repeat,
+    }
+
+
+def _source_bytes(package_dir: Path) -> int:
+    """确定性源码体积：递归覆盖所有Python子包。
+
+    这必须与``tests/perf/test_budgets.py``和基线里的scope逐字同口径。
+    新物理域按spec/15放在子包里；只扫顶层会让增长恰好在最需要看见的地方隐身。
+    """
+
+    return sum(path.stat().st_size for path in sorted(package_dir.rglob("*.py")))
+
+
+def _current_wheel_record(dist_dir: Path, package_dir: Path) -> dict[str, object]:
+    """只把与当前源码树逐文件逐字节相同的wheel认作当前构建。
+
+    ``dist``是持久目录，文件名排序的“最后一个”既不能证明版本最新，也不能证明
+    wheel由当前HEAD构建。这里比较wheel内的Python文件集合与每个文件的原始字节；
+    任一处不同都只报告候选存在，不给它填``wheel_bytes``，避免旧产物冒充当前体积。
+    """
+
+    candidates = sorted(dist_dir.glob("*.whl")) if dist_dir.is_dir() else []
+    candidate_names = [path.name for path in candidates]
+    if not candidates:
+        return {
+            "wheel_bytes": None,
+            "wheel_name": None,
+            "wheel_status": "missing",
+            "wheel_candidates": candidate_names,
+        }
+
+    prefix = f"{package_dir.name}/"
+    source = {
+        f"{prefix}{path.relative_to(package_dir).as_posix()}": path.read_bytes()
+        for path in sorted(package_dir.rglob("*.py"))
+    }
+    #: 最后修改时间只决定“先检查谁”，**不参与当前性判据**；当前性只由上面的
+    #: 文件集合与字节对拍决定。名字用作相同mtime时的稳定tie-break。
+    newest_first = sorted(
+        candidates, key=lambda path: (path.stat().st_mtime_ns, path.name), reverse=True
+    )
+    for wheel in newest_first:
+        try:
+            with ZipFile(wheel) as archive:
+                wheel_names = {
+                    name for name in archive.namelist()
+                    if name.startswith(prefix) and name.endswith(".py")
+                }
+                if wheel_names != set(source):
+                    continue
+                if any(archive.read(name) != payload for name, payload in source.items()):
+                    continue
+        except (BadZipFile, KeyError, OSError):
+            continue
+        return {
+            "wheel_bytes": wheel.stat().st_size,
+            "wheel_name": wheel.name,
+            "wheel_status": "current",
+            "wheel_candidates": candidate_names,
+        }
+
+    return {
+        "wheel_bytes": None,
+        "wheel_name": None,
+        "wheel_status": "stale_or_invalid",
+        "wheel_candidates": candidate_names,
     }
 
 
@@ -482,10 +562,11 @@ def measure_physics(repeat: int, *, with_profile: bool) -> dict:
 
 def measure(repeat: int, *, with_physics: bool = True, with_profile: bool = True) -> dict:
     python = str(ROOT / ".venv/bin/python")
-    wheels = sorted((ROOT / "dist").glob("*.whl")) if (ROOT / "dist").is_dir() else []
-    source_bytes = sum(
-        path.stat().st_size for path in sorted((ROOT / "src/physics_engine").glob("*.py"))
-    )
+    package_dir = ROOT / "src/physics_engine"
+    deterministic = {
+        "source_bytes": _source_bytes(package_dir),
+        **_current_wheel_record(ROOT / "dist", package_dir),
+    }
     return {
         "facet": PERF_BASELINE_FACET,
         "facet_version": PERF_BASELINE_VERSION,
@@ -502,13 +583,11 @@ def measure(repeat: int, *, with_physics: bool = True, with_profile: bool = True
             "pe_scene_check_collisions": _time_subprocess(
                 [python, "-m", "physics_engine.cli", "check-collisions", str(EXAMPLE_SCENE)],
                 repeat,
+                #: CLI契约：0=无候选、1=有候选，二者都是一次成功查询；2才是非法输入。
+                accepted_returncodes=(0, 1),
             ),
         },
-        "deterministic": {
-            "source_bytes": source_bytes,
-            "wheel_bytes": wheels[-1].stat().st_size if wheels else None,
-            "wheel_name": wheels[-1].name if wheels else None,
-        },
+        "deterministic": deterministic,
     }
 
 
@@ -584,7 +663,10 @@ def main(argv: list[str] | None = None) -> int:
     for name, stats in report["wall_clock"].items():
         print(f"  {name}: median={stats['median_s']}s min={stats['min_s']}s")
     determ = report["deterministic"]
-    print(f"  source_bytes={determ['source_bytes']} wheel_bytes={determ['wheel_bytes']}")
+    print(
+        f"  source_bytes={determ['source_bytes']} wheel_bytes={determ['wheel_bytes']} "
+        f"wheel_status={determ['wheel_status']}"
+    )
     print(f"  load_average_1m={report['load_average_1m_at_start']}")
     if report["physics"] is not None:
         _print_physics(report["physics"])

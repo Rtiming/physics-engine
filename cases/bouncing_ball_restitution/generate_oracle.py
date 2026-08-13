@@ -47,7 +47,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from physics_engine.oracles import file_sha256, write_manifest  # noqa: E402
 
 ALGORITHM_ID = "algorithm:oracle/bouncing_ball_restitution"
-ALGORITHM_VERSION = "1.0.0"
+ALGORITHM_VERSION = "2.0.0"
 
 #: 单位：``k``是N/mm、``m``是kg、``v_in``是mm/s、半径是mm。
 STIFFNESS_N_PER_MM = 1.0e4
@@ -63,12 +63,103 @@ STIFFNESS_SWEEP_N_PER_MM = (1.0e3, 1.0e4, 1.0e5)
 #: 每次接触的步数档。plans/08实测2步时恢复系数1.1433（**大于1**）；
 #: 本仓2026-08-12实测20/200/2000步的`|e−1|`是2.5e-4 / 2.5e-7 / <1e-12。
 STEPS_PER_CONTACT_SWEEP = (20, 200, 2000)
+DAMPED_STEPS_PER_CONTACT = 1000
+DAMPED_TARGETS = (("underdamped", 0.8), ("overdamped", 0.05))
 
 
 def omega_rad_per_s(stiffness_n_per_mm: float, mass_kg: float) -> float:
     """``ω = sqrt(1000·k/m)``。那个1000是mm制与米制的接缝，见模块docstring。"""
 
     return math.sqrt(1000.0 * stiffness_n_per_mm / mass_kg)
+
+
+def contact_time_factor(damping_ratio: float) -> float:
+    """独立写在金标侧的``ω0·t_c``三段式；不import生产接触实现。"""
+
+    if damping_ratio == 1.0:
+        return 2.0
+    if damping_ratio < 1.0:
+        root = math.sqrt((1.0 - damping_ratio) * (1.0 + damping_ratio))
+        return 2.0 * math.acos(damping_ratio) / root
+    root = math.sqrt(damping_ratio - 1.0) * math.sqrt(damping_ratio + 1.0)
+    return 2.0 * math.acosh(damping_ratio) / root
+
+
+def restitution_of(damping_ratio: float) -> float:
+    return math.exp(-damping_ratio * contact_time_factor(damping_ratio))
+
+
+def damping_ratio_of(target: float) -> float:
+    lower, upper = 0.0, 1.0
+    while restitution_of(upper) > target:
+        upper *= 2.0
+    for _ in range(160):
+        middle = 0.5 * (lower + upper)
+        if restitution_of(middle) > target:
+            lower = middle
+        else:
+            upper = middle
+    return 0.5 * (lower + upper)
+
+
+def damped_oracle(branch: str, target: float) -> dict:
+    ratio = damping_ratio_of(target)
+    omega0 = omega_rad_per_s(STIFFNESS_N_PER_MM, MASS_KG)
+    duration = contact_time_factor(ratio) / omega0
+    if ratio <= 1.0:
+        stability_rate = omega0
+    else:
+        stability_rate = (ratio + math.sqrt(ratio * ratio - 1.0)) * omega0
+    initial_kinetic_nmm = 0.5 * MASS_KG * INCIDENT_SPEED_MM_S ** 2 / 1000.0
+    return {
+        "id": f"oracle:bounce/restitution_damped_{branch}",
+        "inputs": {
+            "kind": "damped_restitution",
+            "branch": branch,
+            "target_restitution": target,
+            "stiffness_n_per_mm": STIFFNESS_N_PER_MM,
+            "mass_kg": MASS_KG,
+            "incident_speed_mm_s": INCIDENT_SPEED_MM_S,
+            "steps_per_contact": DAMPED_STEPS_PER_CONTACT,
+        },
+        "expected": {
+            "damping_ratio": ratio,
+            "force_zero_contact_duration_s": duration,
+            "restitution": target,
+            "dissipated_energy_nmm": initial_kinetic_nmm * (1.0 - target * target),
+            "energy_balance_residual_nmm": 0.0,
+            "stability_rate_per_s": stability_rate,
+        },
+        "tolerances": {
+            "damping_ratio": {
+                "abs": 0.0, "rel": 2e-13,
+                "reason": "生产侧与金标侧各自二分同一单调闭式，固定迭代次数；只留浮点噪声",
+            },
+            "force_zero_contact_duration_s": {
+                "abs": 0.0, "rel": 2e-3,
+                "reason": "事件只在步长端点观测，N=1000时天然约1e-3；取2倍余量",
+            },
+            "restitution": {
+                "abs": 2e-4, "rel": 0.0,
+                "reason": "N=1000实测e=0.8档偏1.78e-4、e=0.05档偏1.50e-4；"
+                          "按最坏值留约1.12倍，且两档跨过ζ=1",
+            },
+            "dissipated_energy_nmm": {
+                "abs": 4e-5, "rel": 0.0,
+                "reason": "解析账为K0(1-e²)；e的端点离散误差传播到该量，"
+                          "N=1000最坏约3.6e-5 N·mm，取4e-5",
+            },
+            "energy_balance_residual_nmm": {
+                "abs": 3e-6, "rel": 0.0,
+                "reason": "独立判初始机械能-末态机械能-积分耗散；N=1000两档最大"
+                          "1.20e-6 N·mm，取2.5倍余量",
+            },
+            "stability_rate_per_s": {
+                "abs": 0.0, "rel": 2e-13,
+                "reason": "ζ≤1取ω0，ζ>1取快根；闭式对闭式，只留反解与sqrt舍入",
+            },
+        },
+    }
 
 
 def main() -> int:
@@ -204,6 +295,7 @@ def main() -> int:
             },
         },
     ]
+    oracles.extend(damped_oracle(branch, target) for branch, target in DAMPED_TARGETS)
 
     document = {
         "facet": "engine_oracle_manifest",
@@ -218,7 +310,7 @@ def main() -> int:
         },
         "oracles": oracles,
         "arrays": {},
-        "regenerated_by": None,
+        "regenerated_by": "docs/decisions/0055_阶段2耗散装配与阻尼接触_20260813.md",
     }
     written = write_manifest(HERE / "oracle.json", document, root=ROOT)
     print(f"wrote {len(oracles)} oracles, {len(written)} bytes")

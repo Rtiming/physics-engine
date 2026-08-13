@@ -22,7 +22,8 @@
 | [`mesh_asset_integrity`](mesh_asset_integrity/case.md) | `sha256(资产)==声明` 且 逐轴`declared_min≤true_min`、`declared_max≥true_max`，均零容差 | A | interactive | 3条 | `tests/cases/test_mesh_asset_integrity.py` |
 | [`ballistic_free_flight`](ballistic_free_flight/case.md) | 半隐式Euler误差恰为`+a·T·h/2`、显式恰为`−a·T·h/2`（**同幅反号，判据必须带符号**）；velocity Verlet对常加速度精确，rel<1e-12 | B | interactive | 9条 | `tests/cases/test_ballistic_free_flight.py` |
 | [`harmonic_oscillator`](harmonic_oscillator/case.md) | Verlet对`cos(ωT)`收敛比落在`[3.9,4.1]`（**不写死为4**）；漂移排序`explicit > symplectic > verlet`且三者先各自断非零 | B | interactive | 3条 | `tests/cases/test_harmonic_oscillator.py` |
-| [`bouncing_ball_restitution`](bouncing_ball_restitution/case.md) | **引擎第一条被声明的瞬态接触**（此前罚接触+显式积分跑得通是调研顺手测的，仓里没有判据守着）。三条闭式来自同一事实——罚接触期间是简谐半周期：`t_c = π/ω`（与入射速度无关）、`δ_max = v_in/ω`、无阻尼`e = 1`。**必红专防口径混用**：把`δ_max`写成准静态的`N/k`，刚度换一档比值从`sqrt(10)=3.162`跳到`10`当场红（plans/08实测k=1e5时两律差1010倍）。步长由`advise_step()`算不是魔数 | A | interactive | 6条 | `tests/cases/test_bouncing_ball_restitution.py` |
+| [`bouncing_ball_restitution`](bouncing_ball_restitution/case.md) | **引擎第一条被声明的瞬态接触**。无阻尼三条闭式守`t_c = π/ω`、`δ_max = v_in/ω`、`e = 1`；阶段2再以独立三段闭式跨`ζ=1`守欠阻尼`e=0.8`与过阻尼`e=0.05`，同时验合力归零时长、快根、物理耗散与能量账残差。**必红专防**把瞬态穿透写成准静态`N/k` | A | interactive | 7条 | `tests/cases/test_bouncing_ball_restitution.py` |
+| [`ten_ball_funnel`](ten_ball_funnel/case.md) | **10球最小漏斗组合**：三个解析平面、45个球对、30个球-面声明，真实走重力+两类罚接触+两类dashpot+耗散累计；只判质心/速度/穿透/两类接触/耗散/能量残差，不伪造十球轨迹oracle。接触对全量预声明，故只支撑场景③的partial | C | local_batch | `criteria.json` | `tests/cases/test_ten_ball_funnel.py` |
 | [`two_body_spring`](two_body_spring/case.md) | 拉伸能与重力能的闭式值；两体振动角频率`ω=sqrt(k/μ·1000)`（**1000倍单位bug的捕手**）；质心不动 | B | interactive | 3条 | `tests/cases/test_two_body_spring.py` |
 | [`cantilever_self_weight`](cantilever_self_weight/case.md) | 自重悬臂端点挠度对教科书闭式，**二阶收敛实测比恰为4.000**；牛顿一步收敛（二次能量） | B | interactive | 1条 | `tests/cases/test_cantilever_self_weight.py` |
 | [`axial_stretch_hessian`](axial_stretch_hessian/case.md) | 拉伸项梯度与Hessian对**精确有理算术**金标（`Fraction`二阶前向jet + 手推闭式，两条独立路径逐位相等）；**闭合决策0024第六节登记的缺口** | B | interactive | 6条 | `tests/cases/test_axial_stretch_hessian.py` |
@@ -43,12 +44,12 @@
 ## 一之二、每个案例穿过引擎的哪几层（决策0048第三节通则）
 
 **"验公式"与"验引擎"是两类，混在一个计数里计数就不再有意义。**
-本节是那条通则的执行面：23个案例按**穿过引擎哪几层**分类，**不按案例数报成绩**。
+本节是那条通则的执行面：24个案例按**穿过引擎哪几层**分类，**不按案例数报成绩**。
 
 | 穿过的层 | 条数 | 案例 |
 |---|---|---|
 | **`state`→`energies`→`solve`（整条路）** | **6** | `cantilever_self_weight`、`large_deflection_cantilever`、`euler_buckling`、**`incline_slide_threshold`（第一条带接触的）**、**`friction_hysteresis_loop`（第一条改写历史的）**、**`three_sphere_pyramid`（第一条多体接触的）** |
-| `state`→`energies`→`integrate` | **2** | `two_body_spring`、**`bouncing_ball_restitution`（第一条瞬态接触的）** |
+| `state`→`energies`→`integrate` | **3** | `two_body_spring`、**`bouncing_ball_restitution`（第一条瞬态阻尼接触）**、**`ten_ball_funnel`（第一条10球耗散组合）** |
 | `state`→`integrate`（不碰能量装配与求解器） | 3 | `ballistic_free_flight`、`harmonic_oscillator`、`rigid_body_free_flight` |
 | `energies`协议层（梯度与Hessian，不求解） | 1 | `axial_stretch_hessian` |
 | **闭式计算器（不碰引擎的任何一层）** | **5** | `scalar_diffraction_airy`、`fts_instrument_line_shape`、`two_beam_interference`、`mutual_inductance_coaxial`、`norris_thin_strip` |
@@ -59,7 +60,8 @@
 我们自己0029那条只对一半）。**但它们证明的是"这个公式我们抄对了"，
 不是"这个引擎算得对"。**
 
-真正锻炼引擎机械的是第一行那6条，其中**三条带接触**（静置阈值、历史迟滞、多体金字塔），另外三条都是梁。**新增案例时先问它落在哪一行**——
+真正锻炼引擎机械的是前两行那9条，其中**五条带接触**（静置阈值、历史迟滞、
+多体金字塔、单次弹跳、十球漏斗）。**新增案例时先问它落在哪一行**——
 若又是一条闭式计算器，它可以进仓，但**不许被算进"引擎能力"那本账**。
 
 ## 二、案例页六必填字段（缺一即红）
@@ -118,6 +120,9 @@ FEBio的`acceptChanges.py`是这条闭环的出处，本仓的加强是"决策�
 | **主｜用户六场景端到端**（[plans/04](../docs/plans/04_真实使用场景与能力差距_20260805.md)） | 算不算得了**我们要算的** | **0/6** |
 | 从｜同行C档13条标准案例（research/05第2.3节） | 算得**对不对** | **6/13**（逐条重数，见决策0049第十节；此前长期报7是多算了一条） |
 
+主分母的逐位机械计数当前为**11/42**，每场景位数`7/5/10/7/6/7`已由0057冻结；
+它不是加权完成度，正本只在`docs/capability_ledger.json`。
+
 **只报后者是恭维自己。** 0040当初选同行案例当分母的理由
 （"用别人的题当分母，比自己出题自己打分诚实"）**当时是对的**——
 但那是在**还不知道引擎要用来算什么**的时候定的。用户随后给出六个真实场景，
@@ -132,13 +137,14 @@ FEBio的`acceptChanges.py`是这条闭环的出处，本仓的加强是"决策�
 第10条艾里斑（`scalar_diffraction_airy`）、第11条FTS仪器线型与第12条Norton-Beer
 （同在`fts_instrument_line_shape`内，**一个案例文件顶两条C档**）。
 
-**缺7条**（其中**第7条与第8条各做了一半**）：第4条Timoshenko悬臂（缺剪切刚度）、
+**缺7条**（其中**第7、8、9条各做了一部分**）：第4条Timoshenko悬臂（缺剪切刚度）、
 第5条Michell失稳与第6条局部螺旋屈曲（缺扭转）、
 **第8条斜面滑动阈值`incline_slide_threshold`已过，但该条还含无滑滚球**——
 要转动自由度参与接触，故**按半条记、分母仍算6**（0050后续片才补齐）；
 **第7条三球金字塔`three_sphere_pyramid`已过定性判据**，但Chrono原版**所有接触都有摩擦**（静不定），
 本仓做的是球-球无摩擦的**静定变体**（才有闭式μc）——**同样按半条记**；
-第9条恢复系数（**此前写「要隐式积分族」，已推翻**——DEM就是罚接触+显式积分，本仓三个显式积分器与能量→加速度的桥都在，无阻尼弹跳`e=1`已实测跑通；**真正缺的只是一个dashpot**，见plans/08阶段2）、
+第9条恢复系数的**单次阻尼碰撞已跨欠阻尼/过阻尼跑通**，但同行题还要求
+带重力的连续弹跳总时长，故仍为partial、不进分子；
 第13条变换层自洽三件套（缺复数场与FFT）。各自缺的能力见决策0040第二、三节。
 
 **上表其余案例不计入分母**——它们验的是"我们自己的实现有没有内部错误"
@@ -147,7 +153,6 @@ FEBio的`acceptChanges.py`是这条闭环的出处，本仓的加强是"决策�
 `peer_fcl_distance`是特例：同行库对拍、判据强度高，但它验的是几何查询不是物理求解，
 所以归门不归分母。
 
-`rigid_body_free_flight`同样**不计入分母**（决策0043第九节）：它的判据来自
-research/05第**2.2**节的B档，而分母划的是第2.3节的C档。
-**但它的判据强度是第一节表里的第1档（解析闭式，Drake `free_body` + 四家独立实现的
-Dzhanibekov）**——分母要不要按"判据强度"划而不是按"哪一节"划，是一次待裁的口径决定。
+`rigid_body_free_flight`同样**不计入C档分母**（决策0057）：它的判据来自
+research/05第**2.2**节B档，而C档13条固定来自第2.3节；但它仍计入主分母S3.1，
+因为自由刚体飞行确实是用户场景③的前置能力。判据强不等于可以自行扩写外部分母。

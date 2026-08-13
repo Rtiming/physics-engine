@@ -74,6 +74,18 @@ SCHEMA = "capability_ledger/1"
 #: 六个场景的正本编号（plans/04与plans/05的①—⑥）。**分母的骨架，改它要走决策记录。**
 SCENARIO_IDS: tuple[str, ...] = ("S1", "S2", "S3", "S4", "S5", "S6")
 
+#: 0057经第二次人工语义复核后冻结的主分母骨架。冻结**每场景位数**而不只冻总数，
+#: 否则从S1删一位、给S3添一位仍可保持42，却已经换了一套口径。
+#: 新能力可以改变状态，不可静默拆位/并位；确需改口径先写后续决策记录再改这里。
+FROZEN_SCENARIO_BIT_COUNTS: dict[str, int] = {
+    "S1": 7,
+    "S2": 5,
+    "S3": 10,
+    "S4": 7,
+    "S5": 6,
+    "S6": 7,
+}
+
 #: 同行C档的条数。外部给定（research/05第2.3节，0040第二节点名的13条），
 #: **不是我们自己划的及格线**——所以它是常数，不是清单里数出来的。
 PEER_TIER_C_COUNT = 13
@@ -353,6 +365,13 @@ def assert_ids_are_structural(ledger: Ledger) -> int:
             "SCENARIO_SET",
             f"场景集合必须恰好是{list(SCENARIO_IDS)}且按序，拿到"
             f"{[scenario.id for scenario in ledger.scenarios]}",
+        )
+    measured_counts = {scenario.id: len(scenario.bits) for scenario in ledger.scenarios}
+    if measured_counts != FROZEN_SCENARIO_BIT_COUNTS:
+        raise LedgerError(
+            "FROZEN_MAIN_DENOMINATOR",
+            f"主分母骨架已由0057冻结为{FROZEN_SCENARIO_BIT_COUNTS}（合计42位），"
+            f"拿到{measured_counts}——新增能力改状态，拆位/并位须先走后续决策记录",
         )
     seen = 0
     for scenario in ledger.scenarios:

@@ -30,6 +30,8 @@ Vector = tuple[float, ...]
 #: （两个后端都用元组调它）——所以今天加速档只向量化积分器自己的算术。
 #: 这是有意的诚实边界：真正值得加速的是能量装配，那随内核搬迁进来时再谈。
 Acceleration = Callable[[Vector, Vector, float], Sequence[float]]
+#: 物理耗散率回调，单位N·mm/s；返回值必须有限且非负。
+DissipationRate = Callable[[Vector, Vector, float], float]
 
 
 class IntegrateError(ValueError):
@@ -161,6 +163,18 @@ class Integrator:
                    tuple[Vector, Vector]]
 
 
+@dataclass(frozen=True)
+class DissipativeIntegrationResult:
+    """带物理耗散账的推进结果；旧``integrate``三元组保持原样。"""
+
+    x: Vector
+    v: Vector
+    t_s: float
+    #: 按端点梯形求积累计的物理耗散，单位N·mm。它不掩盖算法误差；
+    #: 调用方仍应以``初始机械能-末态机械能-本值``检查数值残差。
+    dissipated_energy_nmm: float
+
+
 def _explicit_euler_step(x, v, t, h, acceleration, ops):
     a = ops.load(acceleration(x, v, t))
     xv, vv = ops.load(x), ops.load(v)
@@ -186,6 +200,24 @@ def _velocity_verlet_step(x, v, t, h, acceleration, ops):
     next_x = ops.add(ops.add(xv, ops.scale(h, vv)), ops.scale(0.5 * h * h, a0))
     next_x_t = ops.dump(next_x)
     a1 = ops.load(acceleration(next_x_t, ops.dump(vv), t + h))
+    next_v = ops.add(vv, ops.scale(0.5 * h, ops.add(a0, a1)))
+    return next_x_t, ops.dump(next_v)
+
+
+def _velocity_verlet_damped_step(x, v, t, h, acceleration, ops):
+    """速度Verlet的显式预测-校正扩展，速度相关加速度下保持二阶。
+
+    位置预测仍是``x + hv + h²a/2``；末端加速度使用一阶速度预测
+    ``v* = v + ha``。当加速度与速度无关时，预测速度不参与求值，运算退化为
+    原``velocity_verlet``的同一串公式；原积分器对象与注册名仍保持不动。
+    """
+
+    a0 = ops.load(acceleration(x, v, t))
+    xv, vv = ops.load(x), ops.load(v)
+    next_x = ops.add(ops.add(xv, ops.scale(h, vv)), ops.scale(0.5 * h * h, a0))
+    next_x_t = ops.dump(next_x)
+    predicted_v = ops.add(vv, ops.scale(h, a0))
+    a1 = ops.load(acceleration(next_x_t, ops.dump(predicted_v), t + h))
     next_v = ops.add(vv, ops.scale(0.5 * h, ops.add(a0, a1)))
     return next_x_t, ops.dump(next_v)
 
@@ -260,9 +292,45 @@ VELOCITY_VERLET = Integrator(
     step=_velocity_verlet_step,
 )
 
+VELOCITY_VERLET_DAMPED = Integrator(
+    declaration=IntegratorDeclaration(
+        name="velocity_verlet_damped",
+        scope_excludes=(
+            "不管刚性约束、不做碰撞时刻定位、不做自适应拒步；"
+            "用于速度相关耗散力时必须同时接耗散记账与步长顾问"
+        ),
+        formal_order=2,
+        measured_order=(
+            "2（本仓2026-08-13在ζ=0.2线性阻尼振子上实测，步长减半位置误差比"
+            "4.036/4.018/4.009）"
+        ),
+        stability="explicit_conditional",
+        step_bound=(
+            "全阻尼范围的保守稳定界h·ω_fast < 1；最紧点ζ=1在本仓实测"
+            "h·ω0=0.995衰减、1.005发散。ζ>1的ω_fast取"
+            "(ζ+sqrt(ζ²−1))·ω0；接触分辨界另由实际接触时长/N给出。"
+            "用advise_step()算，不要从本字符串抄数"
+        ),
+        dissipation_accounting=(
+            "物理耗散由integrate_with_dissipation按耗散率端点梯形累计；"
+            "算法截断误差不冒充物理耗散，须另查机械能平衡残差"
+        ),
+        failure_ladder="无自适应拒步；非有限或负耗散率立即失败关闭",
+        production_ready=False,
+        #: ζ=1是ζ∈[0,∞)按ω_fast归一后的最紧点；测试在1两侧实跑。
+        oscillatory_step_coefficient=1.0,
+    ),
+    step=_velocity_verlet_damped_step,
+)
+
 INTEGRATORS: dict[str, Integrator] = {
     integrator.declaration.name: integrator
-    for integrator in (EXPLICIT_EULER, SYMPLECTIC_EULER, VELOCITY_VERLET)
+    for integrator in (
+        EXPLICIT_EULER,
+        SYMPLECTIC_EULER,
+        VELOCITY_VERLET,
+        VELOCITY_VERLET_DAMPED,
+    )
 }
 
 
@@ -325,6 +393,8 @@ class StepAdvice:
     binding: Literal["stability", "contact_resolution"]
     steps_per_contact: int
     omega_max_rad_per_s: float
+    #: 分辨界使用的接触时长；无显式传入时沿用无阻尼``π/ω_max``。
+    contact_duration_s: float
     #: 建议值相对稳定界的倍数——用来一眼看出"离爆掉还有多远"。
     stability_margin: float
 
@@ -334,6 +404,7 @@ def advise_step(
     *,
     oscillatory_step_coefficient: float,
     steps_per_contact: int = DEFAULT_STEPS_PER_CONTACT,
+    contact_duration_s: float | None = None,
 ) -> StepAdvice:
     """把`step_bound`那个**字符串**变成可计算的数。
 
@@ -379,9 +450,20 @@ def advise_step(
             "— 低于这个数不只是不准，是定性错：plans/08实测2步/接触时"
             "恢复系数1.1433（理论1），**大于1**，积分误差把能量喂进了碰撞"
         )
+    if contact_duration_s is not None and (
+        not math.isfinite(contact_duration_s) or contact_duration_s <= 0.0
+    ):
+        raise IntegrateError(
+            f"contact_duration_s must be finite and positive, got {contact_duration_s!r}"
+        )
 
     stability = oscillatory_step_coefficient / omega_max_rad_per_s
-    resolution = math.pi / (steps_per_contact * omega_max_rad_per_s)
+    duration = (
+        contact_duration_s
+        if contact_duration_s is not None
+        else math.pi / omega_max_rad_per_s
+    )
+    resolution = duration / steps_per_contact
     advised = min(stability, resolution)
     return StepAdvice(
         stability_bound_s=stability,
@@ -390,6 +472,7 @@ def advise_step(
         binding="stability" if stability <= resolution else "contact_resolution",
         steps_per_contact=steps_per_contact,
         omega_max_rad_per_s=omega_max_rad_per_s,
+        contact_duration_s=duration,
         stability_margin=advised / stability,
     )
 
@@ -439,13 +522,67 @@ def integrate(
     return x, v, t
 
 
+def integrate_with_dissipation(
+    integrator: Integrator,
+    *,
+    x0: Sequence[float],
+    v0: Sequence[float],
+    dt_s: float,
+    steps: int,
+    acceleration: Acceleration,
+    dissipation_rate: DissipationRate,
+    t0_s: float = 0.0,
+    ops: VectorOps | None = None,
+) -> DissipativeIntegrationResult:
+    """推进并累计**物理**耗散，旧``integrate``的返回形制一个字节不动。
+
+    耗散率在每步两端求值并作梯形积分。它与二阶状态推进同阶；但接触启停有分段
+    光滑点，调用方仍须报告能量平衡残差，不能把本数当作“算法绝对守恒”的证明。
+    """
+
+    if steps < 0:
+        raise IntegrateError("steps must be nonnegative")
+    if not (dt_s > 0.0):
+        raise IntegrateError("dt_s must be positive — 零步长不是不动，是没有定义")
+    if len(x0) != len(v0):
+        raise IntegrateError("x0 and v0 must have the same length")
+
+    backend = ops or default_ops()
+    x = tuple(float(value) for value in x0)
+    v = tuple(float(value) for value in v0)
+    t = t0_s
+    dissipated = 0.0
+    if steps == 0:
+        return DissipativeIntegrationResult(x, v, t, dissipated)
+
+    def checked_rate(at_x: Vector, at_v: Vector, at_t: float) -> float:
+        rate = float(dissipation_rate(at_x, at_v, at_t))
+        if not math.isfinite(rate) or rate < 0.0:
+            raise IntegrateError(
+                f"dissipation rate must be finite and nonnegative, got {rate!r}"
+            )
+        return rate
+
+    rate0 = checked_rate(x, v, t)
+    for _ in range(steps):
+        next_x, next_v = integrator.step(x, v, t, dt_s, acceleration, backend)
+        next_t = t + dt_s
+        rate1 = checked_rate(next_x, next_v, next_t)
+        dissipated += 0.5 * dt_s * (rate0 + rate1)
+        x, v, t, rate0 = next_x, next_v, next_t, rate1
+    return DissipativeIntegrationResult(x, v, t, dissipated)
+
+
 __all__ = [
     "DEFAULT_STEPS_PER_CONTACT",
     "EXPLICIT_EULER",
     "INTEGRATORS",
     "SYMPLECTIC_EULER",
     "VELOCITY_VERLET",
+    "VELOCITY_VERLET_DAMPED",
     "Acceleration",
+    "DissipationRate",
+    "DissipativeIntegrationResult",
     "IntegrateError",
     "Integrator",
     "IntegratorDeclaration",
@@ -459,4 +596,5 @@ __all__ = [
     "advise_step",
     "default_ops",
     "integrate",
+    "integrate_with_dissipation",
 ]

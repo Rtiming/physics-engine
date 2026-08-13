@@ -233,14 +233,13 @@
         {
           "id": "S3.8",
           "label": "恢复系数与碰撞耗散",
-          "status": "partial",
+          "status": "done",
           "exercises_physics": true,
           "evidence": [
             "case:bouncing_ball_restitution",
-            "test:tests/cases/test_bouncing_ball_restitution.py::test_undamped_restitution_is_one"
+            "test:tests/cases/test_bouncing_ball_restitution.py::test_damped_restitution_and_energy_accounting_cross_the_critical_branch"
           ],
-          "why": "无阻尼那一端已经是被声明的能力：保守力场下e=1，且它与入射速度无关（罚接触期间是简谐半周期）。",
-          "missing": "**e<1的任何情形一个字都没验**——线性弹簧-阻尼器的dashpot未实现（plans/08阶段2）。约定已由0052第一节裁为**截断**（判据是合力归零不是重叠归零），代价两条：反解式不能照抄同行三家、可声明的e有下界exp(−2)=0.1353。案例页第六节自己写明「不验阻尼、不验恢复系数小于1的任何情形」。"
+          "why": "0055落地线性法向dashpot、合力归零截断与物理耗散账；同一真路径以e=0.8（欠阻尼）和e=0.05（过阻尼）跨ζ=1对独立三段闭式，恢复系数、接触时长、快根和能量账均有门。接口覆盖全部有限范围0<e≤1，research/15已证明exp(−2)只是ζ=1连接值而非下界。"
         },
         {
           "id": "S3.9",
@@ -258,11 +257,14 @@
         {
           "id": "S3.10",
           "label": "漏斗容器与多体落料",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": true,
-          "evidence": [],
-          "why": "这是场景③本身——前九位都做完了，还要有一个漏斗和一把料。",
-          "missing": "plans/08阶段3才做「平面围成的漏斗+一个球」，0052第七节裁定先用10—20个球、落在哪一级就报哪一级。**把那个报成「场景③做完了」是虚报**——0052第二节立本清单的直接理由。"
+          "evidence": [
+            "case:ten_ball_funnel",
+            "test:tests/cases/test_ten_ball_funnel.py::test_wall_and_ball_ball_response_are_both_exercised"
+          ],
+          "why": "0052裁定的10—20球最小规模已兑现：三个解析平面围成V形漏斗，10个球、30个球-面声明与45个球对在同一次重力+damping时间推进中运行；两类接触都真实出力，质心下降、末态静置、耗散和能量残差均有门。",
+          "missing": "仍不是场景③端到端：球是质点+半径，无不规则网格窄相、质量属性、转动/滚动/摩擦；45个球对全对全预声明，broad/narrow不驱动响应，规模是10而非512。故只报partial。"
         }
       ]
     },
@@ -579,7 +581,7 @@
         "test:tests/cases/test_three_sphere_pyramid.py::test_the_static_decomposition_matches_the_closed_form"
       ],
       "why": "定性判据（只改μ、一边撑住一边塌）零容差复现，静力分解F=W/√3、N=3W/2、T=W/(2√3)。",
-      "missing": "Chrono原版**所有接触都有摩擦**（静不定）；本仓做的是球-球无摩擦的**静定变体**，闭式μc=1/(3√3)是本变体的。含力矩平衡的刚体解疑似静定且μc=2−√3（本变体那个数的1.392倍），**本仓未独立复核**。案例页第六节自己写明「不是C档第7条的完整兑现，按半条记不进位」。"
+      "missing": "Chrono原版**所有接触都有摩擦**；本仓案例仍是球-球无摩擦的静定变体，闭式μc=1/(3√3)只属于该变体。research/15已独立重推含力矩平衡的全粘着支并得到μc=2−√3，但该数学尚未由转动接触自由度与案例兑现；因此仍按partial，不进位。"
     },
     {
       "index": 8,
@@ -606,10 +608,10 @@
       "exercises_physics": true,
       "evidence": [
         "case:bouncing_ball_restitution",
-        "test:tests/cases/test_bouncing_ball_restitution.py::test_max_penetration_matches_the_transient_amplitude"
+        "test:tests/cases/test_bouncing_ball_restitution.py::test_damped_restitution_and_energy_accounting_cross_the_critical_branch"
       ],
-      "why": "2026-08-12轨道A落地`bouncing_ball_restitution`：瞬态罚接触的三条闭式（t_c=π/ω、δ_max=v_in/ω、无阻尼e=1），并带一条专防口径混用的必红——把δ_max写成准静态的N/k，刚度换一档比值从sqrt(10)=3.162跳到10当场红。",
-      "missing": "**判据的两半都还没到**：`e' == e`要求e<1，而阻尼一个字没验；总弹跳时间闭式要重力，而案例把重力刻意设为零（带重力时「e与入射速度无关」不再成立）。案例页第六节自己写明「它不是弹跳球，它是一次撞击」「从本案例推不出任何关于连续多次弹跳的结论」。research/13第六节另记：罚接触下存在临界入射速度，低于它接触不结束，「弹跳次数无穷」不可达，拿总弹跳时间当判据要写明这条截断。"
+      "why": "`e' == e`这一半已兑现：0055以e=0.8与e=0.05跨欠/过阻尼走state→energies→dashpot→二阶速度相关积分→耗散账真路径，对独立三段闭式；无阻尼三条判据与口径混用必红继续保留。",
+      "missing": "总弹跳时间闭式那一半仍未做：现案例重力刻意为零，只验一次碰撞。带重力时e对入射速度不再严格常量；罚接触还存在低速不分离阈值，连续几何级数必须声明终止规则。因此C9仍为partial，不进位。"
     },
     {
       "index": 10,

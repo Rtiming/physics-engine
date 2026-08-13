@@ -24,7 +24,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import ClassVar, Literal, Protocol
 
 from physics_engine.state import State, StateLayout
 
@@ -38,6 +38,10 @@ Matrix = tuple[tuple[float, ...], ...]
 #: 状态是mm制，所以从力算加速度时必须乘它。写成有名字的常量而不是字面量1000，
 #: 是因为一个裸的1000在半年后没人认得出它是单位换算还是某个物理系数。
 MM_PER_M = 1000.0
+
+POTENTIAL = "potential"
+DISSIPATION = "dissipation"
+TermKind = Literal["potential", "dissipation"]
 
 
 class EnergyError(ValueError):
@@ -127,6 +131,7 @@ class EnergyTerm(Protocol):
     """四方法协议（形制采WDS `model/energies.py:43`的`EnergyTerm`）。"""
 
     name: str
+    kind: Literal["potential"]
 
     def node_index_bound(self) -> int:
         """本项索引到的**最大节点号+1**；不按索引取节点的项返回0。
@@ -161,6 +166,21 @@ class EnergyTerm(Protocol):
         ...
 
 
+class DissipationTerm(Protocol):
+    """速度相关、没有势函数的项；力与耗散率必须由同一次求值给出。"""
+
+    name: str
+    kind: Literal["dissipation"]
+
+    def node_index_bound(self) -> int: ...
+
+    def force_and_power(
+        self, state: State, velocity: Sequence[float], context: EnergyContext
+    ) -> tuple[Vector, float]:
+        """返回``(广义力N, 非负耗散率N·mm/s)``。"""
+        ...
+
+
 def _zeros(n: int) -> list[float]:
     return [0.0] * n
 
@@ -188,6 +208,7 @@ class UniformGravity:
     """
 
     name = "uniform_gravity"
+    kind: ClassVar[Literal["potential"]] = POTENTIAL
 
     def node_index_bound(self) -> int:
         """0——本项不按索引点名节点，它作用在**上下文说有多少就是多少**个节点上。"""
@@ -275,6 +296,7 @@ class PointLoad:
     """
 
     name: str = "point_load"
+    kind: ClassVar[Literal["potential"]] = POTENTIAL
     #: 载荷：(节点索引, (Fx, Fy, Fz) 单位N)。同一节点**不许出现两次**——
     #: 两条同节点载荷该由调用方自己合并，库不替它猜求和次序（浮点加法不结合）。
     loads: tuple[tuple[int, tuple[float, float, float]], ...] = ()
@@ -386,6 +408,7 @@ class AxialStretch:
     """
 
     name: str = "axial_stretch"
+    kind: ClassVar[Literal["potential"]] = POTENTIAL
     #: 边：(节点i, 节点j, 静止长度mm, 轴向刚度EA_n)
     edges: tuple[tuple[int, int, float, float], ...] = ()
 
@@ -549,6 +572,7 @@ class LinearBending:
     """
 
     name: str = "linear_bending"
+    kind: ClassVar[Literal["potential"]] = POTENTIAL
     #: 模板：((节点索引, 系数), ...)、标度（含EI、ℓ³与求积权）、仿射偏置（3矢量）
     stencils: tuple[
         tuple[tuple[tuple[int, float], ...], float, tuple[float, float, float]], ...
@@ -726,6 +750,7 @@ class DiscreteElasticBending:
     """
 
     name: str = "discrete_elastic_bending"
+    kind: ClassVar[Literal["potential"]] = POTENTIAL
     #: 顶点：(左节点, 中节点, 右节点, 弯曲刚度EI_nmm2, 参考Voronoi长度ℓ_mm)
     vertices: tuple[tuple[int, int, int, float, float], ...] = ()
 
@@ -981,6 +1006,15 @@ def clamped_chain_bending_vertices(
 
 
 @dataclass(frozen=True)
+class DissipationQuantities:
+    """同一注册表一次耗散求值的力与账，次序与注册次序一致。"""
+
+    force_n: Vector
+    rate_nmm_per_s: float
+    by_term: tuple[tuple[str, float], ...]
+
+
+@dataclass(frozen=True)
 class EnergyRegistry:
     """注册表：``enabled``显式、**求和次序固定**（spec/12第3.3节）。
 
@@ -988,11 +1022,17 @@ class EnergyRegistry:
     不是"字典恰好这么排"。
     """
 
-    terms: tuple[EnergyTerm, ...]
+    terms: tuple[EnergyTerm | DissipationTerm, ...]
 
     def __post_init__(self) -> None:
         if not self.terms:
             raise EnergyError("an energy registry needs at least one enabled term")
+        for term in self.terms:
+            if getattr(term, "kind", None) not in (POTENTIAL, DISSIPATION):
+                raise EnergyError(
+                    f"term {getattr(term, 'name', '<unnamed>')!r} must declare kind as "
+                    f"{POTENTIAL!r} or {DISSIPATION!r}"
+                )
         names = [term.name for term in self.terms]
         duplicates = sorted({name for name in names if names.count(name) > 1})
         if duplicates:
@@ -1036,6 +1076,8 @@ class EnergyRegistry:
         gradient = _zeros(n) if need_gradient else None
         hessian = _zero_matrix(n) if need_hessian else None
         for term in self.terms:  # 次序即声明次序，不排序、不并行
+            if term.kind == DISSIPATION:
+                continue
             term_energy, term_gradient, term_hessian = term.quantities(
                 state, context, need_gradient=need_gradient, need_hessian=need_hessian
             )
@@ -1070,6 +1112,8 @@ class EnergyRegistry:
         self.assert_within_nodes(state, context)
         accumulated: dict[tuple[int, int], float] = {}
         for term in self.terms:
+            if term.kind == DISSIPATION:
+                continue
             per_term: dict[tuple[int, int], float] = {}
             for row, column, value in term.hessian_entries(state, context):
                 key = (row, column)
@@ -1077,6 +1121,53 @@ class EnergyRegistry:
             for key, value in per_term.items():
                 accumulated[key] = accumulated.get(key, 0.0) + value
         return accumulated
+
+    def dissipation_quantities(
+        self,
+        state: State,
+        velocity: Sequence[float],
+        context: EnergyContext,
+    ) -> DissipationQuantities:
+        """从**同一个注册表**按声明次序装配耗散力与非负功率账。"""
+
+        self.assert_within_nodes(state, context)
+        if len(velocity) != len(state.vector):
+            raise EnergyError("velocity and state vector must have the same length")
+        force = _zeros(len(state.vector))
+        rate = 0.0
+        by_term: list[tuple[str, float]] = []
+        for term in self.terms:
+            if term.kind == POTENTIAL:
+                continue
+            term_force, term_rate = term.force_and_power(state, velocity, context)
+            if len(term_force) != len(state.vector):
+                raise EnergyError(
+                    f"dissipation term {term.name!r} returned {len(term_force)} forces "
+                    f"for a {len(state.vector)}-dof state"
+                )
+            if not math.isfinite(term_rate) or term_rate < 0.0:
+                raise EnergyError(
+                    f"dissipation term {term.name!r} returned a nonphysical rate "
+                    f"{term_rate!r} N·mm/s"
+                )
+            if not all(math.isfinite(value) for value in term_force):
+                raise EnergyError(
+                    f"dissipation term {term.name!r} returned a non-finite force"
+                )
+            for index, value in enumerate(term_force):
+                force[index] += value
+            rate += term_rate
+            by_term.append((term.name, term_rate))
+        return DissipationQuantities(tuple(force), rate, tuple(by_term))
+
+    def dissipation_rate(self, context: EnergyContext, layout: StateLayout):
+        """接``integrate_with_dissipation``的耗散率回调。"""
+
+        def rate_of(x: Sequence[float], v: Sequence[float], t: float) -> float:
+            state = State(layout=layout, vector=tuple(x))
+            return self.dissipation_quantities(state, v, context).rate_nmm_per_s
+
+        return rate_of
 
     def acceleration(self, context: EnergyContext, layout: StateLayout):
         """把能量梯度变成加速度回调，接`integrate`——**这是内核与积分器的接缝**。
@@ -1108,14 +1199,27 @@ class EnergyRegistry:
         那道门守着），而这里是同一条纪律在积分侧的另一半。
         """
 
+        has_dissipation = any(term.kind == DISSIPATION for term in self.terms)
+
         def acceleration_of(x: Sequence[float], v: Sequence[float], t: float):
             state = State(layout=layout, vector=tuple(x))
             node_count = resolve_node_count(state, context)
             _, gradient, _ = self.total(state, context, need_gradient=True)
             assert gradient is not None
             node_dof = 3 * node_count
+            if not has_dissipation:
+                #: 原保守路径保持原表达式与求值次序，既有轨迹逐字节不变。
+                return tuple(
+                    -gradient[index] / context.node_masses_kg[index // 3] * MM_PER_M
+                    if index < node_dof
+                    else 0.0
+                    for index in range(len(gradient))
+                )
+            damping = self.dissipation_quantities(state, v, context).force_n
             return tuple(
-                -gradient[index] / context.node_masses_kg[index // 3] * MM_PER_M
+                (-gradient[index] + damping[index])
+                / context.node_masses_kg[index // 3]
+                * MM_PER_M
                 if index < node_dof
                 else 0.0
                 for index in range(len(gradient))
@@ -1126,7 +1230,10 @@ class EnergyRegistry:
 
 __all__ = [
     "AxialStretch",
+    "DISSIPATION",
     "DiscreteElasticBending",
+    "DissipationQuantities",
+    "DissipationTerm",
     "LinearBending",
     "EnergyContext",
     "EnergyError",
@@ -1134,6 +1241,8 @@ __all__ = [
     "EnergyTerm",
     "Matrix",
     "PointLoad",
+    "POTENTIAL",
+    "TermKind",
     "UniformGravity",
     "Vector",
     "clamped_chain_bending_stencils",

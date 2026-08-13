@@ -364,6 +364,19 @@ def test_a_bit_id_that_does_not_match_its_position_is_red(tmp_path):
     _expect_red("BIT_ID_SHAPE", _mutated(tmp_path, lambda data: _bit(data, "S3.4").update(id="S3.9")))
 
 
+def test_the_frozen_main_denominator_cannot_be_shrunk_by_merging_bits(tmp_path):
+    """**必须红**。注错方式：删掉S1最后一位并让剩余位号仍然连续。
+
+    旧门只守连号，因此把两项语义合并后删掉末位会静默把42改成41。
+    0057冻结的是**每个场景的位数**，修改必须先走新的决策记录。
+    """
+
+    _expect_red(
+        "FROZEN_MAIN_DENOMINATOR",
+        _mutated(tmp_path, lambda data: data["scenarios"][0]["bits"].pop()),
+    )
+
+
 def test_the_peer_tier_denominator_cannot_be_quietly_resized(tmp_path):
     """**必红**。注错方式：把C档第4条的条号也改成13，于是1—13不再各一次。
 

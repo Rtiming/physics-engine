@@ -14,11 +14,14 @@ from physics_engine.integrate import (
     INTEGRATORS,
     SYMPLECTIC_EULER,
     VELOCITY_VERLET,
+    VELOCITY_VERLET_DAMPED,
+    DissipativeIntegrationResult,
     IntegrateError,
     IntegratorDeclaration,
     PurePythonOps,
     default_ops,
     integrate,
+    integrate_with_dissipation,
 )
 
 _COMPLETE = {
@@ -80,6 +83,106 @@ def test_the_two_euler_variants_differ_only_in_update_order():
     assert EXPLICIT_EULER.declaration.stability == "explicit_conditional"
     assert SYMPLECTIC_EULER.declaration.stability == "symplectic"
     assert VELOCITY_VERLET.declaration.formal_order == 2
+
+
+def test_the_velocity_dependent_integrator_measures_second_order_under_damping():
+    """阶段2主门：速度相关力下误差缩放必须趋近4，而不是只在声明里写“二阶”。"""
+
+    damping_ratio = 0.2
+    omega = 3.0
+    duration = 1.0
+    damped_omega = omega * math.sqrt(1.0 - damping_ratio * damping_ratio)
+    exact_x = math.exp(-damping_ratio * omega * duration) * (
+        math.cos(damped_omega * duration)
+        + damping_ratio / math.sqrt(1.0 - damping_ratio * damping_ratio)
+        * math.sin(damped_omega * duration)
+    )
+
+    errors = []
+    for steps in (50, 100, 200, 400):
+        x, _, _ = integrate(
+            VELOCITY_VERLET_DAMPED,
+            x0=(1.0,),
+            v0=(0.0,),
+            dt_s=duration / steps,
+            steps=steps,
+            acceleration=lambda x, v, t: (
+                -omega * omega * x[0] - 2.0 * damping_ratio * omega * v[0],
+            ),
+        )
+        errors.append(abs(x[0] - exact_x))
+
+    ratios = [
+        coarse / fine for coarse, fine in zip(errors[:-1], errors[1:], strict=True)
+    ]
+    assert all(3.8 < ratio < 4.3 for ratio in ratios), (
+        f"速度相关力下没有实测到二阶：errors={errors}, ratios={ratios}"
+    )
+
+
+def test_the_damped_integrator_does_not_replace_the_old_undamped_route():
+    """必须红：新积分器只能新增；把``velocity_verlet``映射偷偷换掉会立即红。"""
+
+    assert INTEGRATORS["velocity_verlet"] is VELOCITY_VERLET
+    assert INTEGRATORS["velocity_verlet_damped"] is VELOCITY_VERLET_DAMPED
+    assert VELOCITY_VERLET_DAMPED is not VELOCITY_VERLET
+
+
+def test_the_global_damped_stability_coefficient_is_measured_at_critical_damping():
+    """ζ=1是全阻尼范围最紧点：``h·ω0=1``内稳、越过即爆。"""
+
+    coefficient = VELOCITY_VERLET_DAMPED.declaration.oscillatory_step_coefficient
+    assert coefficient == 1.0
+
+    def final_norm(h_omega: float) -> float:
+        x, v, _ = integrate(
+            VELOCITY_VERLET_DAMPED,
+            x0=(1.0,),
+            v0=(0.0,),
+            dt_s=h_omega,
+            steps=1000,
+            acceleration=lambda x, v, t: (-x[0] - 2.0 * v[0],),
+        )
+        return x[0] * x[0] + v[0] * v[0]
+
+    assert final_norm(0.995 * coefficient) < 1.0
+    assert final_norm(1.005 * coefficient) > 1.0e6
+
+
+def test_physical_dissipation_is_integrated_and_returned_without_changing_integrate():
+    """耗散记账是新返回形制；旧``integrate``三元组保持不变。"""
+
+    result = integrate_with_dissipation(
+        VELOCITY_VERLET_DAMPED,
+        x0=(0.0,),
+        v0=(2.0,),
+        dt_s=0.01,
+        steps=10,
+        acceleration=lambda x, v, t: (0.0,),
+        dissipation_rate=lambda x, v, t: 3.0,
+    )
+    assert isinstance(result, DissipativeIntegrationResult)
+    assert result.x == pytest.approx((0.2,), rel=1e-15)
+    assert result.v == (2.0,)
+    assert result.t_s == pytest.approx(0.1, rel=1e-15)
+    assert result.dissipated_energy_nmm == pytest.approx(0.3, rel=1e-15)
+    assert len(integrate(
+        VELOCITY_VERLET, x0=(0.0,), v0=(0.0,), dt_s=0.1, steps=1,
+        acceleration=lambda x, v, t: (0.0,),
+    )) == 3
+
+
+@pytest.mark.parametrize("bad_rate", [-1.0, float("nan"), float("inf")])
+def test_dissipation_accounting_fails_closed_on_nonphysical_rates(bad_rate):
+    """必须红：负耗散或非有限耗散不能被静默累计成一份貌似正常的账。"""
+
+    with pytest.raises(IntegrateError, match="dissipation rate"):
+        integrate_with_dissipation(
+            VELOCITY_VERLET_DAMPED,
+            x0=(0.0,), v0=(0.0,), dt_s=0.1, steps=1,
+            acceleration=lambda x, v, t: (0.0,),
+            dissipation_rate=lambda x, v, t: bad_rate,
+        )
 
 
 @pytest.mark.parametrize(
@@ -216,6 +319,30 @@ def test_contact_resolution_is_the_binding_bound_not_stability():
     advice = advise_step(1000.0, oscillatory_step_coefficient=VERLET_COEFFICIENT)
     assert advice.binding == "contact_resolution"
     assert advice.contact_resolution_bound_s < advice.stability_bound_s
+
+
+def test_damped_contact_can_supply_its_actual_force_zero_duration():
+    """阻尼接触不再假装持续π/ω；分辨界必须按三段闭式给出的真实时长。"""
+
+    advice = advise_step(
+        1000.0,
+        oscillatory_step_coefficient=1.0,
+        steps_per_contact=20,
+        contact_duration_s=0.004,
+    )
+    assert advice.contact_duration_s == 0.004
+    assert advice.contact_resolution_bound_s == pytest.approx(0.004 / 20, rel=1e-15)
+    assert advice.advised_step_s == advice.contact_resolution_bound_s
+
+
+@pytest.mark.parametrize("duration", [0.0, -1.0, float("nan"), float("inf")])
+def test_advisor_fails_closed_on_bad_contact_duration(duration):
+    with pytest.raises(IntegrateError, match="contact_duration_s"):
+        advise_step(
+            1000.0,
+            oscillatory_step_coefficient=1.0,
+            contact_duration_s=duration,
+        )
 
 
 def test_stability_margin_is_pi_over_two_n():

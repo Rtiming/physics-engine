@@ -19,14 +19,25 @@ from pathlib import Path
 
 import pytest
 
-from physics_engine.contact import PenaltyNormalContact
+from physics_engine.contact import (
+    LinearNormalDashpot,
+    PenaltyNormalContact,
+    linear_dashpot_parameters,
+)
 from physics_engine.energies import EnergyContext, EnergyRegistry
-from physics_engine.integrate import INTEGRATORS, advise_step, integrate
-from physics_engine.state import StateField, StateLayout
+from physics_engine.integrate import (
+    INTEGRATORS,
+    advise_step,
+    integrate,
+    integrate_with_dissipation,
+)
+from physics_engine.state import State, StateField, StateLayout
 
 CASE_DIR = Path(__file__).resolve().parents[2] / "cases" / "bouncing_ball_restitution"
 VERLET = INTEGRATORS["velocity_verlet"]
 COEFFICIENT = VERLET.declaration.oscillatory_step_coefficient
+DAMPED_VERLET = INTEGRATORS["velocity_verlet_damped"]
+DAMPED_COEFFICIENT = DAMPED_VERLET.declaration.oscillatory_step_coefficient
 
 
 @pytest.fixture(scope="module")
@@ -105,6 +116,93 @@ def _bounce(
     )
 
 
+def _damped_bounce(
+    *,
+    stiffness_n_per_mm: float,
+    mass_kg: float,
+    incident_speed_mm_s: float,
+    target_restitution: float,
+    steps_per_contact: int,
+) -> dict:
+    """走真实dashpot路径，返回恢复系数、合力归零时刻与耗散账。"""
+
+    layout = StateLayout(
+        layout_id="layout/bouncing_ball_restitution_damped",
+        fields=(
+            StateField("node0_x_mm", 1),
+            StateField("node0_y_mm", 1),
+            StateField("node0_z_mm", 1),
+        ),
+    )
+    parameters = linear_dashpot_parameters(
+        stiffness_n_per_mm=stiffness_n_per_mm,
+        effective_mass_kg=mass_kg,
+        restitution=target_restitution,
+    )
+    plane = (0, (0.0, 0.0, 0.0), (0.0, 0.0, 1.0), stiffness_n_per_mm, 0.0)
+    spring = PenaltyNormalContact(planes=(plane,))
+    dashpot = LinearNormalDashpot(
+        planes=((
+            plane[0], plane[1], plane[2], plane[3],
+            parameters.damping_n_s_per_mm, plane[4],
+        ),)
+    )
+    registry = EnergyRegistry(terms=(spring, dashpot))
+    context = EnergyContext(
+        context_id="context/bouncing_ball_restitution_damped",
+        node_masses_kg=(mass_kg,),
+    )
+    acceleration = registry.acceleration(context, layout)
+    dissipation_rate = registry.dissipation_rate(context, layout)
+    advice = advise_step(
+        parameters.stability_rate_per_s,
+        oscillatory_step_coefficient=DAMPED_COEFFICIENT,
+        steps_per_contact=steps_per_contact,
+        contact_duration_s=parameters.contact_duration_s,
+    )
+
+    x = (0.0, 0.0, 0.0)
+    v = (0.0, 0.0, -incident_speed_mm_s)
+    t = 0.0
+    dissipated = 0.0
+    force_zero_time = None
+    for _ in range(6 * steps_per_contact):
+        result = integrate_with_dissipation(
+            DAMPED_VERLET,
+            x0=x,
+            v0=v,
+            dt_s=advice.advised_step_s,
+            steps=1,
+            acceleration=acceleration,
+            dissipation_rate=dissipation_rate,
+            t0_s=t,
+        )
+        x, v, t = result.x, result.v, result.t_s
+        dissipated += result.dissipated_energy_nmm
+        state = State(layout=layout, vector=x)
+        spring_force = spring.normal_force_n(state)[0]
+        damping_force = dashpot.force_and_power(state, v, context)[0][2]
+        total_force = spring_force + damping_force
+        if force_zero_time is None and x[2] < 0.0 and v[2] > 0.0 and total_force == 0.0:
+            force_zero_time = t
+        if x[2] >= 0.0 and t > 0.0:
+            initial_kinetic = 0.5 * mass_kg * incident_speed_mm_s ** 2 / 1000.0
+            final_kinetic = 0.5 * mass_kg * v[2] ** 2 / 1000.0
+            assert force_zero_time is not None, "物体离开重叠区前从未出现合力归零事件"
+            return {
+                "damping_ratio": parameters.damping_ratio,
+                "force_zero_contact_duration_s": force_zero_time,
+                "restitution": v[2] / incident_speed_mm_s,
+                "dissipated_energy_nmm": dissipated,
+                "energy_balance_residual_nmm": initial_kinetic - final_kinetic - dissipated,
+                "stability_rate_per_s": parameters.stability_rate_per_s,
+            }
+    raise AssertionError(
+        f"阻尼碰撞在{6 * steps_per_contact}步内没有离开重叠区——"
+        "这不是慢，是步长或合力归零截断失效"
+    )
+
+
 def test_contact_duration_matches_the_half_period(oracle):
     """判据A1：`t_c = π/ω`。**与入射速度无关**——那是简谐半周期的性质。"""
 
@@ -154,6 +252,39 @@ def test_undamped_restitution_is_one(oracle):
     assert measured["restitution"] == pytest.approx(
         expected["restitution"], abs=_tol(entry, "restitution")["abs"]
     )
+
+
+@pytest.mark.parametrize(
+    "oracle_id",
+    [
+        "oracle:bounce/restitution_damped_underdamped",
+        "oracle:bounce/restitution_damped_overdamped",
+    ],
+)
+def test_damped_restitution_and_energy_accounting_cross_the_critical_branch(
+    oracle, oracle_id
+):
+    """阶段2主判据：同一真路径跨ζ=1验e、合力归零时长、快根与耗散闭账。"""
+
+    entry = oracle[oracle_id]
+    inputs, expected = entry["inputs"], entry["expected"]
+    measured = _damped_bounce(
+        stiffness_n_per_mm=inputs["stiffness_n_per_mm"],
+        mass_kg=inputs["mass_kg"],
+        incident_speed_mm_s=inputs["incident_speed_mm_s"],
+        target_restitution=inputs["target_restitution"],
+        steps_per_contact=inputs["steps_per_contact"],
+    )
+    for key, value in expected.items():
+        tolerance = _tol(entry, key)
+        assert measured[key] == pytest.approx(
+            value, rel=tolerance["rel"], abs=tolerance["abs"]
+        ), f"{oracle_id}的{key}：measured={measured[key]!r}, expected={value!r}"
+
+    if inputs["branch"] == "underdamped":
+        assert measured["damping_ratio"] < 1.0
+    else:
+        assert measured["damping_ratio"] > 1.0
 
 
 def test_restitution_error_shrinks_monotonically_with_steps_per_contact(oracle):
