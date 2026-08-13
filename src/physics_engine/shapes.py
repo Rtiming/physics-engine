@@ -250,6 +250,12 @@ class PosedBody:
         """旋转后取八角点包盒——保守，供broad phase。"""
 
         (lx, ly, lz), (hx, hy, hz) = self.body.collision.shape.local_aabb_mm()
+        if self.rotation_xyzw == (0.0, 0.0, 0.0, 1.0):
+            translation = self.translation_mm
+            return (
+                (lx + translation[0], ly + translation[1], lz + translation[2]),
+                (hx + translation[0], hy + translation[1], hz + translation[2]),
+            )
         x, y, z, w = self.rotation_xyzw
         rows = (
             (1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)),

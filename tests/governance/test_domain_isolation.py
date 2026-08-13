@@ -75,10 +75,18 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
     #: `contact`归力学（2026-08-05，决策0050）：它import `state`（力学）与
     #: `energies`（力学，取`EnergyContext`做质量表比对）——**没有一条边越到别的域**。
     #: 判据仍是0035那条：**import决定环，不是愿望决定环**。
-    #: 它今天**不**import `scene`（基座）——0050第一节写明声明由调用方给，
-    #: 接`FinalizedScene`要等第一个既走装配又走求解的案例。
+    #: `contact_pipeline`归力学（2026-08-13，决策0058）：它是第一个既走场景装配
+    #: 又走求解的消费层，从基座的`scene`/`collision`/`shapes`单向取候选与检测结果，
+    #: 再调用力学域`contact`/`energies`/`state`；依赖仍只向下，没有基座反向import它。
     "mechanics": (
-        "contact", "energies", "integrate", "rigidbody", "sensors", "solve", "state",
+        "contact",
+        "contact_pipeline",
+        "energies",
+        "integrate",
+        "rigidbody",
+        "sensors",
+        "solve",
+        "state",
     ),
     "optics": ("optics",),
     #: 第三个物理域（决策0041第三节预登记；0042互感、0047超导薄带两块落地）。

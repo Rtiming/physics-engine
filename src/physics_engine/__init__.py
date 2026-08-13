@@ -35,6 +35,8 @@
 - `physics_engine.rigidbody` —— 刚体姿态与自由飞行（力学域，spec/12）
 - `physics_engine.contact` —— 接触：锚点布局、罚法向（半空间/球-球）、粘着弹簧、
   库仑return-map、线性法向dashpot、准静态步进器（力学域，决策0050、0055）
+- `physics_engine.contact_pipeline` —— 动态球-球接触整合层：场景候选、碰撞窄相、
+  罚势与dashpot响应（力学域，决策0058）
 - `physics_engine.motion` —— 位姿时间线（spec/10 `MotionSource`）
 - `physics_engine.actuators` —— 驱动器声明层（spec/10 `Actuator`；**`apply`的物理未实现**）
 - `physics_engine.sensors` —— 传感器声明层（spec/10 `Sensor`）
@@ -57,7 +59,8 @@
 粘着弹簧、库仑return-map、线性法向dashpot、准静态步进器；**多体接触成立**
 （球-球两端都是自由度）；锚点是**真历史**、写回状态。欠阻尼与过阻尼的单次碰撞、
 以及10球平面漏斗最小组合已走真实时间推进与耗散账。
-**仍缺**：网格窄相、动态检测到响应的接线、载荷控制失败后的真回退、
+十球案例的球-球响应已由场景候选经过broad/narrow动态检测驱动；解析平面仍直接
+进入既有接触项。**仍缺**：网格窄相、空间索引、载荷控制失败后的真回退、
 接触体的**转动自由度**（今天是质点+半径，**没有力矩**，故多点接触无意义）。
 
 **没有隐式时间积分族、没有扭转、没有约束、没有跨域耦合

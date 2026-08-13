@@ -33,9 +33,10 @@
     "max_sphere_penetration_mm": 0.05,
     "active_wall_contacts_min": 1,
     "active_sphere_contacts_min": 1,
+    "sphere_candidate_pair_count": 45,
     "dissipated_energy_nmm_min": 3.0,
     "relative_energy_balance_residual_max": 0.02,
     "out_of_plane_abs_mm_max": 1e-12
   },
-  "why_these_are_thresholds_not_oracles": "十球多接触没有闭式末态；这里只判结构不变量、进入并留在漏斗、两类接触都真实出力、耗散为正和能量账在声明误差内。不得把本实现的逐位末态反抄成金标。"
+  "why_these_are_thresholds_not_oracles": "十球多接触没有闭式末态；这里只判结构不变量、进入并留在漏斗、动态检测确实把45个候选裁成活动子集、两类接触都真实出力、耗散为正和能量账在声明误差内。不得把本实现的逐位末态反抄成金标。"
 }

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from physics_engine.collision import BroadPhaseCollisionQuery
+from physics_engine.collision import BroadPhaseCollisionQuery, CollisionQueryResult
 from physics_engine.shapes import (
     CollisionShape,
     FiniteCylinder,
@@ -174,3 +174,165 @@ def test_rotated_body_keeps_a_conservative_world_aabb():
     (low, high) = rotated.world_aabb_mm()
     assert low[0] == pytest.approx(-10.0 * math.sqrt(2), rel=1e-9) or low[0] <= -10.0
     assert high[0] >= 10.0
+
+
+def test_identity_pose_aabb_avoids_the_general_rotation_path(monkeypatch):
+    """必须红：单位位姿不得为8个角点重复做通用旋转求和。"""
+
+    import physics_engine.shapes as shapes_module
+
+    posed = PosedBody(
+        SimBody(
+            body_id="body/identity_sphere",
+            collision=CollisionShape(Sphere(radius_mm=2.0), "fitted"),
+        ),
+        translation_mm=(3.0, -4.0, 5.0),
+    )
+    builtin_sum = sum
+    calls = 0
+
+    def counted_sum(values, start=0):
+        nonlocal calls
+        calls += 1
+        return builtin_sum(values, start)
+
+    monkeypatch.setattr(shapes_module, "sum", counted_sum, raising=False)
+    assert posed.world_aabb_mm() == ((1.0, -6.0, 3.0), (5.0, -2.0, 7.0))
+    assert calls == 0
+
+
+def _posed_sphere(body_id: str, x_mm: float) -> PosedBody:
+    return PosedBody(
+        SimBody(
+            body_id=body_id,
+            collision=CollisionShape(Sphere(radius_mm=1.0), "fitted"),
+        ),
+        translation_mm=(x_mm, 0.0, 0.0),
+    )
+
+
+def test_sphere_narrow_phase_uses_translation_as_the_exact_centre(monkeypatch):
+    """必须红：球心与姿态无关，不得为零局部点调用通用位姿变换。"""
+
+    bodies = (_posed_sphere("body/a", 0.0), _posed_sphere("body/b", 1.5))
+
+    def forbidden_transform(*_args, **_kwargs):
+        raise AssertionError("sphere centre must come directly from translation_mm")
+
+    monkeypatch.setattr(PosedBody, "transform_point_mm", forbidden_transform)
+    result = BroadPhaseCollisionQuery(bodies).check_state_with_stats()
+    assert result.events[0].penetration_mm == pytest.approx(0.5)
+
+
+def test_declared_candidates_preserve_order_and_only_those_pairs_are_queried():
+    """必红：活跃对必须来自显式候选池，不能偷偷退回全体两两。"""
+
+    bodies = (
+        _posed_sphere("body/a", 0.0),
+        _posed_sphere("body/b", 0.5),
+        _posed_sphere("body/c", 1.0),
+    )
+    query = BroadPhaseCollisionQuery(
+        bodies,
+        candidate_pairs=(("body/c", "body/a"), ("body/a", "body/b")),
+    )
+    result = query.check_state_with_stats()
+    assert isinstance(result, CollisionQueryResult)
+    assert [(event.body_a, event.body_b) for event in result.events] == [
+        ("body/c", "body/a"),
+        ("body/a", "body/b"),
+    ]
+    assert result.candidate_pair_count == 2
+    assert result.broad_phase_overlap_count == 2
+    assert result.narrow_phase_check_count == 2
+
+
+def test_narrow_geometry_is_prepared_once_per_body(monkeypatch):
+    """必须红：一个体参与多对候选时，世界系窄相几何每帧只准备一次。"""
+
+    import physics_engine.collision as collision_module
+
+    bodies = (
+        _posed_sphere("body/a", 0.0),
+        _posed_sphere("body/b", 0.5),
+        _posed_sphere("body/c", 1.0),
+    )
+    original = collision_module._as_world_segment
+    calls: list[str] = []
+
+    def counted(posed):
+        calls.append(posed.body.body_id)
+        return original(posed)
+
+    monkeypatch.setattr(collision_module, "_as_world_segment", counted)
+    result = BroadPhaseCollisionQuery(bodies).check_state_with_stats()
+    assert len(result.events) == 3
+    assert calls == ["body/a", "body/b", "body/c"]
+
+
+def test_broad_phase_culled_bodies_do_not_prepare_narrow_geometry(monkeypatch):
+    """必须红：没有AABB重叠时，稀疏场景不得白做窄相几何准备。"""
+
+    import physics_engine.collision as collision_module
+
+    bodies = (_posed_sphere("body/a", 0.0), _posed_sphere("body/b", 10.0))
+
+    def forbidden(_posed):
+        raise AssertionError("broad-phase miss must not prepare narrow geometry")
+
+    monkeypatch.setattr(collision_module, "_as_world_segment", forbidden)
+    result = BroadPhaseCollisionQuery(bodies).check_state_with_stats()
+    assert result.events == ()
+    assert result.broad_phase_overlap_count == 0
+    assert result.narrow_phase_check_count == 0
+
+
+def test_every_overlapping_declared_sphere_pair_reaches_the_narrow_phase():
+    """必红：声明池里的真重叠对漏掉一个，动态响应就会静默少一股力。"""
+
+    bodies = (
+        _posed_sphere("body/a", 0.0),
+        _posed_sphere("body/b", 1.5),
+        _posed_sphere("body/c", 8.0),
+    )
+    result = BroadPhaseCollisionQuery(
+        bodies,
+        candidate_pairs=(("body/a", "body/b"), ("body/b", "body/c")),
+    ).check_state_with_stats()
+    assert [(event.body_a, event.body_b) for event in result.events] == [
+        ("body/a", "body/b")
+    ]
+    assert result.candidate_pair_count == 2
+    assert result.broad_phase_overlap_count == 1
+    assert result.narrow_phase_check_count == 1
+    assert result.events[0].penetration_mm == pytest.approx(0.5)
+
+
+@pytest.mark.parametrize(
+    ("candidate_pairs", "allowed_pairs", "message"),
+    [
+        (((1, "body/ghost"),), frozenset(), "nonempty string"),
+        ((("body/a", "body/ghost"),), frozenset(), "unknown bodies"),
+        ((("body/a", "body/a"),), frozenset(), "distinct bodies"),
+        (
+            (("body/a", "body/b"), ("body/b", "body/a")),
+            frozenset(),
+            "declared twice",
+        ),
+        (
+            (("body/a", "body/b"),),
+            frozenset({frozenset(("body/a", "body/b"))}),
+            "both a candidate and an allowed pair",
+        ),
+    ],
+)
+def test_invalid_candidate_pools_fail_closed(candidate_pairs, allowed_pairs, message):
+    """五条构造期必红：坏ID、未知、自对、反序重复、与allowed矛盾。"""
+
+    bodies = (_posed_sphere("body/a", 0.0), _posed_sphere("body/b", 1.0))
+    with pytest.raises(ShapeError, match=message):
+        BroadPhaseCollisionQuery(
+            bodies,
+            candidate_pairs=candidate_pairs,
+            allowed_pairs=allowed_pairs,
+        )

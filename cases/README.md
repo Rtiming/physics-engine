@@ -23,7 +23,7 @@
 | [`ballistic_free_flight`](ballistic_free_flight/case.md) | 半隐式Euler误差恰为`+a·T·h/2`、显式恰为`−a·T·h/2`（**同幅反号，判据必须带符号**）；velocity Verlet对常加速度精确，rel<1e-12 | B | interactive | 9条 | `tests/cases/test_ballistic_free_flight.py` |
 | [`harmonic_oscillator`](harmonic_oscillator/case.md) | Verlet对`cos(ωT)`收敛比落在`[3.9,4.1]`（**不写死为4**）；漂移排序`explicit > symplectic > verlet`且三者先各自断非零 | B | interactive | 3条 | `tests/cases/test_harmonic_oscillator.py` |
 | [`bouncing_ball_restitution`](bouncing_ball_restitution/case.md) | **引擎第一条被声明的瞬态接触**。无阻尼三条闭式守`t_c = π/ω`、`δ_max = v_in/ω`、`e = 1`；阶段2再以独立三段闭式跨`ζ=1`守欠阻尼`e=0.8`与过阻尼`e=0.05`，同时验合力归零时长、快根、物理耗散与能量账残差。**必红专防**把瞬态穿透写成准静态`N/k` | A | interactive | 7条 | `tests/cases/test_bouncing_ball_restitution.py` |
-| [`ten_ball_funnel`](ten_ball_funnel/case.md) | **10球最小漏斗组合**：三个解析平面、45个球对、30个球-面声明，真实走重力+两类罚接触+两类dashpot+耗散累计；只判质心/速度/穿透/两类接触/耗散/能量残差，不伪造十球轨迹oracle。接触对全量预声明，故只支撑场景③的partial | C | local_batch | `criteria.json` | `tests/cases/test_ten_ball_funnel.py` |
+| [`ten_ball_funnel`](ten_ball_funnel/case.md) | **10球最小漏斗组合**：45个场景候选逐帧走球体broad/narrow，只有活动对进入罚势与dashpot；三个解析平面、重力与耗散账同跑。只判质心/速度/穿透/动态裁剪/两类接触/耗散/能量残差，不伪造十球轨迹oracle。候选仍全量预声明、平面未进流水线，故场景③仍为partial | C | local_batch | `criteria.json` | `tests/cases/test_ten_ball_funnel.py` |
 | [`two_body_spring`](two_body_spring/case.md) | 拉伸能与重力能的闭式值；两体振动角频率`ω=sqrt(k/μ·1000)`（**1000倍单位bug的捕手**）；质心不动 | B | interactive | 3条 | `tests/cases/test_two_body_spring.py` |
 | [`cantilever_self_weight`](cantilever_self_weight/case.md) | 自重悬臂端点挠度对教科书闭式，**二阶收敛实测比恰为4.000**；牛顿一步收敛（二次能量） | B | interactive | 1条 | `tests/cases/test_cantilever_self_weight.py` |
 | [`axial_stretch_hessian`](axial_stretch_hessian/case.md) | 拉伸项梯度与Hessian对**精确有理算术**金标（`Fraction`二阶前向jet + 手推闭式，两条独立路径逐位相等）；**闭合决策0024第六节登记的缺口** | B | interactive | 6条 | `tests/cases/test_axial_stretch_hessian.py` |
@@ -120,7 +120,7 @@ FEBio的`acceptChanges.py`是这条闭环的出处，本仓的加强是"决策�
 | **主｜用户六场景端到端**（[plans/04](../docs/plans/04_真实使用场景与能力差距_20260805.md)） | 算不算得了**我们要算的** | **0/6** |
 | 从｜同行C档13条标准案例（research/05第2.3节） | 算得**对不对** | **6/13**（逐条重数，见决策0049第十节；此前长期报7是多算了一条） |
 
-主分母的逐位机械计数当前为**11/42**，每场景位数`7/5/10/7/6/7`已由0057冻结；
+主分母的逐位机械计数当前为**12/42**，每场景位数`7/5/10/7/6/7`已由0057冻结；
 它不是加权完成度，正本只在`docs/capability_ledger.json`。
 
 **只报后者是恭维自己。** 0040当初选同行案例当分母的理由

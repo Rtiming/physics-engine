@@ -1096,6 +1096,17 @@ class PenaltySphereContact:
             if not (stiffness > 0.0 and math.isfinite(stiffness)):
                 raise ContactError(f"penalty stiffness must be positive: {stiffness!r}")
 
+    @classmethod
+    def _from_validated_pairs(
+        cls, pairs: tuple[tuple[int, int, float, float], ...]
+    ) -> PenaltySphereContact:
+        """由同包内已验证装配层构造；调用方承担全部``__post_init__``不变量。"""
+
+        term = object.__new__(cls)
+        object.__setattr__(term, "name", "sphere_contact")
+        object.__setattr__(term, "pairs", pairs)
+        return term
+
     def node_index_bound(self) -> int:
         return max(max(i, j) for i, j, _, _ in self.pairs) + 1
 
@@ -1240,6 +1251,31 @@ class LinearNormalDashpot:
             if i == j:
                 raise ContactError(f"a sphere cannot damp contact with itself: node {i}")
             self._validate_coefficients(stiffness, damping, radii_sum)
+
+    @classmethod
+    def _from_validated_parts(
+        cls,
+        *,
+        planes: tuple[
+            tuple[
+                int,
+                tuple[float, float, float],
+                tuple[float, float, float],
+                float,
+                float,
+                float,
+            ],
+            ...,
+        ],
+        sphere_pairs: tuple[tuple[int, int, float, float, float], ...],
+    ) -> LinearNormalDashpot:
+        """由同包内已验证装配层构造；调用方承担全部``__post_init__``不变量。"""
+
+        term = object.__new__(cls)
+        object.__setattr__(term, "name", "normal_dashpot")
+        object.__setattr__(term, "planes", planes)
+        object.__setattr__(term, "sphere_pairs", sphere_pairs)
+        return term
 
     @staticmethod
     def _validate_coefficients(stiffness: float, damping: float, radius: float) -> None:

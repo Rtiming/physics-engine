@@ -243,16 +243,15 @@
         },
         {
           "id": "S3.9",
-          "label": "动态接触流水线（时间推进 + 由broad/narrow搜出接触对）",
-          "status": "partial",
+          "label": "动态接触流水线（时间推进 + 由broad/narrow筛出活动接触对）",
+          "status": "done",
           "exercises_physics": true,
           "evidence": [
-            "case:bouncing_ball_restitution",
-            "test:tests/cases/test_bouncing_ball_restitution.py::test_contact_duration_matches_the_half_period"
+            "case:ten_ball_funnel",
+            "test:tests/test_contact_pipeline.py::test_collision_output_really_controls_response",
+            "test:tests/cases/test_ten_ball_funnel.py::test_declared_candidates_are_dynamically_culled_before_response"
           ],
-          "shared_gap": "接触",
-          "why": "时间推进下的接触已经跑通并被判据守住：接触时长t_c=π/ω对闭式，步长由`advise_step()`算不是魔数。此前罚接触+显式积分跑得通只是调研顺手测出来的，仓里没有一条判据守着。",
-          "missing": "接触对仍是`ContactDeclaration`**声明**的，`collision.py`的broad/narrow phase不参与任何接触案例；且案例是单质点撞半空间，没有多体的检测—分派—响应流水线。"
+          "why": "0058把`FinalizedScene.contact_pairs`作为稳定候选池，每帧由`collision.py`的AABB broad phase与球体窄相筛出活动对，只有narrow事件进入罚势和dashpot。十球案例在真实阻尼时间推进中走完整检测—分派—响应链；另有必红证明重叠几何若被检测结果关掉，响应必须归零。候选身份与0050定长历史槽在活动集切换时保持不变。"
         },
         {
           "id": "S3.10",
@@ -264,7 +263,7 @@
             "test:tests/cases/test_ten_ball_funnel.py::test_wall_and_ball_ball_response_are_both_exercised"
           ],
           "why": "0052裁定的10—20球最小规模已兑现：三个解析平面围成V形漏斗，10个球、30个球-面声明与45个球对在同一次重力+damping时间推进中运行；两类接触都真实出力，质心下降、末态静置、耗散和能量残差均有门。",
-          "missing": "仍不是场景③端到端：球是质点+半径，无不规则网格窄相、质量属性、转动/滚动/摩擦；45个球对全对全预声明，broad/narrow不驱动响应，规模是10而非512。故只报partial。"
+          "missing": "仍不是场景③端到端：球是质点+半径，无不规则网格窄相、质量属性、转动/滚动/摩擦；45个球对仍全对全预声明，候选阶段没有空间索引，解析平面也未进入动态流水线，规模是10而非512。故只报partial。"
         }
       ]
     },

@@ -28,7 +28,7 @@
     },
     "accept_full": {
       "budget_s": 120.0,
-      "measured_median_s": 76.1,
+      "measured_median_s": 58.3,
       "load_tier": "local_batch"
     },
     "solve_equilibrium_cantilever_160free_dof": {
@@ -48,7 +48,7 @@
   },
   "deterministic_gates": {
     "source_bytes": {
-      "measured": 567719,
+      "measured": 591651,
       "ceiling": 720896,
       "measured_on": "2026-08-13",
       "rationale": "source_bytes是wheel体积的确定性代理——wheel需要构建，源码字节不需要，且跨平台逐位稳定。上限**不是**“引擎必须保持小”的承诺（0015已裁决要把WDS的物理搬进来，源码注定大幅增长），而是“增长必须是一次被记录的决定”。抬上限是允许的，但必须在ceiling_history里留一行，且门校验现行上限等于历史末行——想悄悄抬过不去。",
@@ -128,6 +128,13 @@
       "measured_then": 567719,
       "decision": "docs/decisions/0055_阶段2耗散装配与阻尼接触_20260813.md",
       "reason": "**本条不抬上限。** 阶段2新增耗散装配、二阶阻尼积分器与线性法向dashpot，并对齐包级能力边界后递归实测567719字节；720896/567719 = 1.270，小于0053给出的1.6调回触发线，故保留现行上限。性能报告侧同批由0057修正为递归源码口径，并拒绝把旧wheel冒充当前构建。"
+    },
+    {
+      "raised_on": "2026-08-13",
+      "ceiling": 720896,
+      "measured_then": 591651,
+      "decision": "docs/decisions/0058_动态接触检测响应流水线_20260813.md",
+      "reason": "**本条不抬上限。** 动态球-球接线与同批等价快路径落地后，递归实测591651字节；720896/591651 = 1.219，小于0053给出的1.6调回触发线，故保留现行上限。新增模块保持实验档全路径导入，没有进入顶层eager re-export，运行时依赖仍为0。"
     }
   ],
   "wheel_budget_history": [
