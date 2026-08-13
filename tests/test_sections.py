@@ -14,6 +14,7 @@ import pytest
 
 from physics_engine.sections import (
     ElasticPerfectlyPlastic1D,
+    LinearElastic1D,
     RectangularFiberSection,
     SectionError,
     build_rectangular_section_layout,
@@ -146,6 +147,48 @@ def test_mixed_elastic_plastic_distribution_and_tangent_are_real():
     assert finite_difference == pytest.approx(
         response.bending_tangent_n_mm2, rel=2.0e-9, abs=1.0e-5
     )
+
+
+def test_explicit_linear_elastic_material_has_no_yield_sentinel_or_history():
+    section, section_layout, _ = _model(point_count=8)
+    material = LinearElastic1D(young_modulus_n_mm2=YOUNG_N_MM2)
+    virgin = section_layout.initial_state()
+    curvature = 100.0 * YIELD_CURVATURE_PER_MM
+
+    response = evaluate_section_response(
+        section_layout=section_layout,
+        material=material,
+        previous_state=virgin,
+        axial_strain=0.0,
+        curvature_per_mm=curvature,
+    )
+    discrete_second_moment = sum(
+        point.area_mm2 * point.y_mm**2 for point in section.integration_points
+    )
+
+    assert response.bending_moment_n_mm == pytest.approx(
+        YOUNG_N_MM2 * discrete_second_moment * curvature,
+        rel=2.0e-15,
+    )
+    assert response.bending_tangent_n_mm2 == pytest.approx(
+        YOUNG_N_MM2 * discrete_second_moment,
+        rel=2.0e-15,
+    )
+    assert not any(point.yielded for point in response.points)
+    assert response.next_state.block("section_point_plastic_strain") == (0.0,) * 8
+    assert response.next_state.block("section_point_accumulated_plastic_strain") == (0.0,) * 8
+
+    contaminated = list(virgin.vector)
+    contaminated[section_layout.plastic_strain_index(0)] = 1.0e-6
+    contaminated[section_layout.accumulated_plastic_strain_index(0)] = 1.0e-6
+    with pytest.raises(SectionError, match="linear elastic material"):
+        evaluate_section_response(
+            section_layout=section_layout,
+            material=material,
+            previous_state=State(section_layout.layout, tuple(contaminated)),
+            axial_strain=0.0,
+            curvature_per_mm=curvature,
+        )
 
 
 def test_plastic_history_is_explicit_replayable_and_path_dependent():

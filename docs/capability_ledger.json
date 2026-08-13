@@ -363,8 +363,8 @@
             "test:tests/cases/test_kirchhoff_section_vertex_springback.py::test_global_newton_springback_commits_only_the_converged_history"
           ],
           "shared_gap": "体积与厚度",
-          "why": "与S1.2同一条结构性缺口，但问的量不同：那里要在截面上放电流，这里要在截面上放弯扭与压扁。0059已落矩形纤维局部本构；0060又把easy-axis曲率从一个WDS式三节点/两边扭角站点生成，把M与一致切线装入全局残差/Hessian，并以独立Fraction金标和WDS固定源SHA夹具验证。",
-          "missing": "当前截面点仍是本构/求积点，不是独立宽厚运动学自由度；全局路径只有固定轴向应变的easy-axis单站，WDS也尚未实际采纳。仍无整杆多站、轴向N联立、宽度方向分辨、剪切/hard-axis/扭转、翘曲、压扁或局部屈曲。故只能partial，不能用139个状态槽或11个杆运动学坐标冒充宽厚场自由度。"
+          "why": "与S1.2同一条结构性缺口，但问的量不同：那里要在截面上放电流，这里要在截面上放弯扭与压扁。0059已落矩形纤维局部本构；0060又把easy-axis曲率从一个WDS式三节点/两边扭角站点生成，把M与一致切线装入全局残差/Hessian，并以独立Fraction金标和WDS固定源SHA夹具验证；0061另有WDS默认关闭的线弹性单站采纳候选。",
+          "missing": "当前截面点仍是本构/求积点，不是独立宽厚运动学自由度；全局路径只有固定轴向应变的easy-axis单站，WDS候选也尚未正式发布、合入或过master门。仍无整杆多站、轴向N联立、宽度方向分辨、剪切/hard-axis/扭转、翘曲、压扁或局部屈曲。故只能partial，不能用139个状态槽或11个杆运动学坐标冒充宽厚场自由度。"
         },
         {
           "id": "S5.2",

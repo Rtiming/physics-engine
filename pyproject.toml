@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "physics-engine"
-version = "0.5.0"
+version = "0.6.0"
 description = "rtime的物理引擎：多域物理+模型生成+材料+外观的规范与共享内核（规范先行、代码后置）"
 requires-python = ">=3.11"
 dependencies = []

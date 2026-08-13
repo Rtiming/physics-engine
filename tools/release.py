@@ -11,7 +11,7 @@
 3. `tools/accept.py full`必须PASS；
 4. `uv build`出wheel+sdist，算SHA-256；
 5. wheel拷入`~/wheelhouse`并提交推送（提交信息含版本与哈希）；
-6. 引擎仓打tag `v<版本>`并推送。
+6. 引擎仓只允许从`main`发版，打tag后把`main+tag`显式推到舰队与GitHub双远程。
 """
 
 from __future__ import annotations
@@ -35,6 +35,49 @@ def run(argv: list[str], cwd: Path = ROOT) -> str:
     return completed.stdout
 
 
+def _assert_main_release_head() -> tuple[str, ...]:
+    """拒绝从topic/detached分支造出tag与默认分支不一致的发布。"""
+
+    branch = run(["git", "branch", "--show-current"]).strip()
+    if branch != "main":
+        raise SystemExit(f"发版只允许从main执行，当前分支是{branch or 'detached HEAD'}")
+    head = run(["git", "rev-parse", "HEAD"]).strip()
+    main_head = run(["git", "rev-parse", "main"]).strip()
+    if head != main_head:
+        raise SystemExit("当前HEAD不等于main，拒绝建立悬空发布tag")
+    remotes = tuple(run(["git", "remote"]).split())
+    missing = {"origin", "github"}.difference(remotes)
+    if missing:
+        raise SystemExit(f"发版缺少双远程：{', '.join(sorted(missing))}")
+    return remotes
+
+
+def _release_push_commands(version: str) -> tuple[tuple[str, ...], ...]:
+    """两个default branch与同一tag必须成对推送，不能只推tag或只推一端main。"""
+
+    tag = f"v{version}"
+    return (
+        ("git", "push", "origin", "main", tag),
+        ("git", "push", "github", "main", tag),
+    )
+
+
+def _assert_release_changelog(version: str, changelog: str) -> None:
+    """候选条目不是发布条目；必须先显式解除“未发布”状态。"""
+
+    heading = next(
+        (line for line in changelog.splitlines() if line.startswith(f"## {version}")),
+        None,
+    )
+    if heading is None:
+        raise SystemExit(
+            f"CHANGELOG.md没有{version}的条目——破坏性变更必须被读到，写了才准发"
+            "（decisions/0012）"
+        )
+    if "候选" in heading or "未发布" in heading:
+        raise SystemExit(f"CHANGELOG.md仍把{version}标成候选/未发布，拒绝正式发版")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true")
@@ -42,6 +85,7 @@ def main() -> int:
 
     if run(["git", "status", "--porcelain"]).strip():
         raise SystemExit("工作区不干净：发版前先提交（wheel必须能对回一个commit）")
+    _assert_main_release_head()
 
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     version = re.search(r'^version = "([^"]+)"$', pyproject, re.MULTILINE).group(1)
@@ -57,10 +101,7 @@ def main() -> int:
         raise SystemExit(f"版本{version}已在wheelhouse——版本不可覆盖，改了字节必须跳版本")
 
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    if f"## {version} " not in changelog and f"## {version}\n" not in changelog:
-        raise SystemExit(
-            f"CHANGELOG.md没有{version}的条目——破坏性变更必须被读到，写了才准发（decisions/0012）"
-        )
+    _assert_release_changelog(version, changelog)
 
     print(f"[release] accept full for v{version} ...")
     accept = subprocess.run(
@@ -89,11 +130,8 @@ def main() -> int:
     run(["git", "push", "-u", "origin", branch], cwd=WHEELHOUSE)
 
     run(["git", "tag", f"v{version}"])
-    run(["git", "push", "origin", f"v{version}"])
-    remotes = run(["git", "remote"]).split()
-    if "github" in remotes:
-        run(["git", "push", "github", "main"])
-        run(["git", "push", "github", f"v{version}"])
+    for command in _release_push_commands(version):
+        run(list(command))
     print(f"[release] v{version} 已入wheelhouse并打tag，sha256={digest}")
     print(f"[release] 消费方：uv add 'physics-engine=={version}' --find-links ~/wheelhouse")
     return 0

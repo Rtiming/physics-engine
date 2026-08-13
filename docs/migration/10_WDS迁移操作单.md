@@ -47,12 +47,33 @@ general/full/actual→更新design/26与本仓spec/90→提交**。
 - V1/V2/VA全绿+两份回执重签
 - 不过门即回退，不许"先合了再修"
 
+## 力学批次C：easy-axis单站采纳候选（2026-08-13，决策0061）
+
+用户已经授权力学迁移。为避开WDS主工作树尚未收批的groove-fit改动，本批在
+`codex/wds-section-beam-adoption`独立worktree执行，范围冻结为：
+
+1. physics-engine升0.6.0候选并提供显式`LinearElastic1D`；不能用任意大屈服应力
+   冒充线弹性，也不能覆盖已发布0.5.0；
+2. WDS的`EnergyContext`增加默认`None`的单站配置；关闭时原`BendingEnergy`逐句原路，
+   打开时只把一个内顶点的easy-axis项交给`KirchhoffFiberSectionBending`，hard-axis、
+   其余站点、全杆Newton、接触与continuation仍归WDS；
+3. 第一片只准静态线弹性。动态入口显式拒绝；逐纤维塑性历史在continuation接受点的
+   commit/回传未接好前不得启用；
+4. 中点纤维的算法模量按`EI_easy/sum(A_i*y_i**2)`校准，避免把离散二次矩误当解析
+   `w*t^3/12`造成有限点数漂移；
+5. 依赖以仓内相对0.6.0 wheel和`uv.lock`哈希绑定；master同步清单必须核对wheel
+   SHA-256，并在强制重装后逐项核已安装版本与RECORD字节，不能只验import/版本。
+
+本地候选成立的最低证据是：引擎调用探针、energy/gradient/Hessian对原站点、独立FD、
+默认路径状态字节不变、动态与静态绑定漂移必红、代表性案例改造前后物理指纹相同、一个
+独立plugin身份的1.1命名案例真实启用，以及WDS本机general/full/actual。正式接缝可用
+还需：0.6.0不可变发布wheel与vendor哈希一致、既有14个默认案例逐案对拍、master默认V2
+通过，最后才合入WDS干净main；要称“物理采纳”还必须指明命名case与适用域。
+
 ## 明确不在本单内的
 
-- 力学域（model/solve/contact/dynamic）进不进引擎——远期分岔，用户裁决。0060只在
-  引擎侧完成一个easy-axis三节点截面站点的源级兼容，并以WDS提交`c1b8fe6`的两份
-  物理源SHA作只读夹具；**没有改WDS、没有更新wheel、没有签产物不变回执**。用户授权
-  且WDS工作树可冻结后，才在WDS独立会话把“单站替换→回执重签→general/full/actual”
-  写成新的力学迁移批次，不能把本仓案例当成已迁移证据
+- 力学域的**扩大迁移**——批次C只放开一个默认关闭的easy-axis线弹性站点；整杆多站、
+  轴向N、hard-axis、扭转、塑性历史与动态仍需新的消费需求和独立决策，不能从单站候选
+  外推成WDS力学域已经搬入引擎
 - V3-R真实发布门——固定由用户手工
 - FTS侧任何操作——见20_FTS迁移操作单

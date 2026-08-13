@@ -6,6 +6,9 @@
     uv add "physics-engine==0.5.0" --find-links ~/wheelhouse
     # 或 pip install "physics-engine==0.5.0" --find-links ~/wheelhouse
 
+0.5.0是wheelhouse当前最新已发布版；源码中的0.6.0仍是本地候选，只能由消费方
+相对``vendor/``候选wheel验证，不得据源码版本号宣称wheelhouse已发布。
+
 **0.x语义**：仓库处于快速演进期（模块地图spec/01大半尚空），minor跳变可以
 破坏兼容。消费方必须**钉精确版本**并经自己的门禁自觉升级；升级永远不是
 被动漂移。每次发版有决策记录。
@@ -41,7 +44,7 @@
   N/M求积与局部回弹平衡（力学域，决策0059；**不是独立截面场自由度**）
 - `physics_engine.section_beam` —— 一个WDS式三节点站点的easy-axis纤维弯曲装配：
   节点/边扭角运动学→全局残差/Hessian→收敛后历史提交（力学域，决策0060；
-  **不是整杆或WDS已迁移**）
+  0061有WDS默认关闭的线弹性单站候选，**不是整杆或正式迁移完成**）
 - `physics_engine.motion` —— 位姿时间线（spec/10 `MotionSource`）
 - `physics_engine.actuators` —— 驱动器声明层（spec/10 `Actuator`；**`apply`的物理未实现**）
 - `physics_engine.sensors` —— 传感器声明层（spec/10 `Sensor`）
@@ -68,10 +71,11 @@
 进入既有接触项。**仍缺**：网格窄相、空间索引、载荷控制失败后的真回退、
 接触体的**转动自由度**（今天是质点+半径，**没有力矩**，故多点接触无意义）。
 
-**截面积分点有了两片，但边界要说清**（决策0059、0060）：矩形截面可从轴向应变与曲率
+**截面积分点有了两片，但边界要说清**（决策0059—0061）：矩形截面可从轴向应变与曲率
 得到逐点弹塑性应力，逐点塑性历史显式进`State`，并积分出轴力/弯矩、反解自由回弹。
 其中easy-axis曲率已由一个WDS式三节点/两边扭角站点生成，弯矩与一致切线进入全局
-`EnergyRegistry`/Newton；这只是源级兼容，WDS尚未实际采纳，轴向N也未进全局装配。
+`EnergyRegistry`/Newton；WDS另有默认关闭、准静态线弹性的本地单站采纳候选，但0.6.0
+尚未发布、候选未合入或过master门，轴向N也未进全局装配。
 积分点是本构/求积点，**不增加全局运动学未知量**；它们也不是S1.2所需的独立电磁场
 自由度。尚无整杆多站、hard-axis、截面翘曲、压扁、剪切/扭转或二维任意截面。
 
@@ -131,7 +135,7 @@ from physics_engine.run_package import (
     read_verified_package,
 )
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 __all__ = [
     "BASE_UNIT_SUFFIXES",

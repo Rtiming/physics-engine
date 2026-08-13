@@ -23,7 +23,11 @@ from physics_engine.section_beam import (
     build_kirchhoff_section_vertex_layout,
     solve_kirchhoff_section_equilibrium,
 )
-from physics_engine.sections import ElasticPerfectlyPlastic1D, RectangularFiberSection
+from physics_engine.sections import (
+    ElasticPerfectlyPlastic1D,
+    LinearElastic1D,
+    RectangularFiberSection,
+)
 
 WDS_HEAD = "c1b8fe6"
 WDS_STATE_SHA256 = "ea61bf2611ce30fb91248f9092d5cdf2eff82a0688926253ac9e929b30577c27"
@@ -102,6 +106,43 @@ def test_layout_separates_eleven_wds_kinematic_dofs_from_point_history():
         0.0, 0.0,
     )
     assert state.vector[11:] == (0.0,) * 16
+
+
+def test_energy_interpretation_distinguishes_elastic_and_plastic_materials():
+    layout = _layout(point_count=8)
+    committed = layout.initial_state(
+        positions_mm=((0.0, 0.0, 0.0), (100.0, 0.0, 0.0), (200.0, 0.0, 0.0)),
+        edge_twist_angles=(0.0, 0.0),
+    )
+
+    elastic = KirchhoffFiberSectionBending(
+        vertex_layout=layout,
+        material=LinearElastic1D(young_modulus_n_mm2=250.0),
+        committed_state=committed,
+    )
+    plastic = KirchhoffFiberSectionBending(
+        vertex_layout=layout,
+        material=ElasticPerfectlyPlastic1D(
+            young_modulus_n_mm2=250.0,
+            yield_stress_n_mm2=10.0,
+        ),
+        committed_state=committed,
+    )
+
+    assert elastic.energy_interpretation == "recoverable_potential"
+    assert plastic.energy_interpretation == "incremental_potential"
+    assert elastic.supports_dynamics is False
+    with pytest.raises(EnergyError) as caught:
+        EnergyRegistry((elastic,)).acceleration(
+            EnergyContext(
+                context_id="context/no-unvalidated-elastic-section-dynamics",
+                node_masses_kg=(1.0, 1.0, 1.0),
+            ),
+            layout.layout,
+        )
+    message = str(caught.value)
+    assert "动力学质量映射、时间积分与回归尚未通过验收" in message
+    assert "其标量是含材料耗散的增量势" not in message
 
 
 def test_easy_axis_kinematics_and_elastic_derivatives_match_wds_fixture():
@@ -264,7 +305,10 @@ def test_reference_singularity_and_unimplemented_axes_fail_closed():
     with pytest.raises(KirchhoffSectionError, match="committed history"):
         guarded.trial_response(straight.with_vector(tuple(changed_history)))
 
-    with pytest.raises(EnergyError, match="quasistatic-only"):
+    with pytest.raises(
+        EnergyError,
+        match="动力学质量映射、时间积分与回归尚未通过验收",
+    ):
         EnergyRegistry((guarded,)).acceleration(
             EnergyContext(
                 context_id="context/no-dynamic-plastic-section",

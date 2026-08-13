@@ -36,6 +36,7 @@ from physics_engine.energies import (
 )
 from physics_engine.sections import (
     ElasticPerfectlyPlastic1D,
+    LinearElastic1D,
     RectangularFiberSection,
     RectangularSectionLayout,
     SectionResponse,
@@ -606,20 +607,27 @@ class KirchhoffFiberSectionBending:
     """一个easy-axis纤维截面站点的全局势能项。"""
 
     vertex_layout: KirchhoffSectionVertexLayout
-    material: ElasticPerfectlyPlastic1D
+    material: LinearElastic1D | ElasticPerfectlyPlastic1D
     committed_state: State
     fixed_axial_strain: float = 0.0
     name: str = "kirchhoff_fiber_section_bending"
     kind: ClassVar[Literal["potential"]] = POTENTIAL
-    #: 增量势包含本步塑性耗散，只供准静态平衡；不是瞬态可恢复能量账。
+    #: 线弹性分支是可恢复势，塑性分支含本步耗散；共享动态装配尚未验证，保守关闭。
     supports_dynamics: ClassVar[bool] = False
-    energy_interpretation: ClassVar[str] = "incremental_potential"
 
     def __post_init__(self) -> None:
         self.vertex_layout.assert_state(self.committed_state)
         _finite("fixed_axial_strain", self.fixed_axial_strain)
         if not isinstance(self.name, str) or not self.name:
             raise KirchhoffSectionError("section energy term name must be nonempty")
+
+    @property
+    def energy_interpretation(self) -> str:
+        """Distinguish recoverable elasticity from plastic incremental potential."""
+
+        if isinstance(self.material, LinearElastic1D):
+            return "recoverable_potential"
+        return "incremental_potential"
 
     @property
     def supported_generalized_strains(self) -> tuple[str, ...]:

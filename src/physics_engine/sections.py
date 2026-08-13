@@ -60,6 +60,22 @@ def _finite(name: str, value: float) -> float:
 
 
 @dataclass(frozen=True)
+class LinearElastic1D:
+    """小应变一维线弹性材料；没有屈服哨兵，点历史槽保持为零。
+
+    WDS的第一片真实采纳只替换一个既有线弹性easy-axis站点。用一个任意大的
+    ``yield_stress``模拟线弹性会把“本工况没有屈服”误写成“材料具有某个未经声明的
+    屈服强度”，所以线弹性必须是显式材料语义，而不是弹塑性参数的特殊数值。为与
+    截面通用布局兼容，当前状态仍携带每点两个恒零历史槽，但这些槽永不演化。
+    """
+
+    young_modulus_n_mm2: float
+
+    def __post_init__(self) -> None:
+        _positive_finite("young_modulus_n_mm2", self.young_modulus_n_mm2)
+
+
+@dataclass(frozen=True)
 class ElasticPerfectlyPlastic1D:
     """小应变一维理想弹塑性材料（关联流动、零硬化）。
 
@@ -293,7 +309,7 @@ class SectionResponse:
 
 
 def _material_trial(
-    material: ElasticPerfectlyPlastic1D,
+    material: LinearElastic1D | ElasticPerfectlyPlastic1D,
     *,
     strain: float,
     previous_plastic_strain: float,
@@ -307,6 +323,14 @@ def _material_trial(
         raise SectionError("accumulated plastic strain cannot be smaller than |plastic strain|")
 
     young = float(material.young_modulus_n_mm2)
+    if isinstance(material, LinearElastic1D):
+        if previous_plastic_strain != 0.0 or previous_accumulated_plastic_strain != 0.0:
+            raise SectionError("linear elastic material cannot consume nonzero plastic history")
+        stress = young * strain
+        if not math.isfinite(stress):
+            raise SectionError("material trial stress overflowed to NaN/Inf")
+        return stress, young, 0.0, 0.0, False
+
     yield_stress = float(material.yield_stress_n_mm2)
     trial = young * (strain - previous_plastic_strain)
     if not math.isfinite(trial):
@@ -333,7 +357,7 @@ def _material_trial(
 
 
 def _material_incremental_potential(
-    material: ElasticPerfectlyPlastic1D,
+    material: LinearElastic1D | ElasticPerfectlyPlastic1D,
     *,
     strain: float,
     previous_plastic_strain: float,
@@ -347,6 +371,11 @@ def _material_incremental_potential(
     """
 
     young = float(material.young_modulus_n_mm2)
+    if isinstance(material, LinearElastic1D):
+        if previous_plastic_strain != 0.0:
+            raise SectionError("linear elastic material cannot consume nonzero plastic history")
+        return 0.5 * young * strain * strain
+
     yield_stress = float(material.yield_stress_n_mm2)
     elastic_trial_strain = strain - previous_plastic_strain
     yield_strain = yield_stress / young
@@ -359,7 +388,7 @@ def _material_incremental_potential(
 def evaluate_section_response(
     *,
     section_layout: RectangularSectionLayout,
-    material: ElasticPerfectlyPlastic1D,
+    material: LinearElastic1D | ElasticPerfectlyPlastic1D,
     previous_state: State,
     axial_strain: float,
     curvature_per_mm: float,
@@ -454,7 +483,7 @@ class SectionSolveResult:
 def solve_section_curvature(
     *,
     section_layout: RectangularSectionLayout,
-    material: ElasticPerfectlyPlastic1D,
+    material: LinearElastic1D | ElasticPerfectlyPlastic1D,
     previous_state: State,
     axial_strain: float,
     target_moment_n_mm: float,
@@ -562,6 +591,7 @@ def solve_section_curvature(
 
 __all__ = [
     "ElasticPerfectlyPlastic1D",
+    "LinearElastic1D",
     "RectangularFiberSection",
     "RectangularSectionLayout",
     "SectionError",

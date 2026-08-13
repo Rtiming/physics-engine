@@ -1205,7 +1205,9 @@ class EnergyRegistry:
         if quasistatic_only:
             raise EnergyError(
                 f"energy terms {quasistatic_only!r} are quasistatic-only — "
-                "其标量是含材料耗散的增量势，不是可用于瞬态能量账的可恢复势能"
+                "共享项的动力学质量映射、时间积分与回归尚未通过验收；"
+                "若项的energy_interpretation为incremental_potential，"
+                "还必须先分离可恢复势能与材料耗散"
             )
         has_dissipation = any(term.kind == DISSIPATION for term in self.terms)
 
