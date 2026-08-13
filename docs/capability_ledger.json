@@ -353,12 +353,15 @@
         {
           "id": "S5.1",
           "label": "带材宽厚方向的力学自由度",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": true,
-          "evidence": [],
+          "evidence": [
+            "case:rectangular_section_springback",
+            "test:tests/cases/test_rectangular_section_springback.py::test_free_springback_solves_equilibrium_without_hiding_or_polluting_history"
+          ],
           "shared_gap": "体积与厚度",
-          "why": "与S1.2同一条结构性缺口，但问的量不同：那里要在截面上放电流，这里要在截面上放弯扭与压扁。",
-          "missing": "中心线杆表示不了带材的宽与厚；至少要「带宽方向」的自由度或截面。"
+          "why": "与S1.2同一条结构性缺口，但问的量不同：那里要在截面上放电流，这里要在截面上放弯扭与压扁。0059已落矩形纤维截面的第一片：广义轴向应变/曲率驱动逐点弹塑性应力与显式材料历史，N/M求积和自由回弹局部平衡对解析基准。",
+          "missing": "当前截面点是本构/求积点，不是独立宽厚运动学自由度；只有矩形厚度方向中点纤维，尚无宽度方向分辨、剪切/扭转、翘曲、压扁、局部屈曲，也未与全局带材/梁节点装配。故只能partial，不能用状态槽数量冒充运动自由度。"
         },
         {
           "id": "S5.2",

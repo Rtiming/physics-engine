@@ -78,12 +78,15 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
     #: `contact_pipeline`归力学（2026-08-13，决策0058）：它是第一个既走场景装配
     #: 又走求解的消费层，从基座的`scene`/`collision`/`shapes`单向取候选与检测结果，
     #: 再调用力学域`contact`/`energies`/`state`；依赖仍只向下，没有基座反向import它。
+    #: `sections`归力学（2026-08-13，决策0059）：它import`state`保存逐积分点塑性历史，
+    #: 本构与N/M截面合力也都是力学语义；不是域中立的通用求积器。
     "mechanics": (
         "contact",
         "contact_pipeline",
         "energies",
         "integrate",
         "rigidbody",
+        "sections",
         "sensors",
         "solve",
         "state",

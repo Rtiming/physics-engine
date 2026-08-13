@@ -27,6 +27,7 @@
 | [`two_body_spring`](two_body_spring/case.md) | 拉伸能与重力能的闭式值；两体振动角频率`ω=sqrt(k/μ·1000)`（**1000倍单位bug的捕手**）；质心不动 | B | interactive | 3条 | `tests/cases/test_two_body_spring.py` |
 | [`cantilever_self_weight`](cantilever_self_weight/case.md) | 自重悬臂端点挠度对教科书闭式，**二阶收敛实测比恰为4.000**；牛顿一步收敛（二次能量） | B | interactive | 1条 | `tests/cases/test_cantilever_self_weight.py` |
 | [`axial_stretch_hessian`](axial_stretch_hessian/case.md) | 拉伸项梯度与Hessian对**精确有理算术**金标（`Fraction`二阶前向jet + 手推闭式，两条独立路径逐位相等）；**闭合决策0024第六节登记的缺口** | B | interactive | 6条 | `tests/cases/test_axial_stretch_hessian.py` |
+| [`rectangular_section_springback`](rectangular_section_springback/case.md) | **阶段4第一条截面非线性**：矩形中点纤维逐点理想弹塑性、显式历史、N/M求积与自由回弹局部平衡；连续闭式`M(κ)`+离散`Fraction`金标、8→64点二阶收敛、六格必红。只完成局部截面本构切片，不冒充独立截面场自由度 | B | interactive | 2条 | `tests/cases/test_rectangular_section_springback.py` |
 | [`generator_determinism`](generator_determinism/case.md) | 参数化生成器：同参数逐字节相同（**含换`PYTHONHASHSEED`的子进程**）；22条一位扰动全改变声明；特征长度乘2时40个长度**逐位**翻倍；产出的形对圆柱/胶囊教科书闭式，rel 1e-15 | A | interactive | 5条 | `tests/cases/test_generator_determinism.py` |
 | [`scalar_diffraction_airy`](scalar_diffraction_airy/case.md) | 艾里斑`E(x)=2·J1(x)/x`对贝塞尔积分的独立求值，abs 1e-12（**判绝对不判相对：J1有零点**）；首零`3.8317059702`；角度↔空间频率↔半径的**单位往返** | B | interactive | 2条 | `tests/cases/test_scalar_diffraction_airy.py` |
 | [`fts_instrument_line_shape`](fts_instrument_line_shape/case.md) | 无切趾ILS半宽`1.2067091288/(2L)`对独立求根，半高点上ILS恰为0.5；Norton-Beer三组`Σ Ci = 1`（实测残差**恰为0**）；通量代价闭式对Simpson，排序弱>中>强 | B | interactive | 2条 | `tests/cases/test_fts_instrument_line_shape.py` |
@@ -44,11 +45,12 @@
 ## 一之二、每个案例穿过引擎的哪几层（决策0048第三节通则）
 
 **"验公式"与"验引擎"是两类，混在一个计数里计数就不再有意义。**
-本节是那条通则的执行面：24个案例按**穿过引擎哪几层**分类，**不按案例数报成绩**。
+本节是那条通则的执行面：25个案例按**穿过引擎哪几层**分类，**不按案例数报成绩**。
 
 | 穿过的层 | 条数 | 案例 |
 |---|---|---|
 | **`state`→`energies`→`solve`（整条路）** | **6** | `cantilever_self_weight`、`large_deflection_cantilever`、`euler_buckling`、**`incline_slide_threshold`（第一条带接触的）**、**`friction_hysteresis_loop`（第一条改写历史的）**、**`three_sphere_pyramid`（第一条多体接触的）** |
+| **`state`→`sections`→局部平衡** | **1** | **`rectangular_section_springback`（第一条截面非线性与逐点材料历史）** |
 | `state`→`energies`→`integrate` | **3** | `two_body_spring`、**`bouncing_ball_restitution`（第一条瞬态阻尼接触）**、**`ten_ball_funnel`（第一条10球耗散组合）** |
 | `state`→`integrate`（不碰能量装配与求解器） | 3 | `ballistic_free_flight`、`harmonic_oscillator`、`rigid_body_free_flight` |
 | `energies`协议层（梯度与Hessian，不求解） | 1 | `axial_stretch_hessian` |
@@ -60,7 +62,7 @@
 我们自己0029那条只对一半）。**但它们证明的是"这个公式我们抄对了"，
 不是"这个引擎算得对"。**
 
-真正锻炼引擎机械的是前两行那9条，其中**五条带接触**（静置阈值、历史迟滞、
+真正锻炼引擎机械的是前三行那10条，其中**五条带接触**（静置阈值、历史迟滞、
 多体金字塔、单次弹跳、十球漏斗）。**新增案例时先问它落在哪一行**——
 若又是一条闭式计算器，它可以进仓，但**不许被算进"引擎能力"那本账**。
 
