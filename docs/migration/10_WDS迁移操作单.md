@@ -47,12 +47,12 @@ general/full/actual→更新design/26与本仓spec/90→提交**。
 - V1/V2/VA全绿+两份回执重签
 - 不过门即回退，不许"先合了再修"
 
-## 力学批次C：easy-axis单站采纳候选（2026-08-13，决策0061）
+## 力学批次C：easy-axis正式单站接缝（2026-08-13，决策0061，已完成）
 
 用户已经授权力学迁移。为避开WDS主工作树尚未收批的groove-fit改动，本批在
 `codex/wds-section-beam-adoption`独立worktree执行，范围冻结为：
 
-1. physics-engine升0.6.0候选并提供显式`LinearElastic1D`；不能用任意大屈服应力
+1. physics-engine升0.6.0并提供显式`LinearElastic1D`；不能用任意大屈服应力
    冒充线弹性，也不能覆盖已发布0.5.0；
 2. WDS的`EnergyContext`增加默认`None`的单站配置；关闭时原`BendingEnergy`逐句原路，
    打开时只把一个内顶点的easy-axis项交给`KirchhoffFiberSectionBending`，hard-axis、
@@ -69,6 +69,12 @@ general/full/actual→更新design/26与本仓spec/90→提交**。
 独立plugin身份的1.1命名案例真实启用，以及WDS本机general/full/actual。正式接缝可用
 还需：0.6.0不可变发布wheel与vendor哈希一致、既有14个默认案例逐案对拍、master默认V2
 通过，最后才合入WDS干净main；要称“物理采纳”还必须指明命名case与适用域。
+
+**完成记录**：0.6.0已以不可变wheel正式发布；WDS main `f88986f7...`统一绑定正式
+wheel SHA `53114e43...`，14案双版本门、两份性能正本、隔离master V1/V2/VA和开发Mac
+Node门均通过。14案口径为14/14解析字节一致、10个收敛结果物理指纹一致、3个既有受控
+失败诊断一致、1个保持input-only。R250 v002是唯一显式启用该接缝的命名案例；批次C
+到此完成，但下节列出的扩大迁移仍全部在外。
 
 ## 明确不在本单内的
 
