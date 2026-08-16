@@ -108,6 +108,10 @@ Blender、OCCT、Three.js、VTK等只是可替换适配器。四项目的
 纤维弯矩与一致切线经二阶链式法则进入`EnergyRegistry`/全局Newton，历史收敛后提交
 （`section_beam`，决策0060；0061对应的WDS正式接缝已经进入main，但默认关闭且只在
 R250 v002适用域内启用，不等于整个力学域迁移完成）；
+R25下一片已经形成跨仓执行计划：先在WDS绑定一个固定材料站点，把0.6.0已有逐纤维
+塑性trial/next state接到continuation接受点，补事务提交/回滚、growth携带与history回执；
+不预设修改或重发引擎。范围与停止条件见
+[plans/12](docs/plans/12_R25塑性history单站采纳计划_20260816.md)；
 光学闭式（`optics`）与电磁闭式（`electromagnetics`）。
 
 **不能做**：**没有隐式时间积分族**；**没有扭转**；**没有约束**——边界条件只有
