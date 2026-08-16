@@ -6,18 +6,19 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
 
 ## Unreleased
 
-### WDS R25塑性history本地采纳记录（2026-08-16，消费侧）
+### WDS R25塑性history正式进入main记录（2026-08-16，消费侧）
 
-- `winding-deviation-sim`本地独立分支`4b7b42a328515a832bde4feacaec3eaff2c14225`新增
+- `winding-deviation-sim`验收树`4b7b42a328515a832bde4feacaec3eaff2c14225`新增
   1.2独立plugin，在R25 ep10n v002
   固定名义材料顶点64，使用正式0.6.0的64纤维理想弹塑性；history只在accepted
   continuation点与state/reference/friction事务提交，被拒候选回滚并跨growth携带；
 - 新案例80节点、39个feed步全部收敛，最终64次提交、58/64个纤维history非零，没有启用
   snap；严格`engine_section_history.json`与既有结果原子发布，旧15案解析闭包与plugin身份
   保持。双跑物理结果指纹一致，性能正本、master精确0.6.0环境、最终V2与隔离VA均通过；
-- 本条只登记消费侧本地验收事实。该分支未push、未合入WDS main；新案例仍为
-  `hypothesis_only`固定单站机制证据，不代表整杆塑性、snap历史、轴向耦合或动态完成。
-  本仓没有源码改动，不重建wheel、不改`v0.6.0`tag，也不触发发版。
+- 用户随后授权正式合入；验收树无冲突快进到WDS `main`，状态收口提交为
+  `013ffbef90b905e49817a5e95e6f87522101a192`。新案例仍为`hypothesis_only`固定单站
+  机制证据，不代表整杆塑性、snap历史、轴向耦合或动态完成。本仓没有源码改动，不重建
+  wheel、不改`v0.6.0`tag，也不触发发版。
 
 ### WDS正式接缝交付记录（2026-08-13，文档收口）
 
