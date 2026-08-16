@@ -6,6 +6,23 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
 
 ## Unreleased
 
+### WDS轴向—弯曲N/M耦合单站正式进入main记录（2026-08-16，消费侧）
+
+- `winding-deviation-sim`以新增`spool_wrap_case 1.3`、`engine_section_history 1.1`和独立
+  plugin，在R25 ep10n v003固定名义材料顶点64；两相邻边的对偶单元轴向应变与
+  easy-axis曲率同时交给0.6.0公开截面API，消费侧装配N、M与完整2×2一致切线；
+- WDS显式减去目标顶点拥有的左右edge-stretch各一半，避免与原生StretchEnergy双计数；
+  trial保持只读，只有accepted continuation点提交同一份64纤维history。真实案例完成
+  80节点、39个feed步和64次提交；accepted路径最大绝对轴力为`1.6001820726530358N`，
+  最大绝对轴向—曲率耦合切线超过`1477N·mm`，证明不是只在单元测试中构造耦合项；
+- 旧1.2案例的resolved/dependencies闭包保持逐字节不变。最终WDS提交
+  `bef42882de776b231e67d3d09c45f8e6b6981008`已快进进入其`main`并由远端反向核验；
+  V2为1369 passed/10 skipped、timing 4 passed/1个master无npm明示skip、Mac Node
+  101/101，VA为1369 passed/10 skipped、timing 4/4；两份master性能正本也已重签；
+- 本条只记录消费方利用既有0.6.0公开API完成的单站机制。physics-engine没有源码、API、
+  wheel或tag变化，不触发发版；整杆多站、引擎原生轴向全局项、hard-axis、扭转、snap
+  history、材料实测标定和动态仍未完成，S5.1保持partial。
+
 ### WDS R25塑性history正式进入main记录（2026-08-16，消费侧）
 
 - `winding-deviation-sim`验收树`4b7b42a328515a832bde4feacaec3eaff2c14225`新增
