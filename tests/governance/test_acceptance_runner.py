@@ -140,6 +140,62 @@ def test_resource_verdicts_cover_qualified_unqualified_and_unknown():
     assert accept.classify_resource(1.0, None) == accept.RESOURCE_UNKNOWN
 
 
+def test_two_load_samples_are_reduced_to_the_worse_one():
+    """跑前采一次不够——**计时裁决覆盖的是整段，而那一次描述的是跑之前**。
+
+    2026-08-17实测撞上：四条并行轨道在跑，收据判``resource=QUALIFIED``、
+    计时判FAIL（130.2秒对120秒预算），而当时load average是23—29、限值15.0。
+    原因有两层：观测只在开跑前采一次；且``getloadavg()[0]``是**一分钟**滑动
+    平均，本身滞后——几个重活刚起来时它还低。于是一个**测不准**的墙钟
+    被发成了一条计时结论。
+
+    这与0053那次是同一个错的镜像：那次是拿不合格读数去改台账，
+    差点把一个正确的数改错**而门还会绿**。
+    """
+
+    qualified = accept.RESOURCE_QUALIFIED
+    unqualified = accept.RESOURCE_UNQUALIFIED
+    unknown = accept.RESOURCE_UNKNOWN
+
+    #: 开跑前安静、跑完变忙——**这一格就是那次实测撞上的形态**。
+    assert accept.worse_resource_verdict(qualified, unqualified) == unqualified
+    #: 反过来同样要接住：开跑时忙、跑完安静，那段墙钟一样不可信。
+    assert accept.worse_resource_verdict(unqualified, qualified) == unqualified
+    #: ``UNQUALIFIED``压过``UNKNOWN``：两者对计时都是不合格，
+    #: 但前者**更具体**（机器当时确实是忙的），收据要留下更能解释墙钟的那句。
+    assert accept.worse_resource_verdict(unknown, unqualified) == unqualified
+    assert accept.worse_resource_verdict(unqualified, unknown) == unqualified
+    assert accept.worse_resource_verdict(qualified, unknown) == unknown
+    assert accept.worse_resource_verdict(unknown, qualified) == unknown
+    #: 两次都合格才判合格——这是唯一放行的那一格。
+    assert accept.worse_resource_verdict(qualified, qualified) == qualified
+
+
+def test_a_quiet_start_cannot_certify_a_loaded_run():
+    """必须红用例：取**第一次**（旧行为）会让这段墙钟被冒充成可评估的。
+
+    这条与上一条判的不是同一件事：上一条判归约表，本条判**归约本身不可省**。
+    把``worse_resource_verdict``换成"返回第一个参数"，本条当场红。
+    """
+
+    limit = accept.LOAD_PER_CPU_LIMIT
+    before = accept.classify_resource(limit * 10 - 0.1, 10)   # 安静
+    after = accept.classify_resource(limit * 10 * 2.0, 10)    # 跑成两倍限值
+    assert before == accept.RESOURCE_QUALIFIED
+    assert after == accept.RESOURCE_UNQUALIFIED
+
+    reduced = accept.worse_resource_verdict(before, after)
+    assert reduced == accept.RESOURCE_UNQUALIFIED, (
+        "只看开跑前那一次，一段在负载下跑出来的墙钟会被判成可评估的——"
+        "**那正是不许冒充的那件事**"
+    )
+    verdict, reason = accept.classify_performance(
+        execution_tree_stable=True, resource=reduced, functional="PASS"
+    )
+    assert verdict == accept.PERFORMANCE_NOT_EVALUATED
+    assert reason == "resource_unqualified"
+
+
 def test_performance_is_not_evaluable_when_the_execution_tree_moved():
     """轴6规则5：性能回执绑执行树——树变了，上一轮的性能结论作废。"""
 

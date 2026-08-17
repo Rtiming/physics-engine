@@ -33,7 +33,7 @@ import signal
 import subprocess
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -238,6 +238,18 @@ def classify_resource(load_average_1m: float | None, cpu_count: int | None) -> s
     if load_average_1m > LOAD_PER_CPU_LIMIT * cpu_count:
         return RESOURCE_UNQUALIFIED
     return RESOURCE_QUALIFIED
+
+
+def worse_resource_verdict(first: str, second: str) -> str:
+    """两次观测取**更坏**的那个：``UNQUALIFIED`` > ``UNKNOWN`` > ``QUALIFIED``。
+
+    ``UNQUALIFIED``压过``UNKNOWN``不是因为它"更严重"——两者对计时都同样是
+    "不合格"——而是因为它**更具体**：一个说"机器当时确实是忙的"，
+    另一个只说"测不出来"。收据要留下更能解释那个墙钟的那句话。
+    """
+
+    order = {RESOURCE_QUALIFIED: 0, RESOURCE_UNKNOWN: 1, RESOURCE_UNQUALIFIED: 2}
+    return first if order.get(first, 1) >= order.get(second, 1) else second
 
 
 def observe_resources() -> ResourceObservation:
@@ -495,6 +507,20 @@ def run_profile(profile: str, timing_mode: str) -> int:
         )
     total_elapsed = time.perf_counter() - started
     after = repository_identity(ROOT)
+    #: **跑完再采一次，取更坏的那个。** 开跑前那一次单独不够，两个理由：
+    #: 一、它描述的是**跑之前**的机器，而计时裁决覆盖的是整段；
+    #: 二、``getloadavg()[0]``是**一分钟**滑动平均，本身滞后——
+    #: 几个重活刚起来时它还低。
+    #: 2026-08-17实测撞上：四条并行轨道在跑，收据判``resource=QUALIFIED``、
+    #: 计时判FAIL（130.2s对120s），而当时load average是23—29、限值是15.0。
+    #: 于是一个**测不准**的墙钟被发成了一条计时结论。
+    #: 这与0053那次是同一个错的镜像：那次是拿不合格读数去改台账，
+    #: 差点把一个正确的数改错**而门还会绿**。
+    resources_after = observe_resources()
+    resources = replace(
+        resources,
+        verdict=worse_resource_verdict(resources.verdict, resources_after.verdict),
+    )
     verdicts = classify(
         tuple(results), budget_s=budget, timing_mode=timing_mode,
         total_elapsed_s=total_elapsed, resource=resources.verdict,
