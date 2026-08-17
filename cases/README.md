@@ -48,6 +48,8 @@
 
 | [`roller_skew_lateral_drift`](roller_skew_lateral_drift/case.md) | **导轮轴偏斜引起的稳态横漂，而且它不需要材料输运**——Shelton正规入轮条件`y'(L)=θ_r`本身就是输运的结果，写成边界条件后稳态是静力边值问题。引擎DER弯曲＋轴向张力对闭式`y_ss = θ_r·L·f(KL)`，`f(u)=(sinh u−u cosh u)/(u(1−cosh u))`，**二阶收敛**（实测比3.739/3.861/3.928）。与WDS `research/04`引的**五个独立数字**逐条对拍。**反直觉结论：张力越大横漂越大**（`f`单调增，10→40N给+11.3%），闭式与引擎各判一次。振幅二次律两档一致（9.97e-3/9.93e-3 per mm²），1mm处+0.9%由张力自升解释、验算对上。**装配公差直接输出**：半间隙6.5mm下，跨长100/200/300/500mm的临界偏斜为5.381°/2.489°/1.546°/**0.852°** | B | local_batch | 4条 | `tests/cases/test_roller_skew_lateral_drift.py` |
 
+| [`free_span_tension_step`](free_span_tension_step/case.md) | **第一条让张力由速度差生成的**：`T = M/R`被换成"输运账＋带材弹性＋放线盘力矩平衡"，于是**收线端速度阶跃第一次成为一个真扰动**。稳态`T = M/R + c·v/R²`，`c=0`时与`drives.SpoolTension`**逐位相同**（旧模型是本模型的零阻尼稳态特例）。阶跃闭式带一个零点（张力连续而速度差当场跳）：`t_p=(π−acos ζ)/ω_d`、超调`exp(−ζ(π−acos ζ)/√(1−ζ²))/(2ζ)`，两档ζ实测9.03e-6/7.35e-5。**开环几乎不衰减**：真实量级轴承给`ζ=0.0132`，`c=0`时跑满12.08个周期幅值比**0.99999998**——一次10%线速度阶跃摆1.05 N（20 N的5.3%）且自己不会停。半隐式Euler**一阶**（比1.99906/1.99911/1.99868）。**方向门跑出了反面**：两端对调后张力单调掉、7.595 ms转速穿零被`ω≤0`接住。**盲区实测**：`exp(−ζΦ/√(1−ζ²))`在本仓的第三支，`ζ=0.5`处与恢复系数式差一个ulp | B | local_batch | 7条 | `tests/cases/test_free_span_tension_step.py` |
+
 ## 一之二、每个案例穿过引擎的哪几层（决策0048第三节通则）
 
 **"验公式"与"验引擎"是两类，混在一个计数里计数就不再有意义。**
@@ -63,6 +65,7 @@
 | `energies`协议层（梯度与Hessian，不求解） | 1 | `axial_stretch_hessian` |
 | **闭式计算器（不碰引擎的任何一层）** | **5** | `scalar_diffraction_airy`、`fts_instrument_line_shape`、`two_beam_interference`、`mutual_inductance_coaxial`、`norris_thin_strip` |
 | 几何查询／资产治理／模型生成（基座，不碰物理求解） | 6 | `segment_distance`、`rotated_aabb`、`broadphase_superset`、`mesh_asset_integrity`、`generator_determinism`、`peer_fcl_distance` |
+| **`transport`自带的输运推进（不碰`state`／`energies`／`solve`）** | **1** | **`free_span_tension_step`（第一条张力由速度差生成的；状态是"材料长度＋放线盘转速"两个标量，不进`State`——**这一行是新开的**，本仓此前没有任何案例落在它上面）** |
 
 **怎么读这张表**：闭式计算器那5条**判据强度很高**（第1档解析闭式、容差是算出来的、
 必红门逐条实测），而且它们**抓到过两个真缺陷**（`materials.py`的长度制漏项、
