@@ -48,6 +48,10 @@
 - `physics_engine.feed` —— 喂料前沿：节点预算定死、布局定长，已喂/未喂是向量里的值
   （力学域，决策0062；**不做材料注入**——那是带材从轮面流过，与往前接长度不是一回事）
 - `physics_engine.motion` —— 位姿时间线（spec/10 `MotionSource`）
+- `physics_engine.laydown` —— 落位点几何层：位姿时间线＋槽中心线＋累计送带长度 →
+  落位点的弧长坐标、世界系槽三标架、入射角、所需送带率与**闭合残差**
+  （力学域，决策0067；**不算张力也不算接触**——它是`motion`与`drives`之间缺的那一环。
+  闭合的两条来源一般不自洽，本模块两条各算一次并把差额按方向拆开，**不挑哪一条是对的**）
 - `physics_engine.actuators` —— 驱动器声明层（spec/10 `Actuator`；**`apply`的物理未实现**——
   物理在`drives`，理由是`actuators`在基座、基座不依赖物理域，见决策0062）
 - `physics_engine.drives` —— 张力驱动链：磁粉离合器电流→扭矩、卷径换算、理想PID
