@@ -617,7 +617,11 @@ class TangentialStickSpring:
 
 
 __all__ = [
+    "IN_PLANE_DIRECTION_MIN_SINE",
+    "TRIAL_OUT_OF_PLANE_TOLERANCE",
+    "FrictionEllipse",
     "FrictionOutcome",
     "TangentialStickSpring",
+    "anisotropic_return_map",
     "coulomb_return_map",
 ]
