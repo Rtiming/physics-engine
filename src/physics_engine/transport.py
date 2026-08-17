@@ -395,8 +395,12 @@ class FreeSpan:
     """
 
     span_id: str
-    #: 跨段的几何长度。**本轨道取常数**——真机上它随机械臂位姿变，
-    #: 那是plans/14第3.3节的三号缺口，由落位点几何层供给。
+    #: 跨段**不受扰时**的几何长度。**它是常数，而且这一条是场景给的不是省事**：
+    #: plans/14第3.3节订正后的场景里，自由跨的两个端点——最后那只导向轮的出带点、
+    #: 入带点——**都是世界系固定的**，所以在途自由段是空间里一条**不动的线段**
+    #: （`laydown.FreeSpanGeometry`把这一条冻在了类型上：``length_mm()``连``t``都收不到）。
+    #: **臂动不改这个数**；臂动改的是落位点的几何，那条通道走`takeup_speed_mm_s`。
+    #: 决策0071第二节把0066第九、十节"真机上跨长逐样点变"那句措辞判为**错的**。
     geometric_length_mm: float
     #: ``EA``，单位N（与`energies.AxialStretch`的``axial_stiffness_n``同一个量）。
     axial_stiffness_n: float
@@ -406,21 +410,50 @@ class FreeSpan:
         _require_positive(self.geometric_length_mm, f"{self.span_id}: geometric_length_mm")
         _require_positive(self.axial_stiffness_n, f"{self.span_id}: axial_stiffness_n")
 
-    def strain(self, material_length_mm: float) -> float:
-        """``ε = (L_geo − L_mat)/L_mat``。可以为负——负的意思是**松弛**。"""
+    def path_length_mm(self, path_excess_mm: float = 0.0) -> float:
+        """带材**实际走过的**路径长度＝不受扰跨长 ＋ 显式的路径增量。
+
+        ``path_excess_mm``是**唯一**能让路径长度不等于`geometric_length_mm`的入口，
+        而且它只有一个来源：**有东西横向顶在跨段上**（`disturbance.TransverseTouch`）。
+        两个端点固定 ⟹ 直线段长度固定；顶一下之后带材走的是**折线**，
+        折线比直线长——这条增量是**几何恒等式**不是模型参数。
+
+        **默认值0.0在这里是一个物理事实不是一个替调用方拿的主意**：
+        没有东西碰它时增量恰为零。这与`SpanTransportLoop.forbid_slack`
+        "没有默认值是有意的"不矛盾——那一条是**声明**（容忍不容忍出界），
+        这一条是**状态**（这一瞬有没有人碰）。
+        """
+
+        return self.geometric_length_mm + self.require_path_excess_mm(path_excess_mm)
+
+    def require_path_excess_mm(self, path_excess_mm: float) -> float:
+        """把路径增量验掉并原样返回。**非负是一条几何事实，不是一个约定。**"""
+
+        excess = _require_finite(path_excess_mm, f"{self.span_id}: path_excess_mm")
+        if excess < 0.0:
+            raise TransportError(
+                f"{self.span_id}: path_excess_mm = {excess!r} < 0 —— "
+                "两个端点之间的最短路径就是直线段，任何横向侵入只会让路径**变长**。"
+                "负增量意味着有人拿它当'跨长可以缩'的旋钮，"
+                "而那正是plans/14第3.3节订正掉的那条错误因果"
+            )
+        return excess
+
+    def strain(self, material_length_mm: float, *, path_excess_mm: float = 0.0) -> float:
+        """``ε = (L_path − L_mat)/L_mat``。可以为负——负的意思是**松弛**。"""
 
         length = _require_positive(material_length_mm, f"{self.span_id}: material_length_mm")
-        return (self.geometric_length_mm - length) / length
+        return (self.path_length_mm(path_excess_mm) - length) / length
 
-    def is_slack(self, material_length_mm: float) -> bool:
-        """跨段里的材料比几何长度还长⟹带材垂下来了。"""
+    def is_slack(self, material_length_mm: float, *, path_excess_mm: float = 0.0) -> bool:
+        """跨段里的材料比路径长度还长⟹带材垂下来了。"""
 
-        return self.strain(material_length_mm) <= MIN_STRAIN
+        return self.strain(material_length_mm, path_excess_mm=path_excess_mm) <= MIN_STRAIN
 
-    def tension_n(self, material_length_mm: float) -> float:
+    def tension_n(self, material_length_mm: float, *, path_excess_mm: float = 0.0) -> float:
         """``T = EA·ε``，松弛时恰为0。"""
 
-        strain = self.strain(material_length_mm)
+        strain = self.strain(material_length_mm, path_excess_mm=path_excess_mm)
         return self.axial_stiffness_n * strain if strain > MIN_STRAIN else 0.0
 
     def material_length_for_tension_mm(self, tension_n: float) -> float:
@@ -439,8 +472,10 @@ class FreeSpan:
             self.axial_stiffness_n + tension
         )
 
-    def stiffness_n_per_mm(self, material_length_mm: float) -> float:
-        """``K = −dT/dL_mat = EA·L_geo/L_mat²``——**跨段作为一根弹簧的刚度**。
+    def stiffness_n_per_mm(
+        self, material_length_mm: float, *, path_excess_mm: float = 0.0
+    ) -> float:
+        """``K = −dT/dL_mat = EA·L_path/L_mat²``——**跨段作为一根弹簧的刚度**。
 
         它不是``EA/L``：那是把应变的分母写成``L_geo``时的近似值，
         两者差``(1 + ε)²``。这一档``ε ≈ 3.3e-4``，差``6.7e-4``相对——
@@ -448,7 +483,7 @@ class FreeSpan:
         """
 
         length = _require_positive(material_length_mm, f"{self.span_id}: material_length_mm")
-        return self.axial_stiffness_n * self.geometric_length_mm / (length * length)
+        return self.axial_stiffness_n * self.path_length_mm(path_excess_mm) / (length * length)
 
     def tension_rate_n_per_s(
         self, *, material_length_mm: float, payout_speed_mm_s: float, takeup_speed_mm_s: float
@@ -770,6 +805,9 @@ class SpanTransportSample:
     payout_speed_mm_s: float
     takeup_speed_mm_s: float
     brake_torque_nmm: float
+    #: 本步生效的路径增量（横向侵入让直线段变成折线的那一份）。
+    #: **默认0.0＝没有东西碰它**，见`FreeSpan.path_length_mm`。
+    path_excess_mm: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -875,12 +913,26 @@ class SpanTransportLoop:
         return self.span.tension_n(self.material_length_mm)
 
     def step(
-        self, *, brake_torque_nmm: float, takeup_speed_mm_s: float
+        self,
+        *,
+        brake_torque_nmm: float,
+        takeup_speed_mm_s: float,
+        path_excess_mm: float = 0.0,
     ) -> tuple[SpanTransportLoop, SpanTransportSample]:
-        """走一步，返回``(新回路, 本步观测)``。观测是**步首**快照。"""
+        """走一步，返回``(新回路, 本步观测)``。观测是**步首**快照。
+
+        ``path_excess_mm``是**外扰通道之二**：横向侵入让带材走折线，路径变长。
+        它与``takeup_speed_mm_s``（外扰通道之一，臂动经落位点几何进来）
+        **不是同一件事，也不许互相折算**：路径增量进的是应变的分子，
+        收线端速度进的是长度账的导数。两者只在``L_mat/L_path``这个``O(ε)``因子上
+        可以互相换算，而把那个因子丢掉正是本仓最怕的那种静默错。
+        """
 
         takeup = _require_finite(takeup_speed_mm_s, "takeup_speed_mm_s")
-        strain = self.span.strain(self.material_length_mm)
+        #: 先把增量验掉（非负、有限），**原样记进样点**——
+        #: 用``path_length_mm``减回来会掉几个ulp，而样点是要被逐位比对的产物。
+        excess = self.span.require_path_excess_mm(path_excess_mm)
+        strain = self.span.strain(self.material_length_mm, path_excess_mm=path_excess_mm)
         if self.forbid_slack and strain <= MIN_STRAIN:
             raise TransportError(
                 f"第{self.step_index}步：应变{strain!r} ≤ 0，跨段已经松了。"
@@ -902,6 +954,7 @@ class SpanTransportLoop:
             payout_speed_mm_s=self.reel.payout_speed_mm_s(self.angular_velocity_rad_s),
             takeup_speed_mm_s=takeup,
             brake_torque_nmm=brake_torque_nmm,
+            path_excess_mm=excess,
         )
         omega = self.angular_velocity_rad_s + self.dt_s * acceleration
         length = self.material_length_mm + self.dt_s * (omega * self.reel.radius_mm - takeup)

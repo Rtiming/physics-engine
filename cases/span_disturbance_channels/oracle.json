@@ -1,0 +1,616 @@
+{
+  "arrays": {},
+  "case_id": "case/span_disturbance_channels",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/span_disturbance_channels",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/span_disturbance_channels/generate_oracle.py",
+    "sha256": "4fdee6f839226ac7e7d05dbaa9b5b6d4ffa5024e449c7e58915bfc8171e8b885"
+  },
+  "load_tier": "local_batch",
+  "manifest_self_sha256": "26e4778aeacb0f16f5a91284bd6fb9a6931d8bc9e99c1f645efc1a1df065ca64",
+  "oracles": [
+    {
+      "expected": {
+        "arc_at_alpha_max_mm": 376.9911184307752,
+        "curvature_at_alpha0_per_mm": 0.013058393576398984,
+        "feed_rate_0_mm_s": 152.57105987591868,
+        "feed_rate_1_mm_s": 151.5929722280534,
+        "feed_rate_2_mm_s": 149.71208213674842,
+        "feed_rate_3_mm_s": 147.9926178750334,
+        "groove_tangent_turn_rate_rad_s": 2.0,
+        "mean_feed_rate_mm_s": 120.0,
+        "world_tangent_turn_rate_rad_s": 0.0
+      },
+      "id": "oracle:span_disturbance/tangent_turn_feed_rate",
+      "inputs": {
+        "alpha_origin_rad": 0.4,
+        "base_curvature_per_mm": 0.016666666666666666,
+        "curvature_modulation": 0.3,
+        "dt_s": 0.0001,
+        "kind": "feed_rate_is_turn_rate_over_curvature",
+        "probe_times_s": [
+          0.02,
+          0.05,
+          0.1,
+          0.14
+        ],
+        "rate_probe_step_s": 0.0001,
+        "stations": 256,
+        "steps": 1500,
+        "tangent_turn_rate_rad_s": 2.0
+      },
+      "tolerances": {
+        "arc_at_alpha_max_mm": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-15
+        },
+        "curvature_at_alpha0_per_mm": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-15
+        },
+        "feed_rate_0_mm_s": {
+          "abs": 0.0,
+          "reason": "``σ' = Ω/κ``对`laydown`在离散中心线上差分出来的所需送带率。2026-08-17实测最坏**6.04e-8**相对（256站点/整圈、``hermite_tangent``位置语义、中心差分步长1e-4），取约16倍余量。**这一条判的是接线不是物理**：数对上了才说明`laydown`的落位点几何真的接进了`transport`的收线端",
+          "rel": 1e-06
+        },
+        "feed_rate_1_mm_s": {
+          "abs": 0.0,
+          "reason": "``σ' = Ω/κ``对`laydown`在离散中心线上差分出来的所需送带率。2026-08-17实测最坏**6.04e-8**相对（256站点/整圈、``hermite_tangent``位置语义、中心差分步长1e-4），取约16倍余量。**这一条判的是接线不是物理**：数对上了才说明`laydown`的落位点几何真的接进了`transport`的收线端",
+          "rel": 1e-06
+        },
+        "feed_rate_2_mm_s": {
+          "abs": 0.0,
+          "reason": "``σ' = Ω/κ``对`laydown`在离散中心线上差分出来的所需送带率。2026-08-17实测最坏**6.04e-8**相对（256站点/整圈、``hermite_tangent``位置语义、中心差分步长1e-4），取约16倍余量。**这一条判的是接线不是物理**：数对上了才说明`laydown`的落位点几何真的接进了`transport`的收线端",
+          "rel": 1e-06
+        },
+        "feed_rate_3_mm_s": {
+          "abs": 0.0,
+          "reason": "``σ' = Ω/κ``对`laydown`在离散中心线上差分出来的所需送带率。2026-08-17实测最坏**6.04e-8**相对（256站点/整圈、``hermite_tangent``位置语义、中心差分步长1e-4），取约16倍余量。**这一条判的是接线不是物理**：数对上了才说明`laydown`的落位点几何真的接进了`transport`的收线端",
+          "rel": 1e-06
+        },
+        "groove_tangent_turn_rate_rad_s": {
+          "abs": 0.0,
+          "reason": "**旋钮本体**：工件系槽切向的转速必须等于``α' = Ω``。实测2.000466对2.0是**2.33e-4**相对，残差是``reorthonormalised_linear``帧语义的二阶截断（0067第四节量过那一条是一阶对二阶）。取约4倍余量",
+          "rel": 0.001
+        },
+        "mean_feed_rate_mm_s": {
+          "abs": 0.0,
+          "reason": "``Ω/κ0``。它同时是平面圆退化档的那个恒定送带率",
+          "rel": 1e-06
+        },
+        "world_tangent_turn_rate_rad_s": {
+          "abs": 0.001,
+          "reason": "**期望值是零**：姿态取``Rz(−α)``时世界系槽切向恒为``(1,0,0)``，那正是`laydown`把入射角理想值定在0的那个条件（0067第5.1节）。实测4.66e-4 rad/s（对旋钮值2.0是2.3e-4相对），残差来自帧插值的二阶截断。**判绝对不判相对：期望值是0**",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "feed_rate_mm_s": 120.0,
+        "feed_rate_spread_mm_s": 0.0,
+        "takeup_variance_mm_s": 0.0,
+        "tension_excursion_nominal_damping_n": 0.0,
+        "tension_excursion_zero_damping_n": 0.0
+      },
+      "id": "oracle:span_disturbance/planar_circle_degenerate",
+      "inputs": {
+        "base_curvature_per_mm": 0.016666666666666666,
+        "curvature_modulation": 0.0,
+        "dt_s": 0.0001,
+        "kind": "constant_curvature_gives_no_disturbance",
+        "steps": 20000,
+        "tangent_turn_rate_rad_s": 2.0
+      },
+      "tolerances": {
+        "feed_rate_mm_s": {
+          "abs": 0.0,
+          "reason": "平面圆上``κ``恒定，``σ' = Ω/κ0``**恒定**。经`laydown`的离散中心线走一趟实测散布1.63e-7 mm/s对120 mm/s，即1.36e-9相对——取1e-9是把那条散布单独判在下一行",
+          "rel": 1e-09
+        },
+        "feed_rate_spread_mm_s": {
+          "abs": 2e-06,
+          "reason": "**期望值是零**：解析上送带率恒定。经离散中心线实测散布**1.63e-7 mm/s**（256站点/整圈），取约12倍余量。**判绝对不判相对**——期望值是0",
+          "rel": 0.0
+        },
+        "takeup_variance_mm_s": {
+          "abs": 0.0,
+          "reason": "**零容差，而且这一条真的逐位成立**：平面圆上所需送带率是常数，所以扰动的**输入**方差恰为零。它与下面两条分开列，是因为'输入没有扰动'与'输出一个ulp都不动'是两件事——**后者做不到，而我一开始把它写成了零容差**（见案例页第四节）",
+          "rel": 0.0
+        },
+        "tension_excursion_nominal_damping_n": {
+          "abs": 1e-10,
+          "reason": "同一件事的有阻尼档，实测**1.1376e-11 N**——**比无阻尼档还小一半**，因为轴承把那几个ulp的激励吃掉了一部分。取1e-10留约9倍余量。**两档并排列，是为了让'零容差做不到'这件事有两个独立的数支撑**",
+          "rel": 0.0
+        },
+        "tension_excursion_zero_damping_n": {
+          "abs": 2e-10,
+          "reason": "**期望值是零，而实测不是逐位零**。本条最初写的是零容差，**实测当场否掉**：``c = 0``档20000步（``dt = 1e-4``，共2秒）峰谷差**2.2752e-11 N**。病根不在扰动而在起点——``at_steady_state``那一趟``T → L_mat → T``的往返有几个ulp的舍入（0066实测四档最坏3.908e-12 N），于是``T·R − M ≠ 0``逐位，而``c = 0``**没有任何阻尼**把它吃掉，20000步就把它积成了这个数。取2e-10留约9倍余量。**判绝对不判相对：期望值是0**",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "damping_over_radius_squared": 0.013888888888888888,
+        "harmonic_gain_at_zero_n_per_mm_s": 0.013888888888888888,
+        "two_zeta_k_over_omega_n": 0.013888888888888888
+      },
+      "id": "oracle:span_disturbance/quasi_static_limit",
+      "inputs": {
+        "bearing_damping_nmm_s": 50.0,
+        "kind": "zero_frequency_limit_is_the_steady_state_relation",
+        "line_speed_mm_s": 20.0
+      },
+      "tolerances": {
+        "damping_over_radius_squared": {
+          "abs": 0.0,
+          "reason": "同上，是被对拍的另一半",
+          "rel": 0.0
+        },
+        "harmonic_gain_at_zero_n_per_mm_s": {
+          "abs": 0.0,
+          "reason": "``ω → 0``时正弦响应的增益必须退回稳态关系``dT/dv = c/R²``。两条路径（模长式 对 ``2ζK/ω_n``）实测差**1 ulp**（2.22e-16相对），取2倍。**这一条是`SpoolTension`那条'旧模型是本模型的稳态特例'在频域的同一件事**",
+          "rel": 4e-16
+        },
+        "two_zeta_k_over_omega_n": {
+          "abs": 0.0,
+          "reason": "**零容差，判逐位相等**：``2ζK/ω_n``把``ζ``与``ω_n``的定义代进去，``K``整个消掉，剩下的恰是``c/R²``。2026-08-17实测两边都是``0.013888888888888888``——**这句话要么逐位成立，要么就不该说**",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "amplitude_ratio_1": 2.0295278564041865,
+        "amplitude_ratio_2": 2.112411256139101,
+        "amplitude_ratio_3": 2.3788526714334752,
+        "damping_ratio_0": 0.013171583450892243,
+        "damping_ratio_1": 0.01317140057827054,
+        "damping_ratio_2": 0.01317103484826059,
+        "damping_ratio_3": 0.013170303449168617,
+        "initial_payout_speed_0_mm_s": 78.0001248274196,
+        "initial_payout_speed_1_mm_s": 156.00099861240724,
+        "initial_payout_speed_2_mm_s": 312.0079891202421,
+        "initial_payout_speed_3_mm_s": 624.0639271309011,
+        "initial_tension_0_n": 21.08333680197767,
+        "initial_tension_1_n": 22.166694415917146,
+        "initial_tension_2_n": 24.333555342726974,
+        "initial_tension_3_n": 28.668443431748514,
+        "line_speed_0_mm_s": 60.0,
+        "line_speed_1_mm_s": 120.0,
+        "line_speed_2_mm_s": 240.0,
+        "line_speed_3_mm_s": 480.0,
+        "natural_frequency_0_rad_s": 379.6050807893792,
+        "natural_frequency_1_rad_s": 379.6103512521461,
+        "natural_frequency_2_rad_s": 379.62089217768005,
+        "natural_frequency_3_rad_s": 379.6419740287478,
+        "steady_tension_0_n": 20.833333333333332,
+        "steady_tension_1_n": 21.666666666666668,
+        "steady_tension_2_n": 23.333333333333332,
+        "steady_tension_3_n": 26.666666666666668,
+        "steps_0": 65973.0,
+        "steps_1": 32986.0,
+        "steps_2": 16493.0,
+        "steps_3": 8246.0,
+        "tension_amplitude_0_n": 0.2512486334941851,
+        "tension_amplitude_1_n": 0.5099161005599345,
+        "tension_amplitude_2_n": 1.0771525105093633,
+        "tension_amplitude_3_n": 2.5623871271664735
+      },
+      "id": "oracle:span_disturbance/arm_rate_sweep",
+      "inputs": {
+        "base_curvature_per_mm": 0.016666666666666666,
+        "bearing_damping_nmm_s": 50.0,
+        "curvature_modulation": 0.3,
+        "cycles": 1.05,
+        "dt_s": 0.0001,
+        "kind": "sinusoidal_takeup_from_groove_curvature",
+        "tangent_turn_rates_rad_s": [
+          1.0,
+          2.0,
+          4.0,
+          8.0
+        ]
+      },
+      "tolerances": {
+        "amplitude_ratio_1": {
+          "abs": 0.0,
+          "reason": "闭式之比，纯代数。**它必须>1**——那就是那条单调判据本体，实测2.0295 / 2.1123 / 2.3785",
+          "rel": 1e-14
+        },
+        "amplitude_ratio_2": {
+          "abs": 0.0,
+          "reason": "闭式之比，纯代数。**它必须>1**——那就是那条单调判据本体，实测2.0295 / 2.1123 / 2.3785",
+          "rel": 1e-14
+        },
+        "amplitude_ratio_3": {
+          "abs": 0.0,
+          "reason": "闭式之比，纯代数。**它必须>1**——那就是那条单调判据本体，实测2.0295 / 2.1123 / 2.3785",
+          "rel": 1e-14
+        },
+        "damping_ratio_0": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-14
+        },
+        "damping_ratio_1": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-14
+        },
+        "damping_ratio_2": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-14
+        },
+        "damping_ratio_3": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-14
+        },
+        "initial_payout_speed_0_mm_s": {
+          "abs": 0.0,
+          "reason": "``v₀ + a + ω·Im X/K``。它与上一条一起把回路直接放在受迫轨道上",
+          "rel": 1e-14
+        },
+        "initial_payout_speed_1_mm_s": {
+          "abs": 0.0,
+          "reason": "``v₀ + a + ω·Im X/K``。它与上一条一起把回路直接放在受迫轨道上",
+          "rel": 1e-14
+        },
+        "initial_payout_speed_2_mm_s": {
+          "abs": 0.0,
+          "reason": "``v₀ + a + ω·Im X/K``。它与上一条一起把回路直接放在受迫轨道上",
+          "rel": 1e-14
+        },
+        "initial_payout_speed_3_mm_s": {
+          "abs": 0.0,
+          "reason": "``v₀ + a + ω·Im X/K``。它与上一条一起把回路直接放在受迫轨道上",
+          "rel": 1e-14
+        },
+        "initial_tension_0_n": {
+          "abs": 0.0,
+          "reason": "受迫解在``t = 0``的值。**起点取闭式受迫解而不是稳态**：``ζ = 0.0132``下瞬态要0.2 s才衰减，比整段窗口还长",
+          "rel": 1e-14
+        },
+        "initial_tension_1_n": {
+          "abs": 0.0,
+          "reason": "受迫解在``t = 0``的值。**起点取闭式受迫解而不是稳态**：``ζ = 0.0132``下瞬态要0.2 s才衰减，比整段窗口还长",
+          "rel": 1e-14
+        },
+        "initial_tension_2_n": {
+          "abs": 0.0,
+          "reason": "受迫解在``t = 0``的值。**起点取闭式受迫解而不是稳态**：``ζ = 0.0132``下瞬态要0.2 s才衰减，比整段窗口还长",
+          "rel": 1e-14
+        },
+        "initial_tension_3_n": {
+          "abs": 0.0,
+          "reason": "受迫解在``t = 0``的值。**起点取闭式受迫解而不是稳态**：``ζ = 0.0132``下瞬态要0.2 s才衰减，比整段窗口还长",
+          "rel": 1e-14
+        },
+        "line_speed_0_mm_s": {
+          "abs": 0.0,
+          "reason": "``v₀ = Ω/κ0``，一次除法",
+          "rel": 1e-14
+        },
+        "line_speed_1_mm_s": {
+          "abs": 0.0,
+          "reason": "``v₀ = Ω/κ0``，一次除法",
+          "rel": 1e-14
+        },
+        "line_speed_2_mm_s": {
+          "abs": 0.0,
+          "reason": "``v₀ = Ω/κ0``，一次除法",
+          "rel": 1e-14
+        },
+        "line_speed_3_mm_s": {
+          "abs": 0.0,
+          "reason": "``v₀ = Ω/κ0``，一次除法",
+          "rel": 1e-14
+        },
+        "natural_frequency_0_rad_s": {
+          "abs": 0.0,
+          "reason": "纯代数，含那个1000",
+          "rel": 1e-14
+        },
+        "natural_frequency_1_rad_s": {
+          "abs": 0.0,
+          "reason": "纯代数，含那个1000",
+          "rel": 1e-14
+        },
+        "natural_frequency_2_rad_s": {
+          "abs": 0.0,
+          "reason": "纯代数，含那个1000",
+          "rel": 1e-14
+        },
+        "natural_frequency_3_rad_s": {
+          "abs": 0.0,
+          "reason": "纯代数，含那个1000",
+          "rel": 1e-14
+        },
+        "steady_tension_0_n": {
+          "abs": 0.0,
+          "reason": "``M/R + c·v/R²``，纯算术",
+          "rel": 1e-14
+        },
+        "steady_tension_1_n": {
+          "abs": 0.0,
+          "reason": "``M/R + c·v/R²``，纯算术",
+          "rel": 1e-14
+        },
+        "steady_tension_2_n": {
+          "abs": 0.0,
+          "reason": "``M/R + c·v/R²``，纯算术",
+          "rel": 1e-14
+        },
+        "steady_tension_3_n": {
+          "abs": 0.0,
+          "reason": "``M/R + c·v/R²``，纯算术",
+          "rel": 1e-14
+        },
+        "steps_0": {
+          "abs": 0.0,
+          "reason": "步数是整数，零容差",
+          "rel": 0.0
+        },
+        "steps_1": {
+          "abs": 0.0,
+          "reason": "步数是整数，零容差",
+          "rel": 0.0
+        },
+        "steps_2": {
+          "abs": 0.0,
+          "reason": "步数是整数，零容差",
+          "rel": 0.0
+        },
+        "steps_3": {
+          "abs": 0.0,
+          "reason": "步数是整数，零容差",
+          "rel": 0.0
+        },
+        "tension_amplitude_0_n": {
+          "abs": 0.0,
+          "reason": "**收敛结果**：半隐式Euler的一阶误差。2026-08-17实测四档−4.95e-6 / −1.92e-5 / −6.94e-5 / −2.11e-4（``dt = 1e-4``），取最坏档的约5倍余量。**窗口必须≥一个整周期**——0.55周期档在Ω=8上偏低10.9%，而那是窗口不是物理",
+          "rel": 0.001
+        },
+        "tension_amplitude_1_n": {
+          "abs": 0.0,
+          "reason": "**收敛结果**：半隐式Euler的一阶误差。2026-08-17实测四档−4.95e-6 / −1.92e-5 / −6.94e-5 / −2.11e-4（``dt = 1e-4``），取最坏档的约5倍余量。**窗口必须≥一个整周期**——0.55周期档在Ω=8上偏低10.9%，而那是窗口不是物理",
+          "rel": 0.001
+        },
+        "tension_amplitude_2_n": {
+          "abs": 0.0,
+          "reason": "**收敛结果**：半隐式Euler的一阶误差。2026-08-17实测四档−4.95e-6 / −1.92e-5 / −6.94e-5 / −2.11e-4（``dt = 1e-4``），取最坏档的约5倍余量。**窗口必须≥一个整周期**——0.55周期档在Ω=8上偏低10.9%，而那是窗口不是物理",
+          "rel": 0.001
+        },
+        "tension_amplitude_3_n": {
+          "abs": 0.0,
+          "reason": "**收敛结果**：半隐式Euler的一阶误差。2026-08-17实测四档−4.95e-6 / −1.92e-5 / −6.94e-5 / −2.11e-4（``dt = 1e-4``），取最坏档的约5倍余量。**窗口必须≥一个整周期**——0.55周期档在Ω=8上偏低10.9%，而那是窗口不是物理",
+          "rel": 0.001
+        }
+      }
+    },
+    {
+      "expected": {
+        "centre_excess_mm": 0.026665481586803708,
+        "centre_force_factor": 0.026664296612298865,
+        "centre_over_offcentre_excess": 0.7500703473706035,
+        "centre_small_angle_excess_mm": 0.02666666666666667,
+        "excess_0_mm": 0.0016666620370529017,
+        "excess_1_mm": 0.0066665925942288595,
+        "excess_2_mm": 0.026665481586803708,
+        "excess_3_mm": 0.10664771044309873,
+        "excess_ratio_1": 3.9999666675177616,
+        "excess_ratio_2": 3.99986668000194,
+        "excess_ratio_3": 3.9994668799035256,
+        "offcentre_excess_mm": 0.03555064092358862,
+        "small_angle_centre_over_offcentre": 0.75
+      },
+      "id": "oracle:span_disturbance/touch_path_geometry",
+      "inputs": {
+        "kind": "transverse_intrusion_polyline",
+        "offcentre_station_mm": 75.0,
+        "offset_mm": 2.0,
+        "offset_sweep_mm": [
+          0.5,
+          1.0,
+          2.0,
+          4.0
+        ],
+        "span_length_mm": 300.0,
+        "station_from_guide_mm": 150.0
+      },
+      "tolerances": {
+        "centre_excess_mm": {
+          "abs": 0.0,
+          "reason": "**几何恒等式**（两条斜边减一条底边），双精度往返。判到1e-15是有意的：小角度式在这一档差**4.444e-5相对**，拿小角度式当实现会被这条门当场抓住",
+          "rel": 1e-15
+        },
+        "centre_force_factor": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-15
+        },
+        "centre_over_offcentre_excess": {
+          "abs": 0.0,
+          "reason": "**这个比值小于1**：跨段中点是路径增量**最小**的地方（``p ∝ L/(2ab)``而``ab``在中点最大）。'中间按下去最狠'是直觉，而直觉在这里是反的",
+          "rel": 1e-15
+        },
+        "centre_small_angle_excess_mm": {
+          "abs": 0.0,
+          "reason": "同上，它是被对比的那一半——**清单里同时给两个数才看得见差额**",
+          "rel": 1e-15
+        },
+        "excess_0_mm": {
+          "abs": 0.0,
+          "reason": "四档一起给，判的是**二次律**：δ翻倍路径增量翻四倍",
+          "rel": 1e-15
+        },
+        "excess_1_mm": {
+          "abs": 0.0,
+          "reason": "四档一起给，判的是**二次律**：δ翻倍路径增量翻四倍",
+          "rel": 1e-15
+        },
+        "excess_2_mm": {
+          "abs": 0.0,
+          "reason": "四档一起给，判的是**二次律**：δ翻倍路径增量翻四倍",
+          "rel": 1e-15
+        },
+        "excess_3_mm": {
+          "abs": 0.0,
+          "reason": "四档一起给，判的是**二次律**：δ翻倍路径增量翻四倍",
+          "rel": 1e-15
+        },
+        "excess_ratio_1": {
+          "abs": 0.0,
+          "reason": "相邻两档之比。**它不写死为4**——精确式比小角度式略小，所以比值实测3.99997/3.99987/3.99947，是一条真的会动的判据",
+          "rel": 1e-15
+        },
+        "excess_ratio_2": {
+          "abs": 0.0,
+          "reason": "相邻两档之比。**它不写死为4**——精确式比小角度式略小，所以比值实测3.99997/3.99987/3.99947，是一条真的会动的判据",
+          "rel": 1e-15
+        },
+        "excess_ratio_3": {
+          "abs": 0.0,
+          "reason": "相邻两档之比。**它不写死为4**——精确式比小角度式略小，所以比值实测3.99997/3.99987/3.99947，是一条真的会动的判据",
+          "rel": 1e-15
+        },
+        "offcentre_excess_mm": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-15
+        },
+        "small_angle_centre_over_offcentre": {
+          "abs": 0.0,
+          "reason": "小角度下这个比值恰是``a·b``之比，即``0.75``——两条并排才看得出差额",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "damping_ratio": 0.013171705368794534,
+        "material_length_mm": 299.8986453652238,
+        "natural_frequency_rad_s": 379.6015671475346,
+        "onset_step_n": 5.334898706393924,
+        "peak_tension_n": 26.156423310019836,
+        "span_stiffness_n_per_mm": 200.13520802897804,
+        "steady_tension_n": 20.27777777777778,
+        "touched_steps": 10000.0,
+        "trough_tension_n": 14.15074792169071
+      },
+      "id": "oracle:span_disturbance/touch_tension_spike",
+      "inputs": {
+        "bearing_damping_nmm_s": 50.0,
+        "dt_s": 2e-06,
+        "end_time_s": 0.022,
+        "kind": "rectangular_path_step_second_order",
+        "line_speed_mm_s": 20.0,
+        "start_time_s": 0.002,
+        "steps": 50000
+      },
+      "tolerances": {
+        "damping_ratio": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-14
+        },
+        "material_length_mm": {
+          "abs": 0.0,
+          "reason": "纯代数反解",
+          "rel": 1e-15
+        },
+        "natural_frequency_rad_s": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-14
+        },
+        "onset_step_n": {
+          "abs": 0.0,
+          "reason": "**这一条是精确的不是线性化的**：材料长度是状态、不会瞬变，所以路径一跳张力当场跳``EA·p/L_mat``。2026-08-17实测四档``dt``全部给**同一个**偏差1.70e-13相对，**它不随步长动**——那正是'这是恒等式不是收敛结果'的指纹",
+          "rel": 1e-12
+        },
+        "peak_tension_n": {
+          "abs": 0.0,
+          "reason": "整段窗口的峰值。**它由触碰结束那一次反向阶跃与振铃的相位叠加定**，不是触碰开始那一跳。实测−2.10e-5 / −2.65e-5 / −2.93e-5 / −3.06e-5（``dt``四档），**它有floor不随``dt``趋零**——那是闭式自己的线性化偏差（``K``随``L_mat``变约8.8e-5）。取3倍余量",
+          "rel": 0.0001
+        },
+        "span_stiffness_n_per_mm": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-14
+        },
+        "steady_tension_n": {
+          "abs": 0.0,
+          "reason": "纯算术",
+          "rel": 1e-15
+        },
+        "touched_steps": {
+          "abs": 0.0,
+          "reason": "整数，零容差",
+          "rel": 0.0
+        },
+        "trough_tension_n": {
+          "abs": 0.0,
+          "reason": "谷值14.15 N对稳态20.28 N是**掉30%**——尖峰不是只往上。容差比峰值那条松五倍，因为**谷值的线性化floor更高**：``dt``四档实测9.80e-5 / 1.09e-4 / 1.14e-4，同样不随``dt``趋零。**两条floor不一样高这件事要写出来**，否则下一个人会以为容差是照着峰值那条抄的",
+          "rel": 0.0005
+        }
+      }
+    },
+    {
+      "expected": {
+        "damped_period_s": 0.016553489155082927,
+        "envelope_after_1_periods": 0.9205652036564123,
+        "envelope_after_2_periods": 0.8474402941829718,
+        "envelope_after_3_periods": 0.7801240470011974,
+        "envelope_after_4_periods": 0.7181550522049219
+      },
+      "id": "oracle:span_disturbance/touch_ring_down",
+      "inputs": {
+        "bearing_damping_nmm_s": 50.0,
+        "kind": "open_loop_ring_envelope",
+        "periods": [
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "tolerances": {
+        "damped_period_s": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-14
+        },
+        "envelope_after_1_periods": {
+          "abs": 0.0,
+          "reason": "**这是'撤掉控制器时不回落'那条判据的闭式对手**。2026-08-17实测四档偏差2.04e-8 / 6.02e-9 / −7.58e-9 / −4.82e-8，取约20倍余量。四个周期之后还剩**71.8%**——**那就是不回落**",
+          "rel": 1e-06
+        },
+        "envelope_after_2_periods": {
+          "abs": 0.0,
+          "reason": "**这是'撤掉控制器时不回落'那条判据的闭式对手**。2026-08-17实测四档偏差2.04e-8 / 6.02e-9 / −7.58e-9 / −4.82e-8，取约20倍余量。四个周期之后还剩**71.8%**——**那就是不回落**",
+          "rel": 1e-06
+        },
+        "envelope_after_3_periods": {
+          "abs": 0.0,
+          "reason": "**这是'撤掉控制器时不回落'那条判据的闭式对手**。2026-08-17实测四档偏差2.04e-8 / 6.02e-9 / −7.58e-9 / −4.82e-8，取约20倍余量。四个周期之后还剩**71.8%**——**那就是不回落**",
+          "rel": 1e-06
+        },
+        "envelope_after_4_periods": {
+          "abs": 0.0,
+          "reason": "**这是'撤掉控制器时不回落'那条判据的闭式对手**。2026-08-17实测四档偏差2.04e-8 / 6.02e-9 / −7.58e-9 / −4.82e-8，取约20倍余量。四个周期之后还剩**71.8%**——**那就是不回落**",
+          "rel": 1e-06
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

@@ -762,3 +762,65 @@ def test_must_be_red_the_span_closes_on_bad_declarations(field, value, pattern):
     kwargs[field] = value
     with pytest.raises(TransportError, match=pattern):
         FreeSpan(**kwargs)
+
+
+def test_the_path_excess_enters_the_strain_numerator_and_nothing_else():
+    """横向侵入让路径变长——**它进的是应变的分子，不是长度账的导数**。
+
+    两条通道在推进器里各走各的：``path_excess_mm``改``L_path``（当场改张力），
+    ``takeup_speed_mm_s``改``dL_mat/dt``（改的是张力的**导数**）。
+    本门判两件事：路径增量当场把张力抬到``EA·(L_path − L_mat)/L_mat``，
+    而**转速一点没动**（它是状态，不会因为路径变长而瞬变）。
+    """
+
+    loop = SpanTransportLoop.at_steady_state(
+        span=SPAN, reel=REEL, dt_s=1.0e-6, brake_torque_nmm=BRAKE_NMM,
+        line_speed_mm_s=LINE_SPEED, forbid_slack=True,
+    )
+    excess = 0.02
+    _, plain = loop.step(brake_torque_nmm=BRAKE_NMM, takeup_speed_mm_s=LINE_SPEED)
+    _, pushed = loop.step(
+        brake_torque_nmm=BRAKE_NMM, takeup_speed_mm_s=LINE_SPEED, path_excess_mm=excess
+    )
+    assert pushed.path_excess_mm == excess
+    assert plain.path_excess_mm == 0.0
+    assert pushed.angular_velocity_rad_s == plain.angular_velocity_rad_s
+    lift = SPAN.axial_stiffness_n * excess / loop.material_length_mm
+    assert pushed.tension_n - plain.tension_n == pytest.approx(lift, rel=1.0e-12)
+
+
+def test_must_be_red_the_span_refuses_a_negative_path_excess():
+    """两个端点是世界系常量 ⟹ 路径只会**变长**（决策0071第二节）。"""
+
+    loop = SpanTransportLoop.at_steady_state(
+        span=SPAN, reel=REEL, dt_s=1.0e-6, brake_torque_nmm=BRAKE_NMM,
+        line_speed_mm_s=LINE_SPEED, forbid_slack=True,
+    )
+    with pytest.raises(TransportError, match="path_excess_mm"):
+        loop.step(
+            brake_torque_nmm=BRAKE_NMM, takeup_speed_mm_s=LINE_SPEED, path_excess_mm=-1.0e-9
+        )
+    #: 零增量必须**逐位**退回不受扰的跨长——否则"没人碰它"这件事会带上一个偏差。
+    assert SPAN.strain(299.9, path_excess_mm=0.0) == SPAN.strain(299.9)
+    assert SPAN.stiffness_n_per_mm(299.9, path_excess_mm=0.0) == SPAN.stiffness_n_per_mm(299.9)
+
+
+def test_the_span_stiffness_follows_the_disturbed_path_not_the_nominal_span():
+    """路径被顶长之后，**跨段作为弹簧的刚度也跟着变**：``K = EA·L_path/L_mat²``。
+
+    拿不受扰的``L_geo``当分子在``p/L_geo``这一档只差1e-4相对，
+    **而它正好落在触碰那条判据要分辨的量级上**——所以这一条单独判。
+    """
+
+    material = 299.9
+    excess = 0.03
+    plain = SPAN.stiffness_n_per_mm(material)
+    pushed = SPAN.stiffness_n_per_mm(material, path_excess_mm=excess)
+    assert pushed > plain
+    assert pushed == pytest.approx(
+        SPAN.axial_stiffness_n * (SPAN.geometric_length_mm + excess) / (material * material),
+        rel=1.0e-15,
+    )
+    assert pushed / plain == pytest.approx(
+        1.0 + excess / SPAN.geometric_length_mm, rel=1.0e-15
+    )
