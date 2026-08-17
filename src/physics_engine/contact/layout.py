@@ -17,7 +17,6 @@ from physics_engine.contact.errors import ContactError
 from physics_engine.energies import EnergyContext
 from physics_engine.state import StateField, StateLayout
 
-
 #: 每对声明能分到几个锚点槽，按**形状族**定（0050第一节）。
 #: 今天窄相只有球/胶囊族（`collision.py`第一片明写圆柱/盒/网格"等下一片，不冒充"），
 #: 该族的最近点是唯一的，故为1。
@@ -209,5 +208,16 @@ def build_contact_layout(
     )
 
 
-
-
+__all__ = [
+    "MAX_POINTS_PER_PAIR_SPHERE_CAPSULE",
+    "NORMAL_UNIT_TOLERANCE",
+    "REGIME_SEPARATED",
+    "REGIME_SLIP",
+    "REGIME_STICK",
+    "SLOT_WIDTH",
+    "ContactDeclaration",
+    "ContactLayout",
+    "ContactSlot",
+    "NormalSource",
+    "build_contact_layout",
+]

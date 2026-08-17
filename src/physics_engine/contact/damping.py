@@ -269,3 +269,12 @@ class LinearNormalDashpot:
                 force[3 * j + axis] += component
             power += max(0.0, -magnitude * gap_rate)
         return tuple(force), power
+
+
+__all__ = [
+    "LinearDashpotParameters",
+    "LinearNormalDashpot",
+    "damping_ratio_from_restitution",
+    "linear_dashpot_parameters",
+    "restitution_from_damping_ratio",
+]
