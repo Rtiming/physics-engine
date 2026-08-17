@@ -52,6 +52,9 @@
   物理在`drives`，理由是`actuators`在基座、基座不依赖物理域，见决策0062）
 - `physics_engine.drives` —— 张力驱动链：磁粉离合器电流→扭矩、卷径换算、理想PID
   与闭环推进（力学域，决策0062；**不复现ATC600**，真机回路是拿不到参数的黑箱）
+- `physics_engine.transport` —— 线速度与输运：喂料长度时间线→线速度、自由跨段的
+  材料长度账、带材弹性生成张力、放线盘力矩平衡（力学域，决策0066；
+  **`T = M/R`是本模型的稳态特例不是一条定律**；跨段几何长度本轮取常数）
 - `physics_engine.sensors` —— 传感器声明层（spec/10 `Sensor`）
 - `physics_engine.modelgen` —— 参数化模型生成器（spec/11）
 - `physics_engine.cli` —— `pe-scene`命令行的实现（数据层入口；

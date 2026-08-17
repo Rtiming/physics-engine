@@ -175,6 +175,26 @@ class SpoolTension:
 
     ``R(n) = barrel_radius_mm + turns·tape_thickness_mm``。
 
+    ## ``T = M/R``**不是一条定律，是一个稳态**（2026-08-17，决策0066）
+
+    本类落地时（0062）这条式子是**直接给出**张力的：扭矩除以卷径，完事。
+    `transport.py`把它拆开之后可以说清它到底是什么：
+
+        放线盘的力矩平衡     J·dω/dt = T·R − M − c·ω
+        稳态（dω/dt = 0）    T = M/R + c·v/R²
+
+    **``c = 0``（零轴承阻力矩）时它恰是``T = M/R``**，
+    而`cases/free_span_tension_step`有一道门判两边给出**同一个浮点数**。
+
+    这句话有两个后果，都要写清楚：
+
+    1. **本类没有错**，它是那条平衡在``c = 0``下的稳态解；
+    2. **本类里没有时间也没有速度**，于是在它上面**没有扰动可控**——
+       一个必须抑制线速度扰动的控制律，在这个模型里连扰动都不存在。
+       要让控制器有东西可控，走`transport.SpanTransportLoop`。
+
+    本类的字节形制、门与调用点**一个字没动**（0064波次二的分槽纪律）。
+
     ## 半径生长为什么在这里而不在几何层
 
     因为它改变的是**力**：同一个扭矩在卷满时给出的张力比空卷时小
@@ -213,6 +233,47 @@ class SpoolTension:
         if not math.isfinite(tension_n):
             raise DriveError(f"tension must be finite: {tension_n!r}")
         return tension_n * self.radius_mm(turns)
+
+    def brake_torque_for_tension_nmm(
+        self, tension_n: float, *, bearing_damping_nmm_s: float, line_speed_mm_s: float,
+        turns: float = 0.0,
+    ) -> float:
+        """**带线速度的**前馈：``M = T·R − c·v/R``（决策0066）。
+
+        `torque_nmm`回答"静止时要这个张力需要多大扭矩"，本方法回答
+        "**这条线正在以``v``跑的时候**要这个张力需要多大扭矩"。
+        两者差``c·v/R``——放线盘的轴承阻力矩已经替你出了一部分力，
+        制动器要少出这么多。
+
+        ``bearing_damping_nmm_s = 0``时本方法与`torque_nmm`**逐位相同**，
+        有一道门判它。**没有默认值是有意的**：写``0``是一条声明
+        （"这只轴承没有阻力矩"），而那在真机上不成立。
+
+        推导与判据在`transport.py`；本方法只是把那条稳态平衡摆在
+        驱动链这一侧，因为"要下发多大扭矩"是驱动链的问题。
+        """
+
+        if not math.isfinite(tension_n):
+            raise DriveError(f"tension must be finite: {tension_n!r}")
+        if not math.isfinite(bearing_damping_nmm_s) or bearing_damping_nmm_s < 0.0:
+            raise DriveError(
+                f"bearing damping must be finite and nonnegative: "
+                f"{bearing_damping_nmm_s!r} —— 负的粘性阻力矩是一台往系统里灌能量的轴承"
+            )
+        if not math.isfinite(line_speed_mm_s) or line_speed_mm_s < 0.0:
+            raise DriveError(
+                f"line speed must be finite and nonnegative: {line_speed_mm_s!r} —— "
+                "负线速度是收线端在倒着走，那是另一个工况"
+            )
+        radius = self.radius_mm(turns)
+        torque = tension_n * radius - bearing_damping_nmm_s * line_speed_mm_s / radius
+        if torque < 0.0:
+            raise DriveError(
+                f"要{tension_n!r} N需要的制动力矩是{torque!r} N·mm —— 负的。"
+                "轴承阻力矩本身已经超过这个张力所需，制动器**关到底也太紧**；"
+                "本类不假装能算它（那要么换轴承、要么换张力设定）"
+            )
+        return torque
 
 
 @dataclass(frozen=True)

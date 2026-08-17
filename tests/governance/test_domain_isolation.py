@@ -87,6 +87,10 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
     #: 它没有长在`actuators`里，正是因为那样会让基座反向依赖力学：
     #: 0035那次抓到的"方向反了"，判词是"我最初把它登记成基座接口，
     #: 是把愿望当成了事实"。判据仍是那条：**import决定环，不是愿望决定环**。
+    #: `transport`归力学（2026-08-17，决策0066）：它import基座`scene`圈的`motion`
+    #: （只取`PauseInterval`，让暂停区间在两条时间线上是同一个形制）与标准库——
+    #: **没有一条边越到别的域，也没有向上**。它没有长在`motion`里同样是方向问题：
+    #: `motion`在基座，而跨段张力是力学。判据仍是0035那条。
     "mechanics": (
         "contact",
         "contact_pipeline",
@@ -100,6 +104,7 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
         "sensors",
         "solve",
         "state",
+        "transport",
     ),
     "optics": ("optics",),
     #: 第三个物理域（决策0041第三节预登记；0042互感、0047超导薄带两块落地）。

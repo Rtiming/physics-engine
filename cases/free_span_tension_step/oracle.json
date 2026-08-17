@@ -1,0 +1,442 @@
+{
+  "arrays": {},
+  "case_id": "case/free_span_tension_step",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/free_span_tension_step",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/free_span_tension_step/generate_oracle.py",
+    "sha256": "cf1a3039bafaff3018ac0f8a79601180421981db074728e72d30f2fb9140a79b"
+  },
+  "load_tier": "local_batch",
+  "manifest_self_sha256": "d9c08f716d71b204030145d06da4d7bebf72d0bd7cb73f8d593bc6b8e55f519a",
+  "oracles": [
+    {
+      "expected": {
+        "fixed_point_drift_n": 0.0,
+        "material_length_zero_damping_mm": 299.9000333222259,
+        "strain_zero_damping": 0.0003333333333333333,
+        "tension_nominal_damping_n": 20.27777777777778,
+        "tension_stiff_damping_n": 25.555555555555557,
+        "tension_zero_damping_n": 20.0,
+        "torque_over_radius_n": 20.0
+      },
+      "id": "oracle:free_span/steady_state_torque_balance",
+      "inputs": {
+        "brake_torque_nmm": 1200.0,
+        "kind": "payout_reel_torque_balance",
+        "line_speed_mm_s": 20.0,
+        "reel_radius_mm": 60.0
+      },
+      "tolerances": {
+        "fixed_point_drift_n": {
+          "abs": 1e-10,
+          "reason": "**从闭式稳态起手推进，张力一步都不该动**：半隐式Euler的两条更新在稳态处各自恰为零，**离散不动点与连续不动点逐字相同**。2026-08-17实测20000步（0.2秒）漂移**恰为0.0**；容差按``T → L_mat → T``那一趟往返的浮点舍入给（四档张力最坏3.908e-12 N），取1e-10留25倍余量",
+          "rel": 0.0
+        },
+        "material_length_zero_damping_mm": {
+          "abs": 0.0,
+          "reason": "纯代数反解",
+          "rel": 1e-15
+        },
+        "strain_zero_damping": {
+          "abs": 0.0,
+          "reason": "``ε = T/EA``只在**一阶**上成立（严格定义是``ε = (L_geo−L_mat)/L_mat``，而``T = EA·ε``是恒等的），这里是恒等式：由``T``反解``L_mat``再算``ε``必然回到``T/EA``",
+          "rel": 1e-15
+        },
+        "tension_nominal_damping_n": {
+          "abs": 0.0,
+          "reason": "纯算术",
+          "rel": 1e-15
+        },
+        "tension_stiff_damping_n": {
+          "abs": 0.0,
+          "reason": "纯算术",
+          "rel": 1e-15
+        },
+        "tension_zero_damping_n": {
+          "abs": 0.0,
+          "reason": "**零容差，判逐位相等**：``c = 0``时本式必须与`drives.SpoolTension.tension_n`的``T = M/R``给出**同一个浮点数**。这一条说的是旧模型不是错的、它是本模型的特例——**这句话要么逐位成立，要么就不该说**",
+          "rel": 0.0
+        },
+        "torque_over_radius_n": {
+          "abs": 0.0,
+          "reason": "同上，是被对拍的另一半",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "damping_ratio": 0.013171699272845817,
+        "natural_frequency_rad_s": 379.6017428296268,
+        "peak_excursion_n": 1.0604535397767922,
+        "peak_time_s": 0.0041730731194175264,
+        "relative_overshoot": 37.176327431963436,
+        "span_stiffness_n_per_mm": 200.13539327679183,
+        "steady_change_n": 0.027777777777778567,
+        "tension_after_n": 20.305555555555557,
+        "tension_before_n": 20.27777777777778
+      },
+      "id": "oracle:free_span/velocity_step_nominal",
+      "inputs": {
+        "bearing_damping_nmm_s": 50.0,
+        "kind": "second_order_velocity_step_with_a_zero",
+        "line_speed_mm_s": 20.0,
+        "step_mm_s": 2.0
+      },
+      "tolerances": {
+        "damping_ratio": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-14
+        },
+        "natural_frequency_rad_s": {
+          "abs": 0.0,
+          "reason": "纯代数。**它是那个``1000``的捕手**：掉了单位换算``ω_n``差``sqrt(1000) = 31.6``倍，容差1e-14拦得住",
+          "rel": 1e-14
+        },
+        "peak_excursion_n": {
+          "abs": 0.0,
+          "reason": "实测``c = 50``给8.8e-6、``c = 1000``给3.93e-5，取5倍余量。**它与相对超调必须并判**：``ΔT_ss``在``c → 0``时趋零，只判相对超调时一个把``ΔT_ss``算错的实现可以照样过",
+          "rel": 0.0002
+        },
+        "peak_time_s": {
+          "abs": 0.0,
+          "reason": "峰值时刻的数值分辨率**就是步长**：``dt = 1e-6``对``t_p ≈ 4.2e-3``是2.4e-4相对的栅格。实测两档都是1.76e-5，取1e-4——**这条容差由采样栅格定，不由模型精度定**",
+          "rel": 0.0001
+        },
+        "relative_overshoot": {
+          "abs": 0.0,
+          "reason": "**收敛结果**：半隐式Euler的一阶误差。2026-08-17实测``dt = 1e-6``时``c = 50``给9.03e-6、``c = 1000``给7.35e-5，取1000档的4倍余量。**收敛阶另有一条门判**——只判落点会被一个碰巧的常数骗过，只判阶会被系统偏移骗过",
+          "rel": 0.0003
+        },
+        "span_stiffness_n_per_mm": {
+          "abs": 0.0,
+          "reason": "纯代数。**它与``EA/L_geo``差``(1+ε)²``即6.7e-4相对**，比本案例超调判据的容差大一倍以上——拿``EA/L_geo``当K会把正确实现判红",
+          "rel": 1e-14
+        },
+        "steady_change_n": {
+          "abs": 1e-12,
+          "reason": "``c·Δv/R²``是纯算术，双精度往返",
+          "rel": 0.0
+        },
+        "tension_after_n": {
+          "abs": 1e-10,
+          "reason": "同上",
+          "rel": 0.0
+        },
+        "tension_before_n": {
+          "abs": 1e-10,
+          "reason": "**离散不动点＝连续不动点**（半隐式Euler的两条更新在稳态处各自恰为零），所以这条判的是模型不是步长。判绝对不判相对：剩下的偏差只来自``T → L_mat → T``这一趟往返的浮点舍入，2026-08-17实测四档张力最坏3.908e-12 N，取1e-10留25倍余量",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "damping_ratio": 0.26340850686752443,
+        "natural_frequency_rad_s": 379.6384603869032,
+        "peak_excursion_n": 1.1940924401783342,
+        "peak_time_s": 0.005016911859105693,
+        "relative_overshoot": 1.149366392321009,
+        "span_stiffness_n_per_mm": 200.17411195130316,
+        "steady_change_n": 0.5555555555555536,
+        "tension_after_n": 26.11111111111111,
+        "tension_before_n": 25.555555555555557
+      },
+      "id": "oracle:free_span/velocity_step_stiff",
+      "inputs": {
+        "bearing_damping_nmm_s": 1000.0,
+        "kind": "second_order_velocity_step_with_a_zero",
+        "line_speed_mm_s": 20.0,
+        "step_mm_s": 2.0
+      },
+      "tolerances": {
+        "damping_ratio": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-14
+        },
+        "natural_frequency_rad_s": {
+          "abs": 0.0,
+          "reason": "纯代数。**它是那个``1000``的捕手**：掉了单位换算``ω_n``差``sqrt(1000) = 31.6``倍，容差1e-14拦得住",
+          "rel": 1e-14
+        },
+        "peak_excursion_n": {
+          "abs": 0.0,
+          "reason": "实测``c = 50``给8.8e-6、``c = 1000``给3.93e-5，取5倍余量。**它与相对超调必须并判**：``ΔT_ss``在``c → 0``时趋零，只判相对超调时一个把``ΔT_ss``算错的实现可以照样过",
+          "rel": 0.0002
+        },
+        "peak_time_s": {
+          "abs": 0.0,
+          "reason": "峰值时刻的数值分辨率**就是步长**：``dt = 1e-6``对``t_p ≈ 4.2e-3``是2.4e-4相对的栅格。实测两档都是1.76e-5，取1e-4——**这条容差由采样栅格定，不由模型精度定**",
+          "rel": 0.0001
+        },
+        "relative_overshoot": {
+          "abs": 0.0,
+          "reason": "**收敛结果**：半隐式Euler的一阶误差。2026-08-17实测``dt = 1e-6``时``c = 50``给9.03e-6、``c = 1000``给7.35e-5，取1000档的4倍余量。**收敛阶另有一条门判**——只判落点会被一个碰巧的常数骗过，只判阶会被系统偏移骗过",
+          "rel": 0.0003
+        },
+        "span_stiffness_n_per_mm": {
+          "abs": 0.0,
+          "reason": "纯代数。**它与``EA/L_geo``差``(1+ε)²``即6.7e-4相对**，比本案例超调判据的容差大一倍以上——拿``EA/L_geo``当K会把正确实现判红",
+          "rel": 1e-14
+        },
+        "steady_change_n": {
+          "abs": 1e-12,
+          "reason": "``c·Δv/R²``是纯算术，双精度往返",
+          "rel": 0.0
+        },
+        "tension_after_n": {
+          "abs": 1e-10,
+          "reason": "同上",
+          "rel": 0.0
+        },
+        "tension_before_n": {
+          "abs": 1e-10,
+          "reason": "**离散不动点＝连续不动点**（半隐式Euler的两条更新在稳态处各自恰为零），所以这条判的是模型不是步长。判绝对不判相对：剩下的偏差只来自``T → L_mat → T``这一趟往返的浮点舍入，2026-08-17实测四档张力最坏3.908e-12 N，取1e-10留25倍余量",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "amplitude_n": 1.054443917573923,
+        "natural_frequency_rad_s": 379.59981032661227,
+        "period_s": 0.016552129733082472,
+        "quarter_period_s": 0.004138032433270618,
+        "span_stiffness_n_per_mm": 200.1333555555556
+      },
+      "id": "oracle:free_span/undamped_oscillation",
+      "inputs": {
+        "bearing_damping_nmm_s": 0.0,
+        "kind": "undamped_span_oscillator",
+        "step_mm_s": 2.0
+      },
+      "tolerances": {
+        "amplitude_n": {
+          "abs": 0.0,
+          "reason": "``K·Δv/ω_n``。2026-08-17实测（``dt = 1e-6``）相对偏差1.17e-5，取8倍余量。**这一条是``ζ → 0``时相对超调发散的那一半**：相对量无界而绝对幅值有限",
+          "rel": 0.0001
+        },
+        "natural_frequency_rad_s": {
+          "abs": 0.0,
+          "reason": "纯代数，含那个1000",
+          "rel": 1e-14
+        },
+        "period_s": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-14
+        },
+        "quarter_period_s": {
+          "abs": 0.0,
+          "reason": "无阻尼时峰值落在四分之一周期，实测偏差7.8e-6；它同时是``t_p = (π − acos ζ)/ω_d``在``ζ → 0``的极限",
+          "rel": 0.0001
+        },
+        "span_stiffness_n_per_mm": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-14
+        }
+      }
+    },
+    {
+      "expected": {
+        "degenerate_damping_ratio": 0.5,
+        "restitution_0": 0.7440793977217797,
+        "restitution_1": 0.5062765525186304,
+        "restitution_2": 0.2984360591922749,
+        "restitution_3": 0.19417271847139056,
+        "restitution_4": 0.1552827475016816,
+        "span_0": 4.227030499551294,
+        "span_1": 1.2489804164335871,
+        "span_2": 0.29843605919227484,
+        "span_3": 0.04292964199825781,
+        "span_4": 0.002148232433336753,
+        "textbook_0": 0.7292476142876709,
+        "textbook_1": 0.4443442250884888,
+        "textbook_2": 0.16303353482158048,
+        "textbook_3": 0.02837544174570507,
+        "textbook_4": 0.0015237558205194097
+      },
+      "id": "oracle:free_span/overshoot_family_blind_spot",
+      "inputs": {
+        "damping_ratios": [
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9
+        ],
+        "kind": "exp_minus_zeta_phi_family"
+      },
+      "tolerances": {
+        "degenerate_damping_ratio": {
+          "abs": 0.0,
+          "reason": "**零容差，因为它是解出来的不是试出来的**：``π − acos ζ = 2·acos ζ`` ⟺ ``acos ζ = π/3`` ⟺ ``ζ = 1/2``，且``1/(2ζ)``在同一点恰为1。**两处退化撞在同一个点上**，而``ζ = 0.5``正是写测试时最顺手的那个值",
+          "rel": 0.0
+        },
+        "restitution_0": {
+          "abs": 0.0,
+          "reason": "同上",
+          "rel": 1e-14
+        },
+        "restitution_1": {
+          "abs": 0.0,
+          "reason": "同上",
+          "rel": 1e-14
+        },
+        "restitution_2": {
+          "abs": 0.0,
+          "reason": "同上",
+          "rel": 1e-14
+        },
+        "restitution_3": {
+          "abs": 0.0,
+          "reason": "同上",
+          "rel": 1e-14
+        },
+        "restitution_4": {
+          "abs": 0.0,
+          "reason": "同上",
+          "rel": 1e-14
+        },
+        "span_0": {
+          "abs": 0.0,
+          "reason": "闭式求值；三支必须各自独立算，不许互相import",
+          "rel": 1e-14
+        },
+        "span_1": {
+          "abs": 0.0,
+          "reason": "闭式求值；三支必须各自独立算，不许互相import",
+          "rel": 1e-14
+        },
+        "span_2": {
+          "abs": 0.0,
+          "reason": "闭式求值；三支必须各自独立算，不许互相import",
+          "rel": 1e-14
+        },
+        "span_3": {
+          "abs": 0.0,
+          "reason": "闭式求值；三支必须各自独立算，不许互相import",
+          "rel": 1e-14
+        },
+        "span_4": {
+          "abs": 0.0,
+          "reason": "闭式求值；三支必须各自独立算，不许互相import",
+          "rel": 1e-14
+        },
+        "textbook_0": {
+          "abs": 0.0,
+          "reason": "同上",
+          "rel": 1e-14
+        },
+        "textbook_1": {
+          "abs": 0.0,
+          "reason": "同上",
+          "rel": 1e-14
+        },
+        "textbook_2": {
+          "abs": 0.0,
+          "reason": "同上",
+          "rel": 1e-14
+        },
+        "textbook_3": {
+          "abs": 0.0,
+          "reason": "同上",
+          "rel": 1e-14
+        },
+        "textbook_4": {
+          "abs": 0.0,
+          "reason": "同上",
+          "rel": 1e-14
+        }
+      }
+    },
+    {
+      "expected": {
+        "coarse_tension_at_horizon_n": 26.183118023522436,
+        "order_ratio_high": 2.1,
+        "order_ratio_low": 1.9,
+        "tension_at_horizon_n": 25.618310840759943
+      },
+      "id": "oracle:free_span/time_step_convergence",
+      "inputs": {
+        "bearing_damping_nmm_s": 1000.0,
+        "dt_s": [
+          1.6e-05,
+          8e-06,
+          4e-06,
+          2e-06
+        ],
+        "horizon_s": 0.02,
+        "kind": "semi_implicit_euler_refinement",
+        "step_mm_s": 0.2
+      },
+      "tolerances": {
+        "coarse_tension_at_horizon_n": {
+          "abs": 0.0,
+          "reason": "同上，是floor门用的那一档（``Δv``大十倍）",
+          "rel": 5e-06
+        },
+        "order_ratio_high": {
+          "abs": 0.0,
+          "reason": "同上",
+          "rel": 0.0
+        },
+        "order_ratio_low": {
+          "abs": 0.0,
+          "reason": "**区间不写死为2**——与`harmonic_oscillator`那条'收敛比不写死为4'同源：一致才是收敛的证据。2026-08-17实测``Δv = 0.2``四档给1.9991/1.9991/1.9987，区间[1.9, 2.1]留约50倍偏离余量",
+          "rel": 0.0
+        },
+        "tension_at_horizon_n": {
+          "abs": 0.0,
+          "reason": "最细一档``dt = 2e-6``实测绝对误差4.513e-6 N对张力25.6 N是1.76e-7相对；取5e-6留28倍余量。**这一条只判落点，阶另有一条门**",
+          "rel": 5e-06
+        }
+      }
+    },
+    {
+      "expected": {
+        "length_at_mid_first_segment_mm": 0.02,
+        "segment_speed_0_mm_s": 20.0,
+        "segment_speed_1_mm_s": 22.0
+      },
+      "id": "oracle:free_span/material_feed_timeline",
+      "inputs": {
+        "feed_length_mm": [
+          0.0,
+          0.04,
+          0.216
+        ],
+        "kind": "piecewise_constant_feed_rate",
+        "times_s": [
+          0.0,
+          0.002,
+          0.01
+        ]
+      },
+      "tolerances": {
+        "length_at_mid_first_segment_mm": {
+          "abs": 0.0,
+          "reason": "段内线性＝段内恒速的积分，两者必须自洽",
+          "rel": 1e-15
+        },
+        "segment_speed_0_mm_s": {
+          "abs": 0.0,
+          "reason": "**这就是plans/14第3.2节说的那一步**：累计喂料长度的时间导数＝线速度。段内恒速语义下它是一次除法，双精度往返",
+          "rel": 1e-15
+        },
+        "segment_speed_1_mm_s": {
+          "abs": 0.0,
+          "reason": "同上。两段差10%——那就是本案例判的那次阶跃",
+          "rel": 1e-15
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
