@@ -120,6 +120,12 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
         "sensors",
         "solve",
         "state",
+        #: `tension_control`归力学（2026-08-17，决策0070）：它import `drives`与
+        #: `transport`（都在力学）与标准库——**没有一条边越到别的域，也没有向上**。
+        #: 它没有长进`drives`或`transport`里是所有权问题不是方向问题：
+        #: 装配层同时依赖两边，塞进任何一边都会让那一边反向依赖另一边。
+        #: 判据仍是0035那条：**import决定环，不是愿望决定环**。
+        "tension_control",
         "transport",
     ),
     "optics": ("optics",),

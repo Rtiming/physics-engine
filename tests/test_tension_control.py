@@ -138,6 +138,65 @@ def test_the_steady_state_entry_puts_all_three_on_the_fixed_point():
     assert all(sample.error_n == pytest.approx(0.0, abs=1e-9) for sample in samples)
 
 
+def test_the_plant_advances_on_the_step_start_torque_bit_for_bit():
+    """**因果次序**：对象用**步首**扭矩推进，不用离合器刚刚走完那一步的新扭矩。
+
+    ## 这条门是注错验证补出来的
+
+    2026-08-17第一轮注错：把两句对调（先推进离合器、再拿**步末**扭矩喂对象），
+    **九条注错里唯一一条没红的**。病根是那个差是``O(dt)``的，
+    而``dt = 1e-6``下它落在每一条容差之下——**一道分辨不出因果次序的门，
+    等于没有判过因果次序**。
+
+    ## 补法：一步、逐位、而且先证明这条门不是空的
+
+    从稳态起手但让控制器吐一个**恒定的偏置电流**，于是离合器扭矩在这一步里
+    真的在动（``dt = 1e-4``、``τ = 5e-4`` ⟹ 一步走完18%的路）。
+    然后拿**步首**扭矩独立算一遍角加速度，与实现给的新转速**逐位**对拍。
+
+    第二条断言判的是**这条门有没有内容**：步首扭矩与步末扭矩必须真的不同。
+    它们相等时上面那条逐位断言照样过，而那时它什么也没证明——
+    **本仓已经因为"一道从没被注错验过的门"吃过亏**（0066第5.2节）。
+    """
+
+    class ConstantCommand:
+        """一个既不是`PidController`、也不看测量的控制器。**协议只要求``step``。**"""
+
+        def step(self, *, measurement_n, setpoint_n, dt_s):
+            return self, 0.02
+
+    coarse_dt = 1.0e-4
+    loop = _loop(controller=ConstantCommand(), plant_dt_s=coarse_dt)
+    final, samples = loop.run(1, takeup_speed_mm_s=LINE_SPEED_MM_S + 2.0)
+    first = samples[0]
+
+    #: **先证明这条门不是空的**：步首扭矩与步末扭矩必须真的不同。
+    assert first.brake_torque_nmm != final.brake_torque_nmm, (
+        "这一步里离合器扭矩没动 —— 那么'用步首还是步末'这道门什么也没证明，"
+        "偏置电流或步长要重挑"
+    )
+
+    #: 用**步首**扭矩独立算一遍——这是实现该走的那条路。
+    right = REEL.angular_acceleration_rad_s2(
+        tension_n=first.tension_n,
+        brake_torque_nmm=first.brake_torque_nmm,
+        angular_velocity_rad_s=first.angular_velocity_rad_s,
+    )
+    assert final.plant.angular_velocity_rad_s == (
+        first.angular_velocity_rad_s + coarse_dt * right
+    ), "对象没有用步首扭矩推进 —— 测量与执行的因果次序反了"
+
+    #: 用**步末**扭矩会给出另一个数——两条必须分得开，否则上面那条判了个寂寞。
+    wrong = REEL.angular_acceleration_rad_s2(
+        tension_n=first.tension_n,
+        brake_torque_nmm=final.brake_torque_nmm,
+        angular_velocity_rad_s=first.angular_velocity_rad_s,
+    )
+    assert final.plant.angular_velocity_rad_s != (
+        first.angular_velocity_rad_s + coarse_dt * wrong
+    )
+
+
 def test_a_saturating_feedforward_fails_closed():
     """前馈电流落在饱和段上时，"从稳态起手"这句话不成立——当场关闭。"""
 
