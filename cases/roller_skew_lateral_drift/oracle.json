@@ -7,10 +7,10 @@
     "algorithm_id": "algorithm:oracle/roller_skew_lateral_drift",
     "algorithm_version": "1.0.0",
     "path_relative": "cases/roller_skew_lateral_drift/generate_oracle.py",
-    "sha256": "67dc9beef1d861b2d0ce637de4b74194d44e33590b8e7ad59c98cd232c40d0c2"
+    "sha256": "cebede1fe2ff911089e3108eabc12ed3a012011d7d2d8db0320c687d05e031c2"
   },
   "load_tier": "local_batch",
-  "manifest_self_sha256": "a52ed0f7a2797290746f9bde0f95b93a354d57a28fed9402b01c74c7504d72f1",
+  "manifest_self_sha256": "7c847e15e4bc0f359950935f66d35e2060d6b7a5dfba2e766f63e18883a609f2",
   "oracles": [
     {
       "expected": {
@@ -122,15 +122,21 @@
     },
     {
       "expected": {
-        "critical_skew_deg_at_100mm": 5.380617515425923,
-        "critical_skew_deg_at_200mm": 2.4890388616766135,
-        "critical_skew_deg_at_300mm": 1.5455739013844922,
-        "critical_skew_deg_at_500mm": 0.8520759808737839
+        "critical_skew_deg_at_100mm": 1.6555746201310533,
+        "critical_skew_deg_at_200mm": 0.7658581112851117,
+        "critical_skew_deg_at_300mm": 0.47556120042599753,
+        "critical_skew_deg_at_500mm": 0.26217722488424117,
+        "flat_guide_critical_skew_deg_at_100mm": 5.380617515425923,
+        "flat_guide_critical_skew_deg_at_200mm": 2.4890388616766135,
+        "flat_guide_critical_skew_deg_at_300mm": 1.5455739013844922,
+        "flat_guide_critical_skew_deg_at_500mm": 0.8520759808737839
       },
       "id": "oracle:drift/skew_that_reaches_the_flange",
       "inputs": {
-        "half_clearance_mm": 6.5,
+        "flat_guide_half_clearance_mm": 6.5,
+        "half_clearance_mm": 2.0,
         "kind": "critical_skew_for_rub",
+        "r1_groove_half_clearance_mm": 2.0,
         "spans_mm": [
           100.0,
           200.0,
@@ -142,22 +148,42 @@
       "tolerances": {
         "critical_skew_deg_at_100mm": {
           "abs": 0.0,
-          "reason": "闭式反解；**它是装配公差的直接输入**，所以单列一条",
+          "reason": "闭式反解；**它是装配公差的直接输入**，所以单列一条。半间隙取R1槽底的2.0 mm——**2026-08-17订正**，此前取的6.5 mm是现场平轮的半宽，那是更松的一条",
           "rel": 1e-15
         },
         "critical_skew_deg_at_200mm": {
           "abs": 0.0,
-          "reason": "闭式反解；**它是装配公差的直接输入**，所以单列一条",
+          "reason": "闭式反解；**它是装配公差的直接输入**，所以单列一条。半间隙取R1槽底的2.0 mm——**2026-08-17订正**，此前取的6.5 mm是现场平轮的半宽，那是更松的一条",
           "rel": 1e-15
         },
         "critical_skew_deg_at_300mm": {
           "abs": 0.0,
-          "reason": "闭式反解；**它是装配公差的直接输入**，所以单列一条",
+          "reason": "闭式反解；**它是装配公差的直接输入**，所以单列一条。半间隙取R1槽底的2.0 mm——**2026-08-17订正**，此前取的6.5 mm是现场平轮的半宽，那是更松的一条",
           "rel": 1e-15
         },
         "critical_skew_deg_at_500mm": {
           "abs": 0.0,
-          "reason": "闭式反解；**它是装配公差的直接输入**，所以单列一条",
+          "reason": "闭式反解；**它是装配公差的直接输入**，所以单列一条。半间隙取R1槽底的2.0 mm——**2026-08-17订正**，此前取的6.5 mm是现场平轮的半宽，那是更松的一条",
+          "rel": 1e-15
+        },
+        "flat_guide_critical_skew_deg_at_100mm": {
+          "abs": 0.0,
+          "reason": "更松的那一条，留着让「谁先撞」有一条能红的判据",
+          "rel": 1e-15
+        },
+        "flat_guide_critical_skew_deg_at_200mm": {
+          "abs": 0.0,
+          "reason": "更松的那一条，留着让「谁先撞」有一条能红的判据",
+          "rel": 1e-15
+        },
+        "flat_guide_critical_skew_deg_at_300mm": {
+          "abs": 0.0,
+          "reason": "更松的那一条，留着让「谁先撞」有一条能红的判据",
+          "rel": 1e-15
+        },
+        "flat_guide_critical_skew_deg_at_500mm": {
+          "abs": 0.0,
+          "reason": "更松的那一条，留着让「谁先撞」有一条能红的判据",
           "rel": 1e-15
         }
       }

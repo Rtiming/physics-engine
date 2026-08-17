@@ -88,8 +88,23 @@ AXIAL_STIFFNESS_N = YOUNGS_MODULUS_N_MM2 * THICKNESS_MM * WIDTH_MM
 FREE_SPAN_MM = 200.0
 TENSION_N = 20.0
 SKEW_DEG = 1.0
-#: 半间隙：真机导轮有效宽度17 mm、带宽4 mm ⟹ 6.5 mm（与`winding_line_endtoend`同源）。
-HALF_CLEARANCE_MM = 6.5
+#: **半间隙有两个，而带材两个都要过。2026-08-17订正：先撞的不是原来写的那一个。**
+#:
+#: 本案例最初只写了6.5 mm，出处记的是"真机导轮有效宽度17 mm、带宽4 mm"。
+#: 那个数属实，但它是**现场两只可调平轮**（Ø100×17、平面无凸缘）的半宽——
+#: 带材**先**过的是张力机上的R4→R1，而它们是**带凸缘的槽轮**。
+#:
+#: R1槽型在消费方WII自己展示的那份`static_009_new1.stl`上被复量过
+#: （`docs/records/r1-contact-radius-cross-check-20260726.md`第104—111行），
+#: 并与WDS从另一份网格提取的`config/roller_flange_profile.v1.json`互证：
+#: 槽底半径45.224 mm、**槽底宽度8.000 mm**、凸缘半径60.398 mm、外径120.796 mm。
+#:
+#: 于是4 mm带材在R1里的半间隙是`(8.000 − 4.0)/2 = 2.0 mm`，
+#: **只有平轮那条的0.3077倍**。原案例把更松的那一条当成了约束。
+R1_GROOVE_HALF_CLEARANCE_MM = (8.0 - WIDTH_MM) / 2.0
+FLAT_GUIDE_HALF_CLEARANCE_MM = (17.0 - WIDTH_MM) / 2.0
+#: 起约束作用的是更小的那个。**这一行是本案例的判据入口，不许改成另一个。**
+HALF_CLEARANCE_MM = min(R1_GROOVE_HALF_CLEARANCE_MM, FLAT_GUIDE_HALF_CLEARANCE_MM)
 
 
 def beam_string_factor(u: float) -> float:
@@ -103,6 +118,18 @@ def beam_string_factor(u: float) -> float:
 def steady_drift_mm(*, skew_rad: float, span_mm: float, tension_n: float) -> float:
     u = math.sqrt(tension_n / BENDING_STIFFNESS_NMM2) * span_mm
     return skew_rad * span_mm * beam_string_factor(u)
+
+
+def critical_skew_deg(*, half_clearance_mm: float, span_mm: float) -> float:
+    """反解``y_ss = 半间隙``那个偏斜角。**半间隙是显式入参，不许取模块常量。**
+
+    做成入参的理由就是本案例被订正的那件事：原来它取一个写死的6.5，
+    而那个6.5是**另一只轮**的半宽。半间隙一旦是入参，
+    "这条判据说的是哪只轮"就必须由调用方每次写出来。
+    """
+
+    u = math.sqrt(TENSION_N / BENDING_STIFFNESS_NMM2) * span_mm
+    return math.degrees(half_clearance_mm / (span_mm * beam_string_factor(u)))
 
 
 def main() -> int:
@@ -188,23 +215,47 @@ def main() -> int:
             "inputs": {
                 "kind": "critical_skew_for_rub",
                 "half_clearance_mm": HALF_CLEARANCE_MM,
+                "r1_groove_half_clearance_mm": R1_GROOVE_HALF_CLEARANCE_MM,
+                "flat_guide_half_clearance_mm": FLAT_GUIDE_HALF_CLEARANCE_MM,
                 "tension_n": TENSION_N,
                 "spans_mm": [100.0, 200.0, 300.0, 500.0],
             },
             "expected": {
-                f"critical_skew_deg_at_{int(span)}mm": math.degrees(
-                    HALF_CLEARANCE_MM
-                    / (span * beam_string_factor(
-                        math.sqrt(TENSION_N / BENDING_STIFFNESS_NMM2) * span))
-                )
-                for span in (100.0, 200.0, 300.0, 500.0)
+                **{
+                    f"critical_skew_deg_at_{int(span)}mm": critical_skew_deg(
+                        half_clearance_mm=HALF_CLEARANCE_MM, span_mm=span
+                    )
+                    for span in (100.0, 200.0, 300.0, 500.0)
+                },
+                #: 更松的那一条也留着，**不是为了完整，是为了让订正可判**：
+                #: 两组的比值必须恒为两个半间隙之比（`f(u)`与半间隙无关），
+                #: 于是"谁先撞"这件事有一条能红的判据，而不只是一句话。
+                **{
+                    f"flat_guide_critical_skew_deg_at_{int(span)}mm": critical_skew_deg(
+                        half_clearance_mm=FLAT_GUIDE_HALF_CLEARANCE_MM, span_mm=span
+                    )
+                    for span in (100.0, 200.0, 300.0, 500.0)
+                },
             },
             "tolerances": {
-                f"critical_skew_deg_at_{int(span)}mm": {
-                    "abs": 0.0, "rel": 1.0e-15,
-                    "reason": "闭式反解；**它是装配公差的直接输入**，所以单列一条",
-                }
-                for span in (100.0, 200.0, 300.0, 500.0)
+                **{
+                    f"critical_skew_deg_at_{int(span)}mm": {
+                        "abs": 0.0, "rel": 1.0e-15,
+                        "reason": (
+                            "闭式反解；**它是装配公差的直接输入**，所以单列一条。"
+                            "半间隙取R1槽底的2.0 mm——**2026-08-17订正**，"
+                            "此前取的6.5 mm是现场平轮的半宽，那是更松的一条"
+                        ),
+                    }
+                    for span in (100.0, 200.0, 300.0, 500.0)
+                },
+                **{
+                    f"flat_guide_critical_skew_deg_at_{int(span)}mm": {
+                        "abs": 0.0, "rel": 1.0e-15,
+                        "reason": "更松的那一条，留着让「谁先撞」有一条能红的判据",
+                    }
+                    for span in (100.0, 200.0, 300.0, 500.0)
+                },
             },
         },
     ]

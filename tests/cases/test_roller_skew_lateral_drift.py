@@ -215,25 +215,64 @@ def test_raising_the_tension_makes_the_drift_worse_not_better():
 
 
 def test_the_critical_skew_that_reaches_the_flange():
-    """**装配公差的直接输入**：多少度轮轴偏斜会让带材蹭上法兰。
+    """**装配公差的直接输入**：多少度轮轴偏斜会让带材蹭上边。
 
-    半间隙6.5 mm（真机导轮有效宽度17 mm、带宽4 mm，与`winding_line_endtoend`同源）。
-    实测：跨长100/200/300/500 mm对应**5.381°/2.489°/1.546°/0.852°**。
+    **2026-08-17订正，这条判据的数全体缩小了3.25倍。**
+    原来取半间隙6.5 mm，出处写的是"真机导轮有效宽度17 mm、带宽4 mm"。
+    那个数属实，但它是**现场两只可调平轮**（Ø100×17、平面无凸缘）的半宽；
+    带材**先**过的是张力机上的R4→R1，而它们是槽底宽**8.000 mm**的带凸缘槽轮
+    （两份独立网格互证，见`generate_oracle.py`的出处注）。
+    4 mm带材在R1里的半间隙因此是**2.0 mm**。
 
-    **500 mm跨长时不到1°就蹭上。** 跨长越大越敏感——因为``y_ss ∝ L·f(KL)``
-    而``f``还随``L``增（``u = KL``），**是超线性的**。
+    实测：跨长100/200/300/500 mm对应**1.656°/0.766°/0.476°/0.262°**。
+    **装配公差从"度"级掉到"零点几度"级**，500 mm跨长时0.26°就蹭上。
+
+    跨长越大越敏感——因为``y_ss ∝ L·f(KL)``而``f``还随``L``增（``u = KL``），
+    **是超线性的**。这一条与半间隙无关，订正前后一个字不变。
     """
 
     entry = _oracle("oracle:drift/skew_that_reaches_the_flange")
     values = [
         entry.expected[f"critical_skew_deg_at_{span}mm"] for span in (100, 200, 300, 500)
     ]
-    assert values == pytest.approx([5.381, 2.489, 1.546, 0.852], abs=1e-3)
+    assert values == pytest.approx([1.656, 0.766, 0.476, 0.262], abs=1e-3)
     for earlier, later in zip(values, values[1:], strict=False):
         assert later < earlier, f"跨长增大而临界偏斜没有变小：{values}"
     #: 超线性：跨长×5而临界角小了**6.3倍**，不是5倍。
     assert values[0] / values[3] == pytest.approx(6.315, rel=1e-2)
     assert values[0] / values[3] > 5.0, "只按`y_ss ∝ L`会给恰好5倍——那说明f(KL)被漏掉了"
+
+
+def test_which_roller_binds_is_itself_judged():
+    """**订正要有一条能红的判据，不能只是把常数改小。**
+
+    两只轮的临界角只差一个常数因子——``f(u)``与半间隙无关，
+    所以两组的比值必须**逐档恒等于**两个半间隙之比。这条判两件事：
+
+    1. 生成器真的用了两个不同的半间隙（若谁把它改回同一个，比值变1，红）；
+    2. 起约束作用的是**更小**的那一个（比值必须小于1，红线在这里）。
+
+    **只把6.5改成2.0而不留下更松的那一条，这两件都判不了。**
+    """
+
+    entry = _oracle("oracle:drift/skew_that_reaches_the_flange")
+    binding = entry.inputs["r1_groove_half_clearance_mm"]
+    looser = entry.inputs["flat_guide_half_clearance_mm"]
+    assert binding == pytest.approx(2.0)
+    assert looser == pytest.approx(6.5)
+    assert entry.inputs["half_clearance_mm"] == pytest.approx(binding), (
+        "判据必须取更小的那个半间隙——**先撞的那只轮才是约束**"
+    )
+
+    expected_ratio = binding / looser
+    assert expected_ratio < 1.0
+    for span in (100, 200, 300, 500):
+        tight = entry.expected[f"critical_skew_deg_at_{span}mm"]
+        loose = entry.expected[f"flat_guide_critical_skew_deg_at_{span}mm"]
+        assert tight / loose == pytest.approx(expected_ratio, rel=1e-12), (
+            f"跨长{span} mm处两组的比值不等于半间隙之比——"
+            "说明有一组没在用它自己声明的那个半间隙"
+        )
 
 
 # ---------------------------------------------------------------------------
