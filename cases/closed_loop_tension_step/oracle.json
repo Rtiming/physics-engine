@@ -1,0 +1,520 @@
+{
+  "arrays": {},
+  "case_id": "case/closed_loop_tension_step",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/closed_loop_tension_step",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/closed_loop_tension_step/generate_oracle.py",
+    "sha256": "00e9b819fd82d2136c776f558417c5641c0eeca0eb34f611440e2f301d470734"
+  },
+  "load_tier": "local_batch",
+  "manifest_self_sha256": "63b9bd7013398e1a2c7855fa95cebdd4d2a876606c9b7ab4760d407075e6570c",
+  "oracles": [
+    {
+      "expected": {
+        "authority_ratio": 72.0,
+        "brake_authority_n_per_percent": 0.2,
+        "clutch_pole_fast_rad_s": 2000.0,
+        "clutch_pole_nominal_rad_s": 20.0,
+        "damping_ratio": 0.013171705368794534,
+        "loop_gain": 55852132.77506296,
+        "natural_frequency_rad_s": 379.6015671475346,
+        "nominal_bandwidth_shortfall": 18.98007835737673,
+        "setpoint_n": 20.27777777777778,
+        "span_stiffness_n_per_mm": 200.13520802897804,
+        "takeup_authority_at_zero_damping_n_per_percent": 0.0,
+        "takeup_authority_n_per_percent": 0.002777777777777778
+      },
+      "id": "oracle:closed_loop/plant_linearisation",
+      "inputs": {
+        "bearing_damping_nmm_s": 50.0,
+        "brake_torque_nmm": 1200.0,
+        "kind": "operating_point_and_channel_authority",
+        "line_speed_mm_s": 20.0
+      },
+      "tolerances": {
+        "authority_ratio": {
+          "abs": 0.0,
+          "reason": "72倍。**这是'控制器接哪一路'那条裁决的量**——它同时说明为什么不能反过来接：收线速度要动3.6倍才换来制动力矩5%所换来的张力",
+          "rel": 1e-14
+        },
+        "brake_authority_n_per_percent": {
+          "abs": 0.0,
+          "reason": "``0.01·M₀/R``。**裁决A第1条的被除数**",
+          "rel": 1e-15
+        },
+        "clutch_pole_fast_rad_s": {
+          "abs": 0.0,
+          "reason": "同上",
+          "rel": 1e-15
+        },
+        "clutch_pole_nominal_rad_s": {
+          "abs": 0.0,
+          "reason": "``1/τ``",
+          "rel": 1e-15
+        },
+        "damping_ratio": {
+          "abs": 0.0,
+          "reason": "纯代数。0.01317——**开环几乎不衰减**就是这个数",
+          "rel": 1e-14
+        },
+        "loop_gain": {
+          "abs": 0.0,
+          "reason": "``G = K·(1000R/J)·k_M``，纯代数",
+          "rel": 1e-14
+        },
+        "natural_frequency_rad_s": {
+          "abs": 0.0,
+          "reason": "纯代数；**那个1000的捕手**，掉了差31.6倍",
+          "rel": 1e-14
+        },
+        "nominal_bandwidth_shortfall": {
+          "abs": 0.0,
+          "reason": "``ω_n·τ = 18.98``——**执行器比对象慢19倍**。这一个无量纲数就是``nominal``档全部结论的来源",
+          "rel": 1e-14
+        },
+        "setpoint_n": {
+          "abs": 0.0,
+          "reason": "纯算术；与`free_span_tension_step`的``T*``同一个数",
+          "rel": 1e-15
+        },
+        "span_stiffness_n_per_mm": {
+          "abs": 0.0,
+          "reason": "纯代数。**它与``EA/L_geo``差``(1+ε)²``即6.7e-4相对**",
+          "rel": 1e-14
+        },
+        "takeup_authority_at_zero_damping_n_per_percent": {
+          "abs": 0.0,
+          "reason": "**零容差，判恒等于零**：``∂T/∂v = c/R²``在``c = 0``时恰为零。裁决A最硬的那半条——收线速度通道的全部稳态权限都建在``c``上，而``c``是本模型里唯一没有实测的阻尼参数",
+          "rel": 0.0
+        },
+        "takeup_authority_n_per_percent": {
+          "abs": 0.0,
+          "reason": "``0.01·c·v/R²``。**裁决A第1条的除数**",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "dominant_real_part_per_s": 0.0,
+        "integral_squared_error_n2_s": 0.048206126709178135,
+        "oscillatory_frequency_rad_s": 379.56863645573276,
+        "oscillatory_real_part_per_s": -4.999999999999999,
+        "peak_excursion_n": 1.0604530517910513,
+        "peak_time_s": 0.004173075013251324,
+        "steady_offset_n": 0.027777777777777776
+      },
+      "id": "oracle:closed_loop/open_loop_step",
+      "inputs": {
+        "clutch_lag_s": 0.05,
+        "derivative_a_s_per_n": 0.0,
+        "integral_gain_a_per_n_s": 0.0,
+        "kind": "fourth_order_tension_loop_velocity_step",
+        "proportional_a_per_n": 0.0,
+        "step_mm_s": 2.0
+      },
+      "tolerances": {
+        "dominant_real_part_per_s": {
+          "abs": 1e-12,
+          "reason": "纯代数（Durand-Kerner到机器精度）。**开环那档它恰为零**——那是稳态偏移那一支的零根，所以要判绝对不判相对。本条不与推进对拍，它是闭式内部的自洽判据",
+          "rel": 1e-10
+        },
+        "integral_squared_error_n2_s": {
+          "abs": 0.0,
+          "reason": "实测``open``档8.07e-6、``nominal``档1.37e-5、``fast``档6.07e-4。取5e-3。**它与峰值必须并判**：只判峰值会被一个'把峰压低了却一直不衰减'的实现骗过——而那正是``nominal``档干的事（峰值×1.07而ISE×1.39，两个数一起才说得清）",
+          "rel": 0.005
+        },
+        "oscillatory_frequency_rad_s": {
+          "abs": 0.0,
+          "reason": "开环379.569（≈``ω_n``）。**它与衰减率必须并判**：只判衰减率时，一个把频率也改了的实现可以照样过",
+          "rel": 1e-10
+        },
+        "oscillatory_real_part_per_s": {
+          "abs": 0.0,
+          "reason": "**振荡衰减率本身**：开环−5.000（时间常数0.2 s，**比一次落位动作还长**）、``fast``档−470.709（2.1 ms）、``nominal``档−4.579——**比开环还小**，那就是'积分项吃掉阻尼'这句话的量",
+          "rel": 1e-10
+        },
+        "peak_excursion_n": {
+          "abs": 0.0,
+          "reason": "**收敛结果**：半隐式Euler的对象＋精确ZOH的离合器＋采样控制器，组合误差2026-08-17实测``dt = 1e-6``时``open``档9.26e-6、``nominal``档7.74e-6、``fast``档5.90e-4。取5e-3给最差那档8倍余量。**``fast``档差两个数量级是因为它的闭环极点在470/s上**，同一个``dt``对更快的动态就是更粗的网格",
+          "rel": 0.005
+        },
+        "peak_time_s": {
+          "abs": 0.0,
+          "reason": "峰值时刻的数值分辨率**就是步长**：``dt = 1e-6``对``fast``档的``t_p ≈ 1.44e-3``是6.9e-4相对的栅格。实测三档最坏2.5e-4（``fast``档），取2e-3——**这条容差由采样栅格定，不由模型精度定**",
+          "rel": 0.002
+        },
+        "steady_offset_n": {
+          "abs": 1e-06,
+          "reason": "**判绝对不判相对**：带积分项时它恰为零，相对容差对零无意义。2026-08-17实测（``t = 2.0 s``、``dt = 1e-5``）好控制器给1.60e-10、完全不控给2.7734e-2对闭式2.7778e-2（差4.34e-5，那是``e^{−10} = 4.5e-5``的残余振荡不是偏差）。取1e-6：**它比好控制器的实测大四个数量级，比坏控制器的偏移小四个数量级**——两侧各留四个数量级，这条判据分得开",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "dominant_real_part_per_s": -470.7093182082306,
+        "integral_squared_error_n2_s": 0.0002926530754485473,
+        "oscillatory_frequency_rad_s": 744.1416219601929,
+        "oscillatory_real_part_per_s": -470.7093182082307,
+        "peak_excursion_n": 0.3374865707699917,
+        "peak_time_s": 0.0014436329039728907,
+        "steady_offset_n": 0.0
+      },
+      "id": "oracle:closed_loop/fast_band_step",
+      "inputs": {
+        "clutch_lag_s": 0.0005,
+        "derivative_a_s_per_n": 1.7561293801847282e-05,
+        "integral_gain_a_per_n_s": 2.3909045882870474,
+        "kind": "fourth_order_tension_loop_velocity_step",
+        "proportional_a_per_n": 0.007739938080495356,
+        "step_mm_s": 2.0
+      },
+      "tolerances": {
+        "dominant_real_part_per_s": {
+          "abs": 1e-12,
+          "reason": "纯代数（Durand-Kerner到机器精度）。**开环那档它恰为零**——那是稳态偏移那一支的零根，所以要判绝对不判相对。本条不与推进对拍，它是闭式内部的自洽判据",
+          "rel": 1e-10
+        },
+        "integral_squared_error_n2_s": {
+          "abs": 0.0,
+          "reason": "实测``open``档8.07e-6、``nominal``档1.37e-5、``fast``档6.07e-4。取5e-3。**它与峰值必须并判**：只判峰值会被一个'把峰压低了却一直不衰减'的实现骗过——而那正是``nominal``档干的事（峰值×1.07而ISE×1.39，两个数一起才说得清）",
+          "rel": 0.005
+        },
+        "oscillatory_frequency_rad_s": {
+          "abs": 0.0,
+          "reason": "开环379.569（≈``ω_n``）。**它与衰减率必须并判**：只判衰减率时，一个把频率也改了的实现可以照样过",
+          "rel": 1e-10
+        },
+        "oscillatory_real_part_per_s": {
+          "abs": 0.0,
+          "reason": "**振荡衰减率本身**：开环−5.000（时间常数0.2 s，**比一次落位动作还长**）、``fast``档−470.709（2.1 ms）、``nominal``档−4.579——**比开环还小**，那就是'积分项吃掉阻尼'这句话的量",
+          "rel": 1e-10
+        },
+        "peak_excursion_n": {
+          "abs": 0.0,
+          "reason": "**收敛结果**：半隐式Euler的对象＋精确ZOH的离合器＋采样控制器，组合误差2026-08-17实测``dt = 1e-6``时``open``档9.26e-6、``nominal``档7.74e-6、``fast``档5.90e-4。取5e-3给最差那档8倍余量。**``fast``档差两个数量级是因为它的闭环极点在470/s上**，同一个``dt``对更快的动态就是更粗的网格",
+          "rel": 0.005
+        },
+        "peak_time_s": {
+          "abs": 0.0,
+          "reason": "峰值时刻的数值分辨率**就是步长**：``dt = 1e-6``对``fast``档的``t_p ≈ 1.44e-3``是6.9e-4相对的栅格。实测三档最坏2.5e-4（``fast``档），取2e-3——**这条容差由采样栅格定，不由模型精度定**",
+          "rel": 0.002
+        },
+        "steady_offset_n": {
+          "abs": 1e-06,
+          "reason": "**判绝对不判相对**：带积分项时它恰为零，相对容差对零无意义。2026-08-17实测（``t = 2.0 s``、``dt = 1e-5``）好控制器给1.60e-10、完全不控给2.7734e-2对闭式2.7778e-2（差4.34e-5，那是``e^{−10} = 4.5e-5``的残余振荡不是偏差）。取1e-6：**它比好控制器的实测大四个数量级，比坏控制器的偏移小四个数量级**——两侧各留四个数量级，这条判据分得开",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "dominant_real_part_per_s": -4.579223809971208,
+        "integral_squared_error_n2_s": 0.06691845290125797,
+        "oscillatory_frequency_rad_s": 365.6359801605758,
+        "oscillatory_real_part_per_s": -4.579223809971209,
+        "peak_excursion_n": 1.137505182988744,
+        "peak_time_s": 0.03880742019963976,
+        "steady_offset_n": 0.0
+      },
+      "id": "oracle:closed_loop/nominal_band_step",
+      "inputs": {
+        "clutch_lag_s": 0.05,
+        "derivative_a_s_per_n": 0.0,
+        "integral_gain_a_per_n_s": 1.2443872530174083,
+        "kind": "fourth_order_tension_loop_velocity_step",
+        "proportional_a_per_n": 0.0,
+        "step_mm_s": 2.0
+      },
+      "tolerances": {
+        "dominant_real_part_per_s": {
+          "abs": 1e-12,
+          "reason": "纯代数（Durand-Kerner到机器精度）。**开环那档它恰为零**——那是稳态偏移那一支的零根，所以要判绝对不判相对。本条不与推进对拍，它是闭式内部的自洽判据",
+          "rel": 1e-10
+        },
+        "integral_squared_error_n2_s": {
+          "abs": 0.0,
+          "reason": "实测``open``档8.07e-6、``nominal``档1.37e-5、``fast``档6.07e-4。取5e-3。**它与峰值必须并判**：只判峰值会被一个'把峰压低了却一直不衰减'的实现骗过——而那正是``nominal``档干的事（峰值×1.07而ISE×1.39，两个数一起才说得清）",
+          "rel": 0.005
+        },
+        "oscillatory_frequency_rad_s": {
+          "abs": 0.0,
+          "reason": "开环379.569（≈``ω_n``）。**它与衰减率必须并判**：只判衰减率时，一个把频率也改了的实现可以照样过",
+          "rel": 1e-10
+        },
+        "oscillatory_real_part_per_s": {
+          "abs": 0.0,
+          "reason": "**振荡衰减率本身**：开环−5.000（时间常数0.2 s，**比一次落位动作还长**）、``fast``档−470.709（2.1 ms）、``nominal``档−4.579——**比开环还小**，那就是'积分项吃掉阻尼'这句话的量",
+          "rel": 1e-10
+        },
+        "peak_excursion_n": {
+          "abs": 0.0,
+          "reason": "**收敛结果**：半隐式Euler的对象＋精确ZOH的离合器＋采样控制器，组合误差2026-08-17实测``dt = 1e-6``时``open``档9.26e-6、``nominal``档7.74e-6、``fast``档5.90e-4。取5e-3给最差那档8倍余量。**``fast``档差两个数量级是因为它的闭环极点在470/s上**，同一个``dt``对更快的动态就是更粗的网格",
+          "rel": 0.005
+        },
+        "peak_time_s": {
+          "abs": 0.0,
+          "reason": "峰值时刻的数值分辨率**就是步长**：``dt = 1e-6``对``fast``档的``t_p ≈ 1.44e-3``是6.9e-4相对的栅格。实测三档最坏2.5e-4（``fast``档），取2e-3——**这条容差由采样栅格定，不由模型精度定**",
+          "rel": 0.002
+        },
+        "steady_offset_n": {
+          "abs": 1e-06,
+          "reason": "**判绝对不判相对**：带积分项时它恰为零，相对容差对零无意义。2026-08-17实测（``t = 2.0 s``、``dt = 1e-5``）好控制器给1.60e-10、完全不控给2.7734e-2对闭式2.7778e-2（差4.34e-5，那是``e^{−10} = 4.5e-5``的残余振荡不是偏差）。取1e-6：**它比好控制器的实测大四个数量级，比坏控制器的偏移小四个数量级**——两侧各留四个数量级，这条判据分得开",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "fast_ise_ratio": 0.006070868900421905,
+        "fast_peak_ratio": 0.31824753599416217,
+        "nominal_ise_ratio": 1.3881731943528484,
+        "nominal_makes_it_worse": 1.0,
+        "nominal_peak_ratio": 1.0726596345472865
+      },
+      "id": "oracle:closed_loop/suppression_verdict",
+      "inputs": {
+        "ise_horizon_s": 0.2,
+        "kind": "closed_over_open_ratios"
+      },
+      "tolerances": {
+        "fast_ise_ratio": {
+          "abs": 0.0,
+          "reason": "**这就是'压下去了多少'那个数**：6.07e-3，即165倍。峰值只压到0.318倍而ISE压到六百分之一——**压下去的主要不是峰高，是它不再一直响**",
+          "rel": 0.005
+        },
+        "fast_peak_ratio": {
+          "abs": 0.0,
+          "reason": "两条闭式相除，容差随分子分母的推进对拍容差走",
+          "rel": 0.005
+        },
+        "nominal_ise_ratio": {
+          "abs": 0.0,
+          "reason": "1.3882——**大于1**。积分项把振荡模态的阻尼吃掉了（闭式：开环极点−5.000±379.569j，额定闭环−4.579±365.636j）。**这不是实现的毛病，是闭式预言的**",
+          "rel": 0.005
+        },
+        "nominal_makes_it_worse": {
+          "abs": 0.0,
+          "reason": "**零容差的是那个不等号**：两条比值都必须严格大于这个1。本案例最要紧的结论——**在真机那一档上，这条通道的闭环让扰动响应更坏**",
+          "rel": 0.0
+        },
+        "nominal_peak_ratio": {
+          "abs": 0.0,
+          "reason": "1.0727——**大于1**。闭环把峰值抬高了7.3%",
+          "rel": 0.005
+        }
+      }
+    },
+    {
+      "expected": {
+        "bad_oscillatory_real_part_per_s_0p001": -4.895200242906829,
+        "bad_oscillatory_real_part_per_s_0p01": -3.953908461746002,
+        "bad_peak_excursion_n_0p001": 1.05925980106018,
+        "bad_peak_excursion_n_0p01": 1.0487343559761593,
+        "bad_proportional_a_per_n_0p001": 7.739938080495356e-06,
+        "bad_proportional_a_per_n_0p01": 7.739938080495357e-05,
+        "bad_response_at_horizon_n_0p001": 0.027691541463572413,
+        "bad_response_at_horizon_n_0p01": 0.026838515419709986,
+        "bad_steady_offset_n_0p001": 0.027694693696687714,
+        "bad_steady_offset_n_0p01": 0.026968716289104636,
+        "good_peak_excursion_n": 0.3374865707699917,
+        "good_steady_offset_n": 0.0,
+        "uncontrolled_response_at_horizon_n": 0.027733990806010946,
+        "uncontrolled_steady_offset_n": 0.027777777777777776
+      },
+      "id": "oracle:closed_loop/pluggability",
+      "inputs": {
+        "bad_gain_fractions": [
+          0.01,
+          0.001
+        ],
+        "clutch_lag_s": 0.0005,
+        "kind": "same_case_worse_controller",
+        "steady_horizon_s": 2.0
+      },
+      "tolerances": {
+        "bad_oscillatory_real_part_per_s_0p001": {
+          "abs": 0.0,
+          "reason": "**纯比例增益也把阻尼吃掉了**：−5.000（不控）→−4.895（0.1%）→−3.954（1%）。``Kp``抬高``s¹``系数而``s²``系数不动 ⟹ ``ω``升而``2ζω``不变 ⟹ ``ζ``降。本条记的是这条单调性",
+          "rel": 1e-10
+        },
+        "bad_oscillatory_real_part_per_s_0p01": {
+          "abs": 0.0,
+          "reason": "**纯比例增益也把阻尼吃掉了**：−5.000（不控）→−4.895（0.1%）→−3.954（1%）。``Kp``抬高``s¹``系数而``s²``系数不动 ⟹ ``ω``升而``2ζω``不变 ⟹ ``ζ``降。本条记的是这条单调性",
+          "rel": 1e-10
+        },
+        "bad_peak_excursion_n_0p001": {
+          "abs": 0.0,
+          "reason": "坏控制器（纯比例、增益极小）的峰值。**它必须显著大于好控制器那一个**，那就是'换得动'的判据本身",
+          "rel": 0.005
+        },
+        "bad_peak_excursion_n_0p01": {
+          "abs": 0.0,
+          "reason": "坏控制器（纯比例、增益极小）的峰值。**它必须显著大于好控制器那一个**，那就是'换得动'的判据本身",
+          "rel": 0.005
+        },
+        "bad_proportional_a_per_n_0p001": {
+          "abs": 0.0,
+          "reason": "好控制器增益的一个份额",
+          "rel": 1e-15
+        },
+        "bad_proportional_a_per_n_0p01": {
+          "abs": 0.0,
+          "reason": "好控制器增益的一个份额",
+          "rel": 1e-15
+        },
+        "bad_response_at_horizon_n_0p001": {
+          "abs": 5e-05,
+          "reason": "``t = 2 s``上的闭式值，**含没走完的振荡尾巴**。实测1%档8.64e-6、0.1%档1.14e-6，取5e-5留6倍余量。**判它而不判渐近值，判据紧16—100倍**：对渐近值1%档差1.39e-4，而那1.30e-4是尾巴不是偏差",
+          "rel": 0.0
+        },
+        "bad_response_at_horizon_n_0p01": {
+          "abs": 5e-05,
+          "reason": "``t = 2 s``上的闭式值，**含没走完的振荡尾巴**。实测1%档8.64e-6、0.1%档1.14e-6，取5e-5留6倍余量。**判它而不判渐近值，判据紧16—100倍**：对渐近值1%档差1.39e-4，而那1.30e-4是尾巴不是偏差",
+          "rel": 0.0
+        },
+        "bad_steady_offset_n_0p001": {
+          "abs": 0.0,
+          "reason": "``Δv·K·d/(Ka + G·Kp)``，纯代数**渐近值**。增益极小时它几乎就是完全不控那个数——**这正是'增益极小'的含义**。**推进对拍不判它判下一条**：``t = 2 s``上振荡还没走完",
+          "rel": 1e-14
+        },
+        "bad_steady_offset_n_0p01": {
+          "abs": 0.0,
+          "reason": "``Δv·K·d/(Ka + G·Kp)``，纯代数**渐近值**。增益极小时它几乎就是完全不控那个数——**这正是'增益极小'的含义**。**推进对拍不判它判下一条**：``t = 2 s``上振荡还没走完",
+          "rel": 1e-14
+        },
+        "good_peak_excursion_n": {
+          "abs": 0.0,
+          "reason": "同``fast``档峰值",
+          "rel": 0.005
+        },
+        "good_steady_offset_n": {
+          "abs": 1e-06,
+          "reason": "积分项在，终值定理给恒零；实测1.60e-10",
+          "rel": 0.0
+        },
+        "uncontrolled_response_at_horizon_n": {
+          "abs": 5e-05,
+          "reason": "``t = 2 s``上的闭式值（含没走完的振荡尾巴）。实测差4.15e-7，取5e-5留120倍余量",
+          "rel": 0.0
+        },
+        "uncontrolled_steady_offset_n": {
+          "abs": 0.0,
+          "reason": "``Δv·c/R² = 0.0277778``。它同时是`free_span_tension_step`的``steady_change_n``——**两条案例必须给同一个数**",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "cubic_routh_zero_lag": 0.025799793601651185,
+        "dominant_real_part_above": 0.5024881157364172,
+        "dominant_real_part_below": -0.5021020267659171,
+        "nominal_routh_with_fast_design": -16525.91515292403,
+        "pure_integral_limit_fast": 0.026591631930281166,
+        "pure_integral_limit_nominal": 4.147957510058028,
+        "pure_integral_limit_zero_lag": 0.025799793601651185,
+        "twice_zeta_omega_form": 0.025799793601651185
+      },
+      "id": "oracle:closed_loop/stability_limit",
+      "inputs": {
+        "clutch_lag_s_fast": 0.0005,
+        "clutch_lag_s_nominal": 0.05,
+        "kind": "routh_hurwitz_integral_gain",
+        "probe_fractions": [
+          0.9,
+          1.1
+        ]
+      },
+      "tolerances": {
+        "cubic_routh_zero_lag": {
+          "abs": 0.0,
+          "reason": "同上，是被对拍的另一半",
+          "rel": 0.0
+        },
+        "dominant_real_part_above": {
+          "abs": 0.0,
+          "reason": "+0.50249，**正的**：1.1倍界上闭环发散。**两侧几乎反对称**（−0.5021对+0.5025）说明界确实在中间",
+          "rel": 1e-10
+        },
+        "dominant_real_part_below": {
+          "abs": 0.0,
+          "reason": "−0.50210，**负的**：0.9倍界上闭环收敛",
+          "rel": 1e-10
+        },
+        "nominal_routh_with_fast_design": {
+          "abs": 0.0,
+          "reason": "**−16525.92，负的**：额定离合器上用``fast``那套设计时Routh第一列已经翻号，**任何正的积分增益都不稳**。实现在这里必须失败关闭而不是返回一个负的界。（把``Kd``也按额定档重算会更负，实测−17997.17——**两个数都是负的，本条钉的是前一个**）",
+          "rel": 1e-14
+        },
+        "pure_integral_limit_fast": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-14
+        },
+        "pure_integral_limit_nominal": {
+          "abs": 0.0,
+          "reason": "纯代数",
+          "rel": 1e-14
+        },
+        "pure_integral_limit_zero_lag": {
+          "abs": 0.0,
+          "reason": "**零容差，判逐位相等**：四阶Routh在``τ = 0``处必须与三次那条``d·Ka/G``给出**同一个浮点数**。2026-08-17实测``==``为真。'两条是同一条'这句话要么逐位成立，要么就不该说",
+          "rel": 0.0
+        },
+        "twice_zeta_omega_form": {
+          "abs": 0.0,
+          "reason": "``2ζω_n·Ka/G``。**它说的话比这个数要紧**：积分增益的界正比于开环阻尼，而开环阻尼是``ζ = 0.0132``",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "laydown_excess_fraction": 0.6019776512823565,
+        "laydown_tension_at_setpoint_n": 32.48454681767001,
+        "reversed_excess_fraction": 1.5663323952081352,
+        "reversed_ratio": 2.566332395208135,
+        "transfer_ratio": 1.6019776512823565
+      },
+      "id": "oracle:closed_loop/capstan_at_the_laydown_point",
+      "inputs": {
+        "friction_coefficient": 0.3,
+        "kind": "euler_eytelwein_observation_layer",
+        "wrap_angle_rad": 1.5707963267948966
+      },
+      "tolerances": {
+        "laydown_excess_fraction": {
+          "abs": 0.0,
+          "reason": "0.601978——闭环稳态下落位点比设定高60.198%",
+          "rel": 1e-15
+        },
+        "laydown_tension_at_setpoint_n": {
+          "abs": 0.0,
+          "reason": "设定20.2778 N时落位点上是32.4845 N。**这个数是本案例交给现场的那一个**",
+          "rel": 1e-15
+        },
+        "reversed_excess_fraction": {
+          "abs": 0.0,
+          "reason": "1.566332——156.63%对60.20%，**这是平方的代价**",
+          "rel": 1e-15
+        },
+        "reversed_ratio": {
+          "abs": 0.0,
+          "reason": "``exp(2μθ) = 2.566332``。**判据要判的是'平方'这件事**，所以本条与``transfer_ratio``分开给值：一个凑出来的2.566过不了'它必须等于前一条的平方'那道门",
+          "rel": 1e-15
+        },
+        "transfer_ratio": {
+          "abs": 0.0,
+          "reason": "``exp(μθ) = 1.601978``。**它就是plans/13第六节那个60.2%**，而`cases/capstan_tension_ratio`验的是同一条式子的离散形",
+          "rel": 1e-15
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
