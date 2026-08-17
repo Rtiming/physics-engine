@@ -1,0 +1,312 @@
+{
+  "arrays": {},
+  "case_id": "case/anisotropic_friction_ellipse",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/anisotropic_friction_ellipse",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/anisotropic_friction_ellipse/generate_oracle.py",
+    "sha256": "67f8e7997f6ece3fd57664c980bce55d5a5ca51b1aba2e15f5f8572cc2922063"
+  },
+  "load_tier": "local_batch",
+  "manifest_self_sha256": "4705d314507e7da8d01bfbfe02f4443a4d78b5cca54ecfcdf6934f5161c7bff7",
+  "oracles": [
+    {
+      "expected": {
+        "bitwise_identical": true,
+        "compared_cases": 1440,
+        "general_path_max_relative_gap": 0.0
+      },
+      "id": "oracle:friction/degenerate_to_isotropic",
+      "inputs": {
+        "angle_count": 360,
+        "kind": "equal_coefficients_reduce_to_circle",
+        "magnitude_count": 4,
+        "mu_across": 0.5,
+        "mu_along": 0.5,
+        "normal_force_n": 4.0,
+        "tangential_stiffness_n_per_mm": 30000.0
+      },
+      "tolerances": {
+        "bitwise_identical": {
+          "abs": 0.0,
+          "reason": "**定性判据零容差**：``μ_∥ == μ_⊥``时映射把参数原样转交`coulomb_return_map`，故相同是**构造出来的**不是算出来的。判的是IEEE-754位型（`float.hex()`），不是``==``——``-0.0 == 0.0``为真而位型不同",
+          "rel": 0.0
+        },
+        "compared_cases": {
+          "abs": 0.0,
+          "reason": "**比了几次是被断言的量**。零容差，因为「比了0次然后全绿」是空门的标准形状，而这条门的全部价值在于它真的比过",
+          "rel": 0.0
+        },
+        "general_path_max_relative_gap": {
+          "abs": 4e-16,
+          "reason": "**关掉转交、强走通用椭圆路径**时与圆的闭式的最大相对逐分量差。这一条不许零容差：通用路径解的是标量方程，退化时只能到舍入。**没有它，上一条的「逐位」就只是****转交本身的同义反复**——转交可以掩盖通用路径写错",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "max_flow_normal_sine": 0.0,
+        "max_support_function_relative_gap": 0.0,
+        "near_yield_flow_normal_sine": 0.0,
+        "radial_return_max_flow_normal_sine": 0.923076923076923
+      },
+      "id": "oracle:friction/maximum_dissipation",
+      "inputs": {
+        "ellipse_parameter_step_deg": 1.0,
+        "kind": "associated_flow_outward_normal",
+        "mu_across": 0.1,
+        "mu_along": 0.5,
+        "near_yield_overshoot_factor": 1.001,
+        "normal_force_n": 4.0,
+        "tangential_stiffness_n_per_mm": 30000.0,
+        "trial_overshoot_factors": [
+          1.1,
+          3.0,
+          100.0
+        ]
+      },
+      "tolerances": {
+        "max_flow_normal_sine": {
+          "abs": 1e-14,
+          "reason": "最大耗散原理的KKT条件：滑移增量必须沿屈服面外法向，故正弦的真值是**0**。实测最坏4.9e-15（λ ≥ 1.1）",
+          "rel": 0.0
+        },
+        "max_support_function_relative_gap": {
+          "abs": 1e-14,
+          "reason": "同一条原理的**另一种写法**：``f·m̂``必须等于支撑函数``h(m̂)``。它与上一条各自独立——上一条判方向，这条判大小。**它对方向误差是二阶不敏感的**（``h``的梯度恰是``f``，故两边的一阶变化相消），所以实测在全部λ上平在1.5—1.9e-15，不随``λ → 1``放大。**两条一起才把方向与大小都钉住**——只留这一条会让67°的方向错也通过",
+          "rel": 0.0
+        },
+        "near_yield_flow_normal_sine": {
+          "abs": 1e-12,
+          "reason": "**同一条判据，刚屈服那一档单独列出来**，因为它的容差不是求解精度而是**消去误差**：滑移量``(f_trial − f)/k_t``在``λ → 1``时是两个几乎相等的数相减，方向误差按``eps/(λ−1)``放大。实测λ=1.0001/1.001/1.01/1.1给3.59e-12/4.19e-13/3.31e-14/4.86e-15——**四档各差一个数量级，与该定律逐档吻合**。λ=1.001时取1e-12（实测的2.4倍）。把它混进上一条会让上一条松100倍而看不出为什么",
+          "rel": 0.0
+        },
+        "radial_return_max_flow_normal_sine": {
+          "abs": 0.0,
+          "reason": "**这是对照组、不是被验对象**：径向返回（= 度规变换后的径向返回）在同一条扫描上的最大违反角，闭式``(a²−b²)/(a²+b²)``。它必须**显著非零**，否则「两条映射不同」这句话本身没被验过",
+          "rel": 1e-14
+        }
+      }
+    },
+    {
+      "expected": {
+        "associative_dissipation_n": [
+          2.0,
+          1.9346236779451766,
+          1.7435595774162695,
+          1.4422205101855958,
+          1.0583005244258366,
+          0.6459343811362558,
+          0.4
+        ],
+        "peak_shortfall": 0.6153846153846155,
+        "peak_shortfall_angle_deg": 45.0,
+        "radial_dissipation_n": [
+          2.0,
+          1.238515897842021,
+          0.7559289460184545,
+          0.5547001962252291,
+          0.4588314677411236,
+          0.4135171140103613,
+          0.4
+        ],
+        "transverse_force_overstatement_at_peak": 5.0
+      },
+      "id": "oracle:friction/mixed_angle_dissipation",
+      "inputs": {
+        "angles_deg": [
+          0.0,
+          15.0,
+          30.0,
+          45.0,
+          60.0,
+          75.0,
+          90.0
+        ],
+        "kind": "steady_slide_dissipation_per_unit_distance",
+        "mu_across": 0.1,
+        "mu_along": 0.5,
+        "normal_force_n": 4.0,
+        "peak_scan_step_deg": 1.0,
+        "tangential_stiffness_n_per_mm": 30000.0
+      },
+      "tolerances": {
+        "associative_dissipation_n": {
+          "abs": 0.0,
+          "reason": "支撑函数是闭式；引擎侧是位移控制稳态滑移的实测力投影，留1e-12给稳态迭代的收敛余量（实测1e-15量级）",
+          "rel": 1e-12
+        },
+        "peak_shortfall": {
+          "abs": 0.0,
+          "reason": "``(a−b)²/(a²+b²) = 8/13``。**这一条是本案例的中心数字**：WDS报的「混合角耗散最高短缺60%」在本仓量到61.538%",
+          "rel": 1e-12
+        },
+        "peak_shortfall_angle_deg": {
+          "abs": 0.0,
+          "reason": "**零容差**：峰值角是从1°格点里argmax选出来的，格点含45°，故它要么恰是45.0要么是另一个格点值——**没有中间态**。峰值跑到别的角上就说明椭圆的朝向接错了",
+          "rel": 0.0
+        },
+        "radial_dissipation_n": {
+          "abs": 0.0,
+          "reason": "同上，对照映射一侧",
+          "rel": 1e-12
+        },
+        "transverse_force_overstatement_at_peak": {
+          "abs": 0.0,
+          "reason": "45°处径向返回的横向力比关联流动大``a/b = μ_∥/μ_⊥``倍。**「系统性偏置横向落位」这句话的定量形状就是它**——耗散短缺只说少了多少功，这条说方向错到哪去了",
+          "rel": 1e-12
+        }
+      }
+    },
+    {
+      "expected": {
+        "isotropic_dissipation_n": 2.0,
+        "peak_shortfall": 0.8,
+        "peak_shortfall_angle_deg": 90.0,
+        "shortfall_vs_anisotropic": [
+          0.0,
+          0.03268816102741168,
+          0.12822021129186523,
+          0.2788897449072021,
+          0.4708497377870817,
+          0.677032809431872,
+          0.8
+        ]
+      },
+      "id": "oracle:friction/isotropic_substitute_shortfall",
+      "inputs": {
+        "angles_deg": [
+          0.0,
+          15.0,
+          30.0,
+          45.0,
+          60.0,
+          75.0,
+          90.0
+        ],
+        "kind": "single_scalar_mu_stands_in_for_the_ellipse",
+        "mu_across": 0.1,
+        "mu_along": 0.5,
+        "normal_force_n": 4.0,
+        "substitute_mu": 0.5
+      },
+      "tolerances": {
+        "isotropic_dissipation_n": {
+          "abs": 0.0,
+          "reason": "各向同性映射的稳态耗散与方向无关，恒为``μ·N``",
+          "rel": 1e-12
+        },
+        "peak_shortfall": {
+          "abs": 0.0,
+          "reason": "``1 − μ_⊥/μ_∥ = 0.8``，在纯横向滑移上取到",
+          "rel": 1e-12
+        },
+        "peak_shortfall_angle_deg": {
+          "abs": 0.0,
+          "reason": "**峰值在主轴上而不在混合角上**——这正是WDS那句「混合角上短缺最高」指的不是这个口径的证据",
+          "rel": 0.0
+        },
+        "shortfall_vs_anisotropic": {
+          "abs": 0.0,
+          "reason": "**这是另一个口径，不要与`mixed_angle_dissipation`的短缺混起来**：这一条比的是「今天的引擎拿单个``μ_∥``顶上去」，那一条比的是「椭圆上径向缩 vs 最近点」。两个数不同、峰值位置也不同（这条在主轴、那条在45°）",
+          "rel": 1e-12
+        }
+      }
+    },
+    {
+      "expected": {
+        "dissipation_n_mm": [
+          0.0005333333333333334,
+          0.0021333333333333334,
+          0.010133333333333334
+        ],
+        "max_across_force_n": 0.0,
+        "yield_displacement_mm": 6.666666666666667e-05
+      },
+      "id": "oracle:friction/principal_axis_loop",
+      "inputs": {
+        "amplitudes_in_yield": [
+          2.0,
+          5.0,
+          20.0
+        ],
+        "kind": "elastic_perfectly_plastic_loop_area_on_the_long_axis",
+        "mu_across": 0.1,
+        "mu_along": 0.5,
+        "normal_force_n": 4.0,
+        "steady_cycle_index": 3,
+        "steps_per_leg": 500,
+        "tangential_stiffness_n_per_mm": 30000.0
+      },
+      "tolerances": {
+        "dissipation_n_mm": {
+          "abs": 0.0,
+          "reason": "主轴上椭圆退化成1维理想塑性，回线是平行四边形、梯形积分在线性段上精确、拐点对齐步长边界，**离散误差因此为0**；剩下的是1500项梯形累加的浮点求和误差，实测2.0e-14（K=500）、2.2e-14（K=1000）、2.1e-15（K=2000）——**不随K单调，正是求和舍入而不是离散化的指纹**。取1e-13是实测的5倍余量。拐点不对齐时（K=250）实测4.2e-05，比这高九个数量级",
+          "rel": 1e-13
+        },
+        "max_across_force_n": {
+          "abs": 1e-15,
+          "reason": "沿主轴加载全程横向力**实测恰为0.0**（试探力在``e_⊥``上的投影是精确零，之后每一步都乘0）。**它非零就说明面内轴接错了**——而那正是`PenaltyAnnulusLimit`把朝向藏进坐标符号时单元门抓不到的那一类错。留1e-15是为了让「有人把装置转了个角度」表现为可读偏差而不是神秘的红",
+          "rel": 0.0
+        },
+        "yield_displacement_mm": {
+          "abs": 0.0,
+          "reason": "``u_y = μ_∥N/k_t``是一次除法",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "cycle_to_cycle_relative_gap": 0.0,
+        "energy_balance_relative_gap": 0.0,
+        "first_cycle_is_different": true,
+        "steady_anchor_drift_mm": 0.0,
+        "steady_force_drift_n": 0.0
+      },
+      "id": "oracle:friction/mixed_angle_closed_loop",
+      "inputs": {
+        "amplitude_in_yield": 20.0,
+        "angle_deg": 45.0,
+        "cycles": 4,
+        "kind": "steady_cycle_closes_and_two_accountings_agree",
+        "mu_across": 0.1,
+        "mu_along": 0.5,
+        "normal_force_n": 4.0,
+        "steps_per_leg": 2000,
+        "tangential_stiffness_n_per_mm": 30000.0
+      },
+      "tolerances": {
+        "cycle_to_cycle_relative_gap": {
+          "abs": 1e-15,
+          "reason": "第3圈与第4圈的耗散必须相同。**这条顺手补上了`friction_hysteresis_loop`第六条已知失效**（那里明写「多圈的稳态性没验」）",
+          "rel": 0.0
+        },
+        "energy_balance_relative_gap": {
+          "abs": 3e-06,
+          "reason": "外功``∮f·du``与塑性功``Σf·Δu_slip``是**两条独立记账**，闭合回线上必须相等。**混合角上回线不是平行四边形**（卸载支的再屈服点不在``−f_sup``上，之后力沿椭圆弯着走），故梯形积分留O(h²)残余：实测2000步给1.11e-06，细化比3.98/3.99/3.99/4.00——**二阶是判出来的**。3e-6 = 实测值的2.7倍余量",
+          "rel": 0.0
+        },
+        "first_cycle_is_different": {
+          "abs": 0.0,
+          "reason": "**定性判据零容差、而且是反向的**：第1圈必须**不等于**稳态圈。它若也相等，说明锚点从零出发那一段瞬态被抹平了——那意味着历史没在起作用，整个案例就是空的",
+          "rel": 0.0
+        },
+        "steady_anchor_drift_mm": {
+          "abs": 1e-15,
+          "reason": "**回线闭合**：稳态圈走完一整圈，锚点必须回到原处。实测恰为0（映射是确定的，状态一旦重复就永远重复）；留1e-15是让「有人改了步数」表现为可读偏差而不是神秘的红",
+          "rel": 0.0
+        },
+        "steady_force_drift_n": {
+          "abs": 1e-15,
+          "reason": "同上，力那一半。锚点回原处而力不回，说明返回映射不是锚点的函数——那会让历史记账整个失效",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

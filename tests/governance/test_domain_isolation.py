@@ -82,6 +82,13 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
     #: 本构与N/M截面合力也都是力学语义；不是域中立的通用求积器。
     #: `section_beam`归力学（2026-08-13，决策0060）：它把`sections`的本构响应经
     #: WDS式杆运动学装进`energies`/`solve`，全部依赖都留在同一力学域。
+    #: `laydown`归力学（2026-08-17，决策0067）：它import基座的`motion`（取位姿时间线
+    #: 与`MotionSource`协议）与`identity`（取命名空间ID校验）——**依赖只向下**。
+    #: 有人会觉得它"只是几何"该进基座modelgen：**否决**，判据仍是0035那条
+    #: "import决定环，不是愿望决定环"，而它算的是落位点的所需送带率与闭合残差，
+    #: 那是`drives`（力学）要的边界条件，不是形状生成。
+    #: 触发条件：哪天它要读`State`（比如落位点参与求解），门①仍绿——因为`state`
+    #: 也在力学；真要出事的是它去import光学或电磁，那时门②当场红。
     #: `drives`归力学（2026-08-17，决策0062）：它只import基座的`actuators`
     #: （取时延线与命令校验）与标准库——**没有一条边越到别的域，也没有向上**。
     #: 它没有长在`actuators`里，正是因为那样会让基座反向依赖力学：
@@ -93,6 +100,10 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
     #: 第三个消费方预支通用性。触发条件：某个非力学域真的要求导时重开。
     #: `rod`归力学（2026-08-17，决策0065）：它import `autodiff`/`energies`/`solve`/
     #: `state`（全是力学）与`canonical`（基座）——没有一条边越到别的域。
+    #: `transport`归力学（2026-08-17，决策0066）：它import基座`scene`圈的`motion`
+    #: （只取`PauseInterval`，让暂停区间在两条时间线上是同一个形制）与标准库——
+    #: **没有一条边越到别的域，也没有向上**。它没有长在`motion`里同样是方向问题：
+    #: `motion`在基座，而跨段张力是力学。判据仍是0035那条。
     "mechanics": (
         "autodiff",
         "contact",
@@ -101,6 +112,7 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
         "energies",
         "feed",
         "integrate",
+        "laydown",
         "rigidbody",
         "rod",
         "section_beam",
@@ -108,6 +120,7 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
         "sensors",
         "solve",
         "state",
+        "transport",
     ),
     "optics": ("optics",),
     #: 第三个物理域（决策0041第三节预登记；0042互感、0047超导薄带两块落地）。

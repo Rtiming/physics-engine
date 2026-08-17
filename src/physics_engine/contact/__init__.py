@@ -56,7 +56,7 @@
 | `errors.py` | `ContactError`。谁也不依赖，故不产生环 |
 | `layout.py` | 槽宽/每对槽数/regime取值/法向来源类型＋声明与锚点布局 |
 | `penalty.py` | 罚法向四族：半空间、球-球、有限长圆柱侧面、法兰内环面 |
-| `friction.py` | 库仑return-map与粘着弹簧（**各向同性**，边界见该文件） |
+| `friction.py` | 库仑return-map（**圆与椭圆两条并列**，决策0068）与粘着弹簧 |
 | `damping.py` | 恢复系数↔阻尼比换算与线性法向dashpot |
 | `stepper.py` | 准静态步进器：单槽位与多槽位 |
 
@@ -75,8 +75,12 @@ from physics_engine.contact.damping import (
 )
 from physics_engine.contact.errors import ContactError
 from physics_engine.contact.friction import (
+    IN_PLANE_DIRECTION_MIN_SINE,
+    TRIAL_OUT_OF_PLANE_TOLERANCE,
+    FrictionEllipse,
     FrictionOutcome,
     TangentialStickSpring,
+    anisotropic_return_map,
     coulomb_return_map,
 )
 from physics_engine.contact.layout import (
@@ -107,18 +111,21 @@ from physics_engine.contact.stepper import (
 )
 
 __all__ = [
+    "IN_PLANE_DIRECTION_MIN_SINE",
     "MAX_POINTS_PER_PAIR_SPHERE_CAPSULE",
     "NORMAL_UNIT_TOLERANCE",
     "REGIME_SEPARATED",
     "REGIME_SLIP",
     "REGIME_STICK",
     "SLOT_WIDTH",
+    "TRIAL_OUT_OF_PLANE_TOLERANCE",
     "ContactDeclaration",
     "ContactError",
     "ContactLayout",
     "ContactPoint",
     "ContactSlot",
     "ContactStep",
+    "FrictionEllipse",
     "FrictionOutcome",
     "LinearDashpotParameters",
     "LinearNormalDashpot",
@@ -131,6 +138,7 @@ __all__ = [
     "TangentialStickSpring",
     "advance_contact_quasistatic",
     "advance_contacts_quasistatic",
+    "anisotropic_return_map",
     "build_contact_layout",
     "coulomb_return_map",
     "damping_ratio_from_restitution",
