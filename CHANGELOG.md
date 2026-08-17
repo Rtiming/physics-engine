@@ -35,7 +35,8 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
   与Routh积分增益界`integral_gain_stability_limit`。`τ = 0`时四阶Routh与三次那条
   `d·Ka/G`**逐位相同**（零容差门），而它同时等于`2ζω_n·Ka/G`——**界正比于开环阻尼**；
 - **新案例`cases/closed_loop_tension_step`**（8条oracle、B档`local_batch`、
-  14条conformance、27.6 s）。金标是四阶闭环的**精确留数解**，
+  14条conformance，实测27.6／34.1／46.0 s——**三个数差1.7倍，差的是本机
+  并行负载不是判据**）。金标是四阶闭环的**精确留数解**，
   特征多项式手推、根用Durand-Kerner到机器精度，**不import被验的任何模块**；
 - **本轮最要紧的结论是一个否定**：额定磁粉离合器（`τ = 50 ms`）比跨段谐振
   （`ω_n = 379.6 rad/s`）慢19倍，于是闭环把10%线速度阶跃的响应**变坏**——

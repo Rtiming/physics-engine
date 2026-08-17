@@ -142,8 +142,10 @@ SHA-256钉在`oracle.json`的`generator.sha256`字段。
 清单的`case_id`是`case/closed_loop_tension_step`。
 pytest marker：跑推进的11条标`batch`，只判闭式的3条无marker。
 
-实测耗时：`tests/cases/test_closed_loop_tension_step.py`共14条，**27.6 s**
-（2026-08-17，本机Mac）。`tests/test_tension_control.py`共33条，0.17 s。
+实测耗时：`tests/cases/test_closed_loop_tension_step.py`共14条，
+**27.6／34.1／46.0 s**（2026-08-17，本机Mac，同一命令三次）。
+**三个数差1.7倍，差的是本机并行负载不是判据**——按0018墙钟不进门，
+这里记的是量级不是阈值。`tests/test_tension_control.py`共34条，1.7 s。
 
 耗时的来源是三档各跑一趟0.2秒×`dt = 1e-6`＝200000步，加上可插拔那条的
 两趟2.0秒×`dt = 1e-5`。**没有再压**：`dt`是判据分辨率定的（见第三节峰值时刻那一行），
