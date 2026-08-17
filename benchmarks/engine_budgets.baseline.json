@@ -28,8 +28,10 @@
     },
     "accept_full": {
       "budget_s": 120.0,
-      "measured_median_s": 58.3,
-      "load_tier": "local_batch"
+      "measured_median_s": 54.8,
+      "load_tier": "local_batch",
+      "measured_on": "2026-08-17",
+      "measured_by": "docs/decisions/0062_绕线机端到端物理主线开工裁决_20260817.md 第八节。安静机器（1分钟负载4.89、resource=QUALIFIED）三次实测69.7/54.8/38.6秒取中位数。**同一份代码在负载18—86时给出157.9—186.3秒**，那些数resource=UNQUALIFIED、运行器已判performance=NOT_EVALUATED，不进本字段。"
     },
     "solve_equilibrium_cantilever_160free_dof": {
       "budget_s": 0.05,
