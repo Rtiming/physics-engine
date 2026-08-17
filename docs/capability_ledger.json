@@ -391,11 +391,15 @@
         {
           "id": "S5.4",
           "label": "喂料与移动前沿",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": true,
-          "evidence": [],
-          "why": "十几匝不是一次装配出来的，是一匝一匝喂出来的——自由度数在过程中变。",
-          "missing": "WDS有`feed_turn`，引擎侧零。且它与0033/0050那条「状态布局固定而数量随构型变」是同一类问题。"
+          "evidence": [
+            "test:tests/test_feed.py::test_the_layout_never_changes_while_the_tape_feeds",
+            "test:tests/test_feed.py::test_the_unfed_segments_contribute_exactly_zero_by_construction",
+            "test:tests/test_feed.py::test_the_fed_portion_behaves_like_a_rod_of_that_length"
+          ],
+          "why": "十几匝不是一次装配出来的，是一匝一匝喂出来的——自由度数在过程中变。0062丙1已落`feed.FeedFront`，**解法直接复用0050对锚点裁过的形制**：节点数不由『已经喂进来多少』决定，由『这一卷总共要喂多少』决定；预算在声明期定死、布局定长，`fed_count`是**向量里的一个值不是一次布局变更**，未喂节点停在喂料口后方一个静止段长处并被钉住。于是S5.4原文那句『自由度数在过程中变』在这里**不变**——0050那条承重条款（指纹跨步不变）保住了。未喂边的贡献**逐字节为零**（全预算项与只含已喂边的项能量/梯度逐字节相同），不是被if跳过的——跳过会让求和次序随`fed_count`变，而求和次序是形制。",
+          "missing": "**不是材料注入**。WDS `research/05`第三节称『当前最大的单项缺口』的那一条是**带材从轮面上流过、边界随材料移动**（欧拉式），而本模块是**拉格朗日**的：每个节点始终是同一块材料，喂料只是往前接长度。横漂稳态、绞盘全滑都要材料注入，本模块给不了。另无匝数与半径生长的接线（那是`drives.SpoolTension`的`turns`，两者尚未接在一起）、无自接触（S5.2）、无喂料速度与线速的耦合、未喂节点的停放位置是一条直线而不是放线盘上的真实位形。故只报partial。"
         },
         {
           "id": "S5.5",

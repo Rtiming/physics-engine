@@ -92,6 +92,7 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
         "contact_pipeline",
         "drives",
         "energies",
+        "feed",
         "integrate",
         "rigidbody",
         "section_beam",

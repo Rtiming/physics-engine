@@ -45,6 +45,8 @@
 - `physics_engine.section_beam` —— 一个WDS式三节点站点的easy-axis纤维弯曲装配：
   节点/边扭角运动学→全局残差/Hessian→收敛后历史提交（力学域，决策0060；
   0061有WDS默认关闭的线弹性单站候选，**不是整杆或正式迁移完成**）
+- `physics_engine.feed` —— 喂料前沿：节点预算定死、布局定长，已喂/未喂是向量里的值
+  （力学域，决策0062；**不做材料注入**——那是带材从轮面流过，与往前接长度不是一回事）
 - `physics_engine.motion` —— 位姿时间线（spec/10 `MotionSource`）
 - `physics_engine.actuators` —— 驱动器声明层（spec/10 `Actuator`；**`apply`的物理未实现**——
   物理在`drives`，理由是`actuators`在基座、基座不依赖物理域，见决策0062）
