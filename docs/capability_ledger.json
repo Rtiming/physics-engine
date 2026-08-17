@@ -487,11 +487,16 @@
         {
           "id": "S6.6",
           "label": "蹭边：带材碰法兰",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": true,
-          "evidence": [],
-          "why": "用户原话点名了「模拟实际蹭边的情况」。plans/04第九节明写：本场景一旦真做，0034第四节自动重开。",
-          "missing": "接触无；且**法兰轴向尺寸是spec/11的已知缺口**，0032/0034维持失败关闭，触发条件正是本位。"
+          "evidence": [
+            "test:tests/test_contact_annulus.py::test_the_half_clearance_is_the_channel_minus_the_tape",
+            "test:tests/test_contact_annulus.py::test_only_one_flange_ever_carries_load",
+            "test:tests/test_contact_annulus.py::test_ignoring_the_edge_offset_moves_the_threshold_by_half_the_tape_width",
+            "test:tests/test_contact_annulus.py::test_the_rub_force_equals_the_lateral_load_exactly"
+          ],
+          "why": "用户原话点名了「模拟实际蹭边的情况」。0062轨道甲已落`contact.PenaltyAnnulusLimit`：法兰内环面对**带材边缘**的单边罚接触。边缘点由中心线加带符号半宽偏移生成，限位面用带符号的轴向坐标声明（符号即哪一片法兰），活动条件两条——顶上了且边缘确实在环带`ρ ∈ [R_筒, R_法兰]`内。真机数字：导轮有效宽度17mm、带宽4mm ⟹ **半间隙恰好6.5mm**，跑偏超过它才蹭得上。互补条件与单边性是零容差判据；Hessian恒为`k·(a⊗a)`（间隙是位置的线性函数，**没有几何刚度**）。0034第四节的触发条件已到达并重新裁决：**仍不改spec/11词汇**——`modelgen`按0032已把带法兰带盘精确分解为三件独立`FiniteCylinder`，内环面用既有原语表达得了。",
+          "missing": "**只是接触项，还没有蹭边案例**：没有一次真实运行让带材横漂到6.5mm之外并产出事件区间表。**边缘点假定材料标架不绕切线转**（无扭转自由度，0029登记、0062第六节第3条声明），有扭转时边缘位置错`(w/2)·sin(扭角)`。**杆模型原理上看不见边缘载荷下的板屈曲**（WDS research/04第5.3节），所以本位最多给事件区间、边缘力密度与滑距的**上界估计**，真定量必须过壳FE交叉裁决——那不在本仓。另无边缘摩擦与Archard磨损代理、无支架/挡边一类任意静态障碍的SDF。故只报partial。"
         },
         {
           "id": "S6.7",

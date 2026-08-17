@@ -554,6 +554,7 @@ __all__ = [
     "LinearNormalDashpot",
     "MultiContactStep",
     "NORMAL_UNIT_TOLERANCE",
+    "PenaltyAnnulusLimit",
     "PenaltyCylinderContact",
     "PenaltyNormalContact",
     "PenaltySphereContact",
@@ -1739,6 +1740,251 @@ class PenaltyCylinderContact:
             _, _, _, normal = self._frame(state.vector, node, point, axis, radius, node_radius)
             normals.append(normal)
         return tuple(normals)
+
+
+@dataclass(frozen=True)
+class PenaltyAnnulusLimit:
+    """环带限位面——**法兰内环面对带材边缘的单边接触**（蹭边）。
+
+    决策0062轨道甲第二片，守能力位S6.6。
+
+    记``d = x − p``、``s = d·a``（轴向坐标）、``ρ = |d − s·a|``（径向距离）。
+    带材边缘点在``x + e·a``处（``e``是**带符号**的半宽偏移），其轴向坐标是
+    ``s_e = s + e``，**而径向距离与中心线的完全相同**（沿轴平移不改变到轴的距离）。
+
+    限位面用**带符号的**``limit``声明，符号即哪一片法兰：
+
+        limit > 0：边缘必须满足 s_e ≤ limit，  g = limit − s_e
+        limit < 0：边缘必须满足 s_e ≥ limit，  g = s_e − limit
+
+    合起来``g = sign(limit)·(limit − s_e)``。``g < 0``即**蹭上了**。
+
+    ## 为什么不改spec/11的形状词汇（0034第四节重开后的裁决）
+
+    0034把"法兰轴向尺寸"登记成spec/11缺口并维持失败关闭，触发条件写的是
+    "WDS碰撞预演批次或case2给出带法兰导轮的书面需求"。**那个条件2026-08-17到达**
+    （用户点名"带材蹭边"），0062第三节重开并重新裁决：**仍不改词汇**。
+
+    理由是牵引来了、而它要的东西不在词汇层：蹭边要的是法兰的**内环面**，
+    而`modelgen.generate_spool`按0032已经把带法兰带盘**精确分解**为
+    `barrel`＋`flange_low`＋`flange_high`三件独立`FiniteCylinder`。
+    内环面就是``s = ±W/2``这张平面**限制在环带``ρ ∈ [R_筒, R_法兰]``上**——
+    既有原语已经表达得了。新增的词汇在**接触侧**，就是本类。
+
+    ``geometry.mass_properties``对带`flange_outer_radius_mm`的圆柱**维持失败关闭**：
+    那条缺口问的是复合体的质量分布，而接触求解不需要它，**它的触发条件没有到来**。
+
+    ## 单边：这是本项与半空间**唯一但要命**的差别
+
+    两片法兰各是一个独立的限位面。**一片被顶住时另一片必须一个牛顿都不出**——
+    带材不可能同时贴住两侧还各受一个法向力，除非槽宽比带宽还窄，
+    而那是几何声明本身就错了（构造时失败关闭）。
+
+    互补条件``g > 0 ⟹ f ≡ 0``在这里是**零容差**判据，不是"很小"。
+
+    ## Hessian没有几何刚度：``H = k·(a ⊗ a)``，就这一块
+
+    ``s_e``是位置的**线性**函数，所以``g``也是，``∂²g/∂x² = 0``。
+    与`PenaltyNormalContact`（常法向半空间）同构，
+    **与`PenaltyCylinderContact`不同**——那里``g = ρ − R``里的``ρ``是非线性的，
+    于是多出一块周向softening。**别照抄圆柱那一项的Hessian**。
+
+    ## 环带判据是活动条件，不是能量的一部分
+
+    ``ρ ∉ [inner, outer]``时法兰在那里不存在（带材还没绕到法兰的径向范围里，
+    或者已经绕过了法兰外径）。与`PenaltyCylinderContact`的轴向硬切同源：
+    力在环带边界上跳，**所以本项给出``radial_distance_mm``让案例为它设门**。
+
+    ## 无扭转假设——一条声明，不是一个实现细节
+
+    边缘点由``x + e·a``生成，即**假定带材的宽度方向平行于轴**、材料标架不绕切线转。
+    带材平贴在筒上时这是精确的；一旦有扭转，边缘点位置就错了``(w/2)·sin(扭角)``。
+    扭转是0029登记的欠账，0062第六节第3条与第八节写明触发条件。
+    """
+
+    name: str = "annulus_limit"
+    kind: ClassVar[Literal["potential"]] = POTENTIAL
+    #: (节点索引, 轴上一点mm, 轴单位方向, 环带内半径mm, 环带外半径mm,
+    #:  带符号的限位轴向坐标mm, 带符号的边缘偏移mm, 罚刚度N/mm)
+    faces: tuple[
+        tuple[
+            int,
+            tuple[float, float, float],
+            tuple[float, float, float],
+            float,
+            float,
+            float,
+            float,
+            float,
+        ],
+        ...,
+    ] = ()
+
+    def __post_init__(self) -> None:
+        if not self.faces:
+            raise ContactError("annulus_limit needs at least one face")
+        for node, point, axis, inner, outer, limit, offset, stiffness in self.faces:
+            if isinstance(node, bool) or not isinstance(node, int) or node < 0:
+                raise ContactError(
+                    f"annulus limit node index must be a nonnegative int: {node!r}"
+                )
+            if len(point) != 3 or not all(math.isfinite(value) for value in point):
+                raise ContactError(f"annulus axis point must be a finite 3-vector: {point!r}")
+            if len(axis) != 3 or not all(math.isfinite(value) for value in axis):
+                raise ContactError(f"annulus axis must be a finite 3-vector: {axis!r}")
+            norm = math.sqrt(sum(component * component for component in axis))
+            if abs(norm - 1.0) > NORMAL_UNIT_TOLERANCE:
+                raise ContactError(
+                    f"annulus axis must be a unit vector (|a| = {norm!r})"
+                )
+            if not (inner >= 0.0 and math.isfinite(inner)):
+                raise ContactError(f"annulus inner radius must be finite and >= 0: {inner!r}")
+            if not (outer > inner and math.isfinite(outer)):
+                raise ContactError(
+                    f"annulus outer radius must exceed the inner one: {outer!r} <= {inner!r}"
+                    " —— 环带塌成一条线时法兰的径向范围为零，那不是一片法兰"
+                )
+            if not math.isfinite(limit) or limit == 0.0:
+                raise ContactError(
+                    f"annulus limit must be finite and nonzero: {limit!r} —— "
+                    "**符号即哪一片法兰**，零号法兰没有朝向"
+                )
+            if not math.isfinite(offset):
+                raise ContactError(f"edge offset must be finite: {offset!r}")
+            if not (stiffness > 0.0 and math.isfinite(stiffness)):
+                raise ContactError(f"penalty stiffness must be positive: {stiffness!r}")
+
+    def node_index_bound(self) -> int:
+        return max(node for node, _, _, _, _, _, _, _ in self.faces) + 1
+
+    @staticmethod
+    def _frame(
+        vector: tuple[float, ...],
+        node: int,
+        point: tuple[float, float, float],
+        axis: tuple[float, float, float],
+        limit: float,
+        offset: float,
+    ) -> tuple[float, float, float]:
+        """返回``(间隙g, 边缘轴向坐标s_e, 径向距离ρ)``。
+
+        ``ρ``用**中心线**算：沿轴平移不改变到轴的距离，边缘点与中心线的``ρ``相同。
+        这不是近似，是``|d − (d·a)a|``对``d → d + e·a``不变。
+        """
+
+        base = 3 * node
+        delta = tuple(vector[base + component] - point[component] for component in range(3))
+        axial = sum(delta[component] * axis[component] for component in range(3))
+        radial = tuple(delta[component] - axial * axis[component] for component in range(3))
+        distance = math.sqrt(sum(component * component for component in radial))
+        edge_axial = axial + offset
+        sign = 1.0 if limit > 0.0 else -1.0
+        return sign * (limit - edge_axial), edge_axial, distance
+
+    @staticmethod
+    def _is_active(gap: float, distance: float, inner: float, outer: float) -> bool:
+        """活动条件是**两条**：顶上了，且边缘确实在法兰的径向范围内。"""
+
+        return gap < 0.0 and inner <= distance <= outer
+
+    def energy(self, state: State, context: EnergyContext) -> float:
+        total = 0.0
+        for node, point, axis, inner, outer, limit, offset, stiffness in self.faces:
+            gap, _, distance = self._frame(state.vector, node, point, axis, limit, offset)
+            if self._is_active(gap, distance, inner, outer):
+                total += 0.5 * stiffness * gap * gap
+        return total
+
+    def gradient(self, state: State, context: EnergyContext) -> Vector:
+        result = [0.0] * len(state.vector)
+        for node, point, axis, inner, outer, limit, offset, stiffness in self.faces:
+            gap, _, distance = self._frame(state.vector, node, point, axis, limit, offset)
+            if self._is_active(gap, distance, inner, outer):
+                #: ``∂g/∂x = −sign(limit)·a``，故``∇U = k·g·(−sign·a)``。
+                scale = -stiffness * gap * (1.0 if limit > 0.0 else -1.0)
+                base = 3 * node
+                for component in range(3):
+                    result[base + component] += scale * axis[component]
+        return tuple(result)
+
+    def hessian(self, state: State, context: EnergyContext) -> Matrix:
+        size = len(state.vector)
+        result = [[0.0] * size for _ in range(size)]
+        for row, column, value in self.hessian_entries(state, context):
+            result[row][column] += value
+        return tuple(tuple(row) for row in result)
+
+    def hessian_entries(
+        self, state: State, context: EnergyContext
+    ) -> tuple[tuple[int, int, float], ...]:
+        """``k·(a ⊗ a)``，仅活动。**没有几何刚度**——``g``是位置的线性函数。"""
+
+        entries: list[tuple[int, int, float]] = []
+        for node, point, axis, inner, outer, limit, offset, stiffness in self.faces:
+            gap, _, distance = self._frame(state.vector, node, point, axis, limit, offset)
+            if not self._is_active(gap, distance, inner, outer):
+                continue
+            base = 3 * node
+            for a in range(3):
+                for b in range(3):
+                    entries.append((base + a, base + b, stiffness * axis[a] * axis[b]))
+        return tuple(entries)
+
+    def quantities(self, state, context, *, need_gradient, need_hessian):
+        """融合路径。**能量值必须与单独调`energy`逐字节相同**（spec/12第3.1节）。"""
+
+        vector = state.vector
+        total = 0.0
+        gradient = [0.0] * len(vector) if need_gradient else None
+        for node, point, axis, inner, outer, limit, offset, stiffness in self.faces:
+            gap, _, distance = self._frame(vector, node, point, axis, limit, offset)
+            if self._is_active(gap, distance, inner, outer):
+                total += 0.5 * stiffness * gap * gap
+                if gradient is not None:
+                    scale = -stiffness * gap * (1.0 if limit > 0.0 else -1.0)
+                    base = 3 * node
+                    for component in range(3):
+                        gradient[base + component] += scale * axis[component]
+        return (
+            total,
+            tuple(gradient) if gradient is not None else None,
+            self.hessian(state, context) if need_hessian else None,
+        )
+
+    def rub_force_n(self, state: State) -> tuple[float, ...]:
+        """每个限位面上的**蹭边力**``|k·g|``（没蹭上时为0）。
+
+        与半空间项同理：**平衡时它精确等于理论法向力，与罚刚度无关**。
+        蹭边事件表判的正是它，所以它是公开面。
+        """
+
+        forces = []
+        for node, point, axis, inner, outer, limit, offset, stiffness in self.faces:
+            gap, _, distance = self._frame(state.vector, node, point, axis, limit, offset)
+            forces.append(
+                stiffness * -gap if self._is_active(gap, distance, inner, outer) else 0.0
+            )
+        return tuple(forces)
+
+    def edge_clearance_mm(self, state: State) -> tuple[float, ...]:
+        """每个限位面上的``g``：**离法兰还有多远**，正为未蹭、负为已蹭。
+
+        它是蹭边事件的判据量：一段连续的``g < 0``就是一次蹭边事件。
+        **判它而不是判位置**——位置有``O(1/k)``的穿透误差，力与阈值没有。
+        """
+
+        return tuple(
+            self._frame(state.vector, node, point, axis, limit, offset)[0]
+            for node, point, axis, _, _, limit, offset, _ in self.faces
+        )
+
+    def radial_distance_mm(self, state: State) -> tuple[float, ...]:
+        """每个限位面上边缘点的``ρ``。环带边界上力会跳，门要看得见它在哪。"""
+
+        return tuple(
+            self._frame(state.vector, node, point, axis, limit, offset)[2]
+            for node, point, axis, _, _, limit, offset, _ in self.faces
+        )
 
 
 @dataclass(frozen=True)
