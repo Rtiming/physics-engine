@@ -48,15 +48,18 @@
 
 | [`roller_skew_lateral_drift`](roller_skew_lateral_drift/case.md) | **导轮轴偏斜引起的稳态横漂，而且它不需要材料输运**——Shelton正规入轮条件`y'(L)=θ_r`本身就是输运的结果，写成边界条件后稳态是静力边值问题。引擎DER弯曲＋轴向张力对闭式`y_ss = θ_r·L·f(KL)`，`f(u)=(sinh u−u cosh u)/(u(1−cosh u))`，**二阶收敛**（实测比3.739/3.861/3.928）。与WDS `research/04`引的**五个独立数字**逐条对拍。**反直觉结论：张力越大横漂越大**（`f`单调增，10→40N给+11.3%），闭式与引擎各判一次。振幅二次律两档一致（9.97e-3/9.93e-3 per mm²），1mm处+0.9%由张力自升解释、验算对上。**装配公差直接输出**：半间隙6.5mm下，跨长100/200/300/500mm的临界偏斜为5.381°/2.489°/1.546°/**0.852°** | B | local_batch | 4条 | `tests/cases/test_roller_skew_lateral_drift.py` |
 
+| [`anisotropic_rod_twist`](anisotropic_rod_twist/case.md) | **第一条有材料帧的整杆，也是全仓第一条扭转金标**。四条闭式各自独立于内核：螺旋线`κ=R/(R²+p²)`、`τ=p/(R²+p²)`二阶收敛（比值恒4.00），**`κ2`是结构零**（1.07—8.83e-15，**不随h下降**，另有一条门专判它没在下降）；**易/难轴互换**——参考`d1`转90°挠度比实测999.99972 vs 1000（偏差2.79e-7，随载荷平方下降＝几何非线性），**同行点名了这个失效模式却没有门守着**；端扭矩`θ=M·L/GJ`偏差4.885e-15、牛顿一步收敛、扭率极差6.85e-17；**Gauss-Bonnet holonomy**——切向`x̂→ŷ→ẑ→x̂`围出三直角球面三角形，面积`4π/8=π/2`，重输运后`γ₃−γ₀`与`−π/2`**逐位相同**。**最后一条判据期望的是错误答案**（不重输运时扭转能量恒为`0.0`，零容差）——那是「抄了公式不抄retransport外层循环」的分辨力本身。顺带量到固支半格柔度的**第三例**（不订正只有一阶，`3h/2`订正后二阶3.876/3.939/3.968） | B | local_batch | 4条 | `tests/cases/test_anisotropic_rod_twist.py` |
+
 ## 一之二、每个案例穿过引擎的哪几层（决策0048第三节通则）
 
 **"验公式"与"验引擎"是两类，混在一个计数里计数就不再有意义。**
-本节是那条通则的执行面：29个案例按**穿过引擎哪几层**分类，**不按案例数报成绩**。
+本节是那条通则的执行面：30个案例按**穿过引擎哪几层**分类，**不按案例数报成绩**。
 
 | 穿过的层 | 条数 | 案例 |
 |---|---|---|
 | **`state`→`energies`→`solve`（整条路）** | **9** | `cantilever_self_weight`、`large_deflection_cantilever`、`euler_buckling`、**`incline_slide_threshold`（第一条带接触的）**、**`friction_hysteresis_loop`（第一条改写历史的）**、**`three_sphere_pyramid`（第一条多体接触的）**、**`capstan_tension_ratio`（第一条多槽位同时滑移的）**、**`winding_line_endtoend`（第一条把张力、接触、摩擦、蹭边装在一条链路上的）**、**`roller_skew_lateral_drift`（第一条弯曲＋张力的梁-弦边值问题）** |
 | **`state`→`sections`→`section_beam`→`energies`→`solve`** | **1** | **`kirchhoff_section_vertex_springback`（第一条WDS运动学全局截面站点与收敛后历史提交）** |
+| **`state`→`rod`→`energies`→`solve`＋外层重输运** | **1** | **`anisotropic_rod_twist`（第一条有材料帧的整杆：双轴弯曲＋扭转，且`solve_equilibrium`之上还有一层retransport循环——**它是唯一一条求解入口被包了一层的**）** |
 | **`state`→`sections`→局部平衡** | **1** | **`rectangular_section_springback`（第一条截面非线性与逐点材料历史）** |
 | `state`→`energies`→`integrate` | **3** | `two_body_spring`、**`bouncing_ball_restitution`（第一条瞬态阻尼接触）**、**`ten_ball_funnel`（第一条10球耗散组合）** |
 | `state`→`integrate`（不碰能量装配与求解器） | 3 | `ballistic_free_flight`、`harmonic_oscillator`、`rigid_body_free_flight` |
