@@ -104,10 +104,18 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
     #: （只取`PauseInterval`，让暂停区间在两条时间线上是同一个形制）与标准库——
     #: **没有一条边越到别的域，也没有向上**。它没有长在`motion`里同样是方向问题：
     #: `motion`在基座，而跨段张力是力学。判据仍是0035那条。
+    #: `disturbance`归力学（2026-08-17，决策0071）：它import `laydown`与`transport`
+    #: （都在力学）与标准库——**没有一条边越到别的域，也没有向上**。
+    #: 它没有长进`transport`，理由是**边界**而不是大小：`transport`是跨段本身的物理
+    #: （长度账、带材弹性、放线盘力矩平衡），而本模块是**什么东西在扰动它**
+    #: （臂动经落位点几何、人手横向侵入）。把后者塞进前者会让`transport`去import
+    #: `laydown`，于是"跨段物理"这个词就同时包含了"线圈在哪"。判据仍是0035那条：
+    #: **import决定环，不是愿望决定环**。
     "mechanics": (
         "autodiff",
         "contact",
         "contact_pipeline",
+        "disturbance",
         "drives",
         "energies",
         "feed",
