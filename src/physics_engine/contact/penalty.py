@@ -208,34 +208,10 @@ class PenaltyNormalContact:
         )
 
 __all__ = [
-    "MAX_POINTS_PER_PAIR_SPHERE_CAPSULE",
-    "REGIME_SEPARATED",
-    "REGIME_SLIP",
-    "REGIME_STICK",
-    "SLOT_WIDTH",
-    "ContactDeclaration",
-    "ContactError",
-    "ContactLayout",
-    "ContactPoint",
-    "ContactSlot",
-    "ContactStep",
-    "FrictionOutcome",
-    "LinearDashpotParameters",
-    "LinearNormalDashpot",
-    "MultiContactStep",
-    "NORMAL_UNIT_TOLERANCE",
     "PenaltyAnnulusLimit",
     "PenaltyCylinderContact",
     "PenaltyNormalContact",
     "PenaltySphereContact",
-    "TangentialStickSpring",
-    "advance_contact_quasistatic",
-    "advance_contacts_quasistatic",
-    "build_contact_layout",
-    "coulomb_return_map",
-    "damping_ratio_from_restitution",
-    "linear_dashpot_parameters",
-    "restitution_from_damping_ratio",
 ]
 
 

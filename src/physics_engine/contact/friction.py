@@ -616,3 +616,8 @@ class TangentialStickSpring:
         )
 
 
+__all__ = [
+    "FrictionOutcome",
+    "TangentialStickSpring",
+    "coulomb_return_map",
+]
