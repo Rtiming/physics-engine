@@ -27,6 +27,7 @@ from physics_engine.contact.layout import (
     REGIME_SEPARATED,
     REGIME_SLIP,
     REGIME_STICK,
+    NormalSource,
 )
 from physics_engine.energies import POTENTIAL, EnergyContext, Matrix, Vector
 from physics_engine.state import State
@@ -228,6 +229,121 @@ class FrictionEllipse:
         """两个``μ``**逐位相等**。这一条为真时椭圆就是圆，走旧路径。"""
 
         return self.mu_along == self.mu_across
+
+
+@dataclass(frozen=True)
+class FrictionEllipseSpec:
+    """屈服面的**声明**：两个系数 + 纵向轴的来源。**法向不在这里**。
+
+    `FrictionEllipse`要求法向，而准静态步进器的法向是**每趟现算**的
+    （曲面接触上它随位形转，见`advance_contact_quasistatic`那段实测）。
+    把一个带着某趟法向的`FrictionEllipse`交给步进器，下一趟它就过期了：
+    试探力落在**新**切平面里，而椭圆还活在旧切平面里——
+    `anisotropic_return_map`会以"试探力带法向分量"当场报错。
+    症状看着像输入错，病根是**把一个每趟变的量当成了构造期常量**。
+
+    所以进步进器的是本类：它只带**材料属性**（两个μ与纵向轴），
+    法向由步进器每趟用同一个`NormalSource`给出——
+    **与粘着弹簧用的那一个是同一个值**，这一条是试探力落在椭圆平面里的前提。
+
+    ## ``along_direction``为什么也是`NormalSource`
+
+    带材沿槽走，纵向轴跟着位形转。允许它是可调用对象与法向同源；
+    给元组即固定轴（等价于常值可调用），与`NormalSource`的口径逐字相同。
+
+    ## 本类**不**校验两个μ、也不校验方向
+
+    校验全在`FrictionEllipse.__post_init__`里，而本类每趟造一个。
+    在这里再抄一遍等于把同一条判据写两处，**而两处迟早会分叉**；
+    更要紧的是`FrictionEllipse`那几条（纵向轴近乎平行法向即拒收）
+    **只有拿到法向才判得了**，构造期根本没有那个信息。
+    """
+
+    #: 沿``along_direction``（带长方向）的摩擦系数。
+    mu_along: float
+    #: 垂直于``along_direction``、仍在切平面内（带宽方向）的摩擦系数。
+    mu_across: float
+    #: 带长方向：固定元组，或「给定当前状态向量返回当前方向」的可调用对象。
+    along_direction: NormalSource
+
+    @property
+    def is_isotropic(self) -> bool:
+        """两个``μ``**逐位相等**——判的是IEEE-754位型不是``==``的语义吗？
+
+        这里``==``就够：两个都是有限正数（`FrictionEllipse`拒收零与非有限值），
+        而有限正数上``==``与位型等价。``-0.0 == 0.0``那条陷阱在这里进不来，
+        因为``μ = 0``本身就被拒收。**这句话写出来是因为
+        它在别处不成立**——见`tests/test_contact_stepper_ellipse.py`那条退化门，
+        那里判的是`float.hex()`。
+        """
+
+        return self.mu_along == self.mu_across
+
+    def at(
+        self, *, normal: tuple[float, float, float], vector: tuple[float, ...]
+    ) -> FrictionEllipse:
+        """按**这一趟**的法向与状态造出屈服面。"""
+
+        direction = (
+            self.along_direction(vector)
+            if callable(self.along_direction)
+            else self.along_direction
+        )
+        return FrictionEllipse(
+            mu_along=self.mu_along,
+            mu_across=self.mu_across,
+            along_direction=direction,
+            normal=normal,
+        )
+
+
+def yield_excess_n(
+    *,
+    trial_force_n: tuple[float, float, float],
+    normal_force_n: float,
+    ellipse: FrictionEllipse,
+) -> float:
+    """试探力超出屈服面多少（N）：**沿试探力方向量的那一截**。
+
+    各向同性时它按定义就是``|f_trial| − μN``；椭圆上把``μN``换成
+    **椭圆沿``f_trial``方向的半径**``ρ = |f_trial|/√Φ``，于是
+
+        excess = |f_trial| − ρ = |f_trial|·(1 − 1/√Φ)
+
+    这是步进器预测-修正那条收敛判据要的量，力的量纲、粘着时≤0，
+    与`ContactStep.yield_excess_n`的既有语义逐条对得上。
+
+    ## 各向同性那一支**是构造出来的**，不是算出来的
+
+    ``μ_∥ == μ_⊥``时本函数走的是与旧步进器**逐字相同的那一串运算**
+    （同一个求和次序、同一个乘法），故"退化逐位"不需要任何数值论证——
+    与`anisotropic_return_map`第四节同一条纪律。
+
+    通用支在圆上给的是同一个数吗？**量过**：它要先把``f_trial``投到两条面内轴上
+    再合成，多走两次点积，于是只在舍入层面差一点（实测相对差``≤2.3e-16``）。
+    那条由`test_the_general_excess_path_also_degenerates`守着——
+    **捷径保证逐位，通用支保证捷径没有掩盖错误**。
+    """
+
+    magnitude = math.sqrt(sum(value * value for value in trial_force_n))
+    if ellipse.is_isotropic:
+        return magnitude - ellipse.mu_along * normal_force_n
+    if normal_force_n == 0.0:
+        #: 分离：屈服面塌成一个点，任何非零试探力都在它外面，
+        #: 而"外面多远"就是试探力本身的模。与`REGIME_SEPARATED`口径一致。
+        return magnitude
+    axis_along, axis_across = ellipse.in_plane_axes()
+    along = sum(trial_force_n[axis] * axis_along[axis] for axis in range(3))
+    across = sum(trial_force_n[axis] * axis_across[axis] for axis in range(3))
+    semi_along = ellipse.mu_along * normal_force_n
+    semi_across = ellipse.mu_across * normal_force_n
+    quadratic = (along / semi_along) ** 2 + (across / semi_across) ** 2
+    if quadratic == 0.0:
+        #: 零试探力：沿"试探力方向"这个说法在这里没有内容，取**最短**半轴，
+        #: 即离屈服面最近的那个margin。取最长会报出一个比真实余量大的数，
+        #: 而这个量是收敛判据——**判据宁可保守，不可乐观**。
+        return -min(semi_along, semi_across)
+    return magnitude * (1.0 - 1.0 / math.sqrt(quadratic))
 
 
 def _positive_zero(value: float) -> float:
@@ -620,8 +736,10 @@ __all__ = [
     "IN_PLANE_DIRECTION_MIN_SINE",
     "TRIAL_OUT_OF_PLANE_TOLERANCE",
     "FrictionEllipse",
+    "FrictionEllipseSpec",
     "FrictionOutcome",
     "TangentialStickSpring",
     "anisotropic_return_map",
     "coulomb_return_map",
+    "yield_excess_n",
 ]

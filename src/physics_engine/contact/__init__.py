@@ -78,10 +78,12 @@ from physics_engine.contact.friction import (
     IN_PLANE_DIRECTION_MIN_SINE,
     TRIAL_OUT_OF_PLANE_TOLERANCE,
     FrictionEllipse,
+    FrictionEllipseSpec,
     FrictionOutcome,
     TangentialStickSpring,
     anisotropic_return_map,
     coulomb_return_map,
+    yield_excess_n,
 )
 from physics_engine.contact.layout import (
     MAX_POINTS_PER_PAIR_SPHERE_CAPSULE,
@@ -126,6 +128,7 @@ __all__ = [
     "ContactSlot",
     "ContactStep",
     "FrictionEllipse",
+    "FrictionEllipseSpec",
     "FrictionOutcome",
     "LinearDashpotParameters",
     "LinearNormalDashpot",
@@ -144,4 +147,5 @@ __all__ = [
     "damping_ratio_from_restitution",
     "linear_dashpot_parameters",
     "restitution_from_damping_ratio",
+    "yield_excess_n",
 ]

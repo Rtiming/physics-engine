@@ -16,11 +16,16 @@ from dataclasses import dataclass
 
 from physics_engine.contact.errors import ContactError
 from physics_engine.contact.friction import (
+    FrictionEllipse,
+    FrictionEllipseSpec,
     FrictionOutcome,
     TangentialStickSpring,
+    anisotropic_return_map,
     coulomb_return_map,
+    yield_excess_n,
 )
 from physics_engine.contact.layout import (
+    REGIME_SEPARATED,
     REGIME_STICK,
     ContactLayout,
     ContactSlot,
@@ -58,6 +63,83 @@ class ContactStep:
         return self.regime == REGIME_STICK
 
 
+def _yield_surface(
+    *,
+    friction_coefficient: float | None,
+    friction_ellipse: FrictionEllipseSpec | None,
+    where: str,
+) -> None:
+    """``friction_coefficient``与``friction_ellipse``**必须恰好给一个**。
+
+    两个都给会出现两份μ，而"哪一份说了算"只能靠读实现——
+    本仓在`PenaltyAnnulusLimit`上吃过同源的亏（朝向被编码进另一个量，
+    单元门永远抓不到）。两个都不给则连屈服面都没有，那不是默认，是漏参。
+
+    **不给`friction_coefficient`一个默认标量值**：默认值一旦有内容，
+    "忘了传"就变成"用了一个没人声明过的摩擦系数"，而它会一路静默算到底。
+    """
+
+    if (friction_coefficient is None) == (friction_ellipse is None):
+        raise ContactError(
+            f"{where}: friction_coefficient与friction_ellipse必须**恰好给一个**"
+            f"（现在给的是 coefficient={friction_coefficient!r}、"
+            f"ellipse={friction_ellipse!r}）——两个都给等于有两份μ而哪份说了算只能靠读实现；"
+            "两个都不给等于没有屈服面"
+        )
+
+
+def _return_map(
+    *,
+    trial: tuple[float, float, float],
+    normal_force_n: float,
+    friction_coefficient: float | None,
+    ellipse: FrictionEllipse | None,
+    tangential_stiffness_n_per_mm: float,
+) -> tuple[FrictionOutcome, float]:
+    """一次return-map + 它的屈服残差。**两条屈服面在这里合流，且只在这里。**
+
+    ``ellipse is None``那一支是**旧路径逐字未动**——包括``excess``那串运算的
+    求和次序（spec/12第3.3节：次序是形制）。这是"不给椭圆时逐字节不变"的构造性保证：
+    不是"算出来恰好相等"，是**同一串代码**。
+
+    椭圆那一支在``μ_∥ == μ_⊥``时由`anisotropic_return_map`与`yield_excess_n`
+    各自转交回圆的写法，故它也是逐位退化的（决策0068第4.1节同一条纪律）。
+    """
+
+    if ellipse is None and friction_coefficient is None:
+        #: 声明了椭圆、但这一趟没有屈服面对象。多槽位版本只给**装配时活动**的点
+        #: 造椭圆（理由见那里：给分离的点求法向等于凭空加一条报错路径），
+        #: 于是"装配时就分离、求解后仍分离"的点会走到这里。
+        #: ``N = 0``上两条屈服面给的是**同一个**答案——分离、零力、零修正，
+        #: 屈服残差等于试探力的模而那也是零——**所以这里不需要知道是哪一条**。
+        assert normal_force_n == 0.0, "没有屈服面却拿到了非零法向力"
+        zero = (0.0, 0.0, 0.0)
+        return FrictionOutcome(zero, REGIME_SEPARATED, zero), 0.0
+    if ellipse is None:
+        assert friction_coefficient is not None
+        outcome = coulomb_return_map(
+            trial_force_n=trial,
+            normal_force_n=normal_force_n,
+            friction_coefficient=friction_coefficient,
+            tangential_stiffness_n_per_mm=tangential_stiffness_n_per_mm,
+        )
+        excess = (
+            math.sqrt(sum(value * value for value in trial))
+            - friction_coefficient * normal_force_n
+        )
+        return outcome, excess
+    outcome = anisotropic_return_map(
+        trial_force_n=trial,
+        normal_force_n=normal_force_n,
+        ellipse=ellipse,
+        tangential_stiffness_n_per_mm=tangential_stiffness_n_per_mm,
+    )
+    excess = yield_excess_n(
+        trial_force_n=trial, normal_force_n=normal_force_n, ellipse=ellipse
+    )
+    return outcome, excess
+
+
 def advance_contact_quasistatic(
     *,
     registry_without_stick,
@@ -69,7 +151,8 @@ def advance_contact_quasistatic(
     normal: NormalSource,
     normal_force_of: Callable[[State], float],
     tangential_stiffness_n_per_mm: float,
-    friction_coefficient: float,
+    friction_coefficient: float | None = None,
+    friction_ellipse: FrictionEllipseSpec | None = None,
     fixed_indices: frozenset[int],
     residual_tol_n: float = 1.0e-12,
     max_iterations: int = 60,
@@ -116,6 +199,17 @@ def advance_contact_quasistatic(
     症状是"迭代不收敛"，病根是**步进器越权拥有了一个它不该拥有的东西**。
     法向接触可能是半空间、可能是球-球、将来可能是网格，
     **它属于调用方的注册表，而这里只需要一个数：当前法向力**。
+
+    ## 屈服面是**圆还是椭圆，由调用方声明**（plans/15第1.6条，2026-08-17补）
+
+    ``friction_coefficient``（圆）与``friction_ellipse``（椭圆，决策0068）
+    **恰好给一个**。给椭圆时本函数每趟用**这一趟的法向**造一个`FrictionEllipse`——
+    与粘着弹簧用的是同一个法向值，那是试探力落在椭圆所在切平面里的前提。
+
+    **默认没有变**：不给`friction_ellipse`时走的是与2026-08-17之前
+    逐字相同的那串代码（见`_return_map`）。0068第五节第2条裁的
+    "不切默认"在这里继续成立——**能走这条路**与**默认走这条路**是两件事，
+    而今天仍然没有消费方声明过两个系数。
     """
 
     from physics_engine.energies import EnergyRegistry
@@ -123,6 +217,11 @@ def advance_contact_quasistatic(
 
     if max_passes < 1:
         raise ContactError(f"max_passes must be at least 1: {max_passes!r}")
+    _yield_surface(
+        friction_coefficient=friction_coefficient,
+        friction_ellipse=friction_ellipse,
+        where="advance_contact_quasistatic",
+    )
 
     #: **`slot`与`node`的落位校验**（plans/09第七节第7条，2026-08-12补）。
     #:
@@ -183,6 +282,14 @@ def advance_contact_quasistatic(
     for _ in range(max_passes):
         passes += 1
         direction = normal_of(current)
+        #: 椭圆**每趟现造**，法向取``direction``——与下一行粘着弹簧用的是同一个值。
+        #: 取求解**之后**的法向会让试探力落在另一个切平面里，
+        #: `anisotropic_return_map`当场以"试探力带法向分量"报错（那条报错是对的）。
+        ellipse = (
+            None
+            if friction_ellipse is None
+            else friction_ellipse.at(normal=direction, vector=current)
+        )
         stick_term = TangentialStickSpring(
             springs=((node, anchor, direction, tangential_stiffness_n_per_mm),)
         )
@@ -208,20 +315,17 @@ def advance_contact_quasistatic(
         normal_force = normal_force_of(solved.state)
         engaged = normal_force > 0.0
         trial = stick_term.tangential_force_n(solved.state)[0] if engaged else (0.0,) * 3
-        outcome = coulomb_return_map(
-            trial_force_n=trial,
+        #: 屈服残差：试探力超出屈服面多少。粘着时它按定义≤0，
+        #: 故本判据只在滑移分支上有内容——粘着一趟就退出，与旧行为一致。
+        outcome, excess = _return_map(
+            trial=trial,
             normal_force_n=normal_force,
             friction_coefficient=friction_coefficient,
+            ellipse=ellipse,
             tangential_stiffness_n_per_mm=tangential_stiffness_n_per_mm,
         )
         anchor = tuple(
             anchor[axis] + outcome.anchor_correction_mm[axis] for axis in range(3)
-        )
-        #: 屈服残差：试探力超出锥面多少。粘着时它按定义≤0，
-        #: 故本判据只在滑移分支上有内容——粘着一趟就退出，与旧行为一致。
-        excess = (
-            math.sqrt(sum(value * value for value in trial))
-            - friction_coefficient * normal_force
         )
         if excess <= yield_tol_n:
             break
@@ -293,6 +397,12 @@ class ContactPoint:
     把它做成一个记录而不是六条平行元组，是因为**它们必须同进同出**——
     0050落地时`PenaltySphereContact`吃过的亏正是"节点号与槽位各说各的"，
     而那两个参数当时就是分开传的。
+
+    ## 屈服面**逐点**声明（plans/15第1.6条）
+
+    ``friction_coefficient``与``friction_ellipse``恰好给一个，**每个点各判各的**：
+    带材压在导轮上时几十个接触点共用同一套材料常数，但把它做成整步一个参数
+    就等于宣布"一步之内不许有两种屈服面"，而那句话本仓没有理由说。
     """
 
     slot: ContactSlot
@@ -300,7 +410,15 @@ class ContactPoint:
     normal: NormalSource
     normal_force_of: Callable[[State], float]
     tangential_stiffness_n_per_mm: float
-    friction_coefficient: float
+    friction_coefficient: float | None = None
+    friction_ellipse: FrictionEllipseSpec | None = None
+
+    def __post_init__(self) -> None:
+        _yield_surface(
+            friction_coefficient=self.friction_coefficient,
+            friction_ellipse=self.friction_ellipse,
+            where=f"ContactPoint(slot={self.slot.pair_id!r}, node={self.node!r})",
+        )
 
 
 @dataclass(frozen=True)
@@ -364,6 +482,12 @@ def advance_contacts_quasistatic(
     的docstring（法向随位形转时约1/2）；多点耦合下不保证同样的因子，
     所以``require_pass_convergence``在这里更该开——但默认仍是``False``，
     与单槽位版本同口径。
+
+    ## 屈服面逐点声明（plans/15第1.6条，2026-08-17补）
+
+    每个`ContactPoint`各带``friction_coefficient``（圆）或``friction_ellipse``
+    （椭圆，决策0068），恰好一个。**混着声明是允许的**：同一步里一部分点走圆、
+    另一部分走椭圆，因为屈服面是**材料对**的属性而不是这一步的属性。
     """
 
     from physics_engine.energies import EnergyRegistry
@@ -438,11 +562,28 @@ def advance_contacts_quasistatic(
 
     for _ in range(max_passes):
         passes += 1
+        #: 法向**只对活动点求值**——这一条不是省算力，是保行为：
+        #: `PenaltyCylinderContact`的法向在轴上没有定义并**失败关闭**，
+        #: 而一个分离的点完全可能落在那里。对全体求值等于给旧调用方
+        #: 凭空加一条新的报错路径。
+        directions: list[tuple[float, float, float] | None] = [None] * count
+        #: 椭圆与粘着弹簧共用**同一个**``directions[index]``——
+        #: 两处各算一次法向会在曲面上给出两个差着舍入的切平面，
+        #: 而试探力必须精确落在椭圆那一个里面。
+        ellipses: list[FrictionEllipse | None] = [None] * count
+        for index in range(count):
+            if not engaged[index]:
+                continue
+            direction = normal_of[index](current)
+            directions[index] = direction
+            spec = contacts[index].friction_ellipse
+            if spec is not None:
+                ellipses[index] = spec.at(normal=direction, vector=current)
         springs = tuple(
             (
                 contacts[index].node,
                 anchors[index],
-                normal_of[index](current),
+                directions[index],
                 contacts[index].tangential_stiffness_n_per_mm,
             )
             for index in range(count)
@@ -487,20 +628,26 @@ def advance_contacts_quasistatic(
             normal_forces[index] = normal_force
             engaged[index] = normal_force > 0.0
             trial = trials[index] if engaged[index] else (0.0, 0.0, 0.0)
-            outcome = coulomb_return_map(
-                trial_force_n=trial,
+            ellipse = ellipses[index]
+            if ellipse is None and point.friction_ellipse is not None and engaged[index]:
+                #: 装配时它还是分离的（故上面没给它造椭圆），求解后又贴上了。
+                #: 此刻``trials[index]``按构造恒为零矢量，屈服面只用来报一个margin，
+                #: 所以拿求解后的法向现造一个就够。
+                ellipse = point.friction_ellipse.at(
+                    normal=normal_of[index](current), vector=current
+                )
+            outcome, excess = _return_map(
+                trial=trial,
                 normal_force_n=normal_force,
                 friction_coefficient=point.friction_coefficient,
+                ellipse=ellipse,
                 tangential_stiffness_n_per_mm=point.tangential_stiffness_n_per_mm,
             )
             outcomes[index] = outcome
             anchors[index] = tuple(
                 anchors[index][axis] + outcome.anchor_correction_mm[axis] for axis in range(3)
             )
-            excesses[index] = (
-                math.sqrt(sum(value * value for value in trial))
-                - point.friction_coefficient * normal_force
-            )
+            excesses[index] = excess
         if max(excesses) <= yield_tol_n:
             break
     else:
