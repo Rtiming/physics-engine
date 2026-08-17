@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from physics_engine.contact.errors import ContactError
@@ -546,3 +546,10 @@ def advance_contacts_quasistatic(
     )
 
 
+__all__ = [
+    "ContactPoint",
+    "ContactStep",
+    "MultiContactStep",
+    "advance_contact_quasistatic",
+    "advance_contacts_quasistatic",
+]

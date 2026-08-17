@@ -10,3 +10,7 @@ from __future__ import annotations
 class ContactError(ValueError):
     """接触层的一切失败关闭。"""
 
+
+__all__ = [
+    "ContactError",
+]
