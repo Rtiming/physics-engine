@@ -1,0 +1,113 @@
+{
+  "arrays": {},
+  "case_id": "case/capstan_tension_ratio",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/capstan_tension_ratio",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/capstan_tension_ratio/generate_oracle.py",
+    "sha256": "5266b3a763629fc9f7ffe0a909cbfe64fd905418f566f43e689db847fcd763d7"
+  },
+  "load_tier": "local_batch",
+  "manifest_self_sha256": "14a36ef87a62704646fc684fa3609cf47c45c3f3251d2938048daf52263695ce",
+  "oracles": [
+    {
+      "expected": {
+        "half_angle_tangent": 0.09849140335716425,
+        "node_ratio": 1.0608941057950798
+      },
+      "id": "oracle:capstan/node_tension_ratio",
+      "inputs": {
+        "friction_coefficient": 0.3,
+        "kind": "discrete_capstan_node_ratio",
+        "segments": 8,
+        "wrap_angle_rad": 1.5707963267948966
+      },
+      "tolerances": {
+        "half_angle_tangent": {
+          "abs": 0.0,
+          "reason": "纯几何，双精度往返即可",
+          "rel": 1e-15
+        },
+        "node_ratio": {
+          "abs": 0.0,
+          "reason": "引擎侧是准静态载荷步连续化到全滑移，**载荷步误差是一阶**（步数翻倍误差减半，2026-08-17实测比2.10/2.06）。8段240载荷步在包角中点实测4.256e-3，取1.4倍余量。**收敛阶本身另有一条门判**，这一条只判落点——只判落点会被一个碰巧的常数骗过，只判阶会被系统偏移骗过",
+          "rel": 0.006
+        }
+      }
+    },
+    {
+      "expected": {
+        "half_angle_sine": 0.0980171403295606
+      },
+      "id": "oracle:capstan/normal_force_kink",
+      "inputs": {
+        "kind": "discrete_capstan_normal_force",
+        "segments": 8,
+        "wrap_angle_rad": 1.5707963267948966
+      },
+      "tolerances": {
+        "half_angle_sine": {
+          "abs": 0.0,
+          "reason": "纯几何常数",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "tangential_over_mu_normal": 1.0
+      },
+      "id": "oracle:capstan/cone_saturation",
+      "inputs": {
+        "friction_coefficient": 0.3,
+        "kind": "full_slip_cone_saturation"
+      },
+      "tolerances": {
+        "tangential_over_mu_normal": {
+          "abs": 1e-12,
+          "reason": "全滑移下每个接触**精确落在摩擦锥面上**，这是return-map理想塑性修正的定义性质而不是收敛结果。判绝对不判相对：真值恰为1，且它是本案例唯一**不随载荷步数变化**的判据",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "continuum_ratio": 1.6019776512823565,
+        "discrete_16": 1.6026394222253417,
+        "discrete_32": 1.602142932623626,
+        "discrete_64": 1.602018961543161
+      },
+      "id": "oracle:capstan/continuum_limit",
+      "inputs": {
+        "friction_coefficient": 0.3,
+        "kind": "euler_eytelwein",
+        "wrap_angle_rad": 1.5707963267948966
+      },
+      "tolerances": {
+        "continuum_ratio": {
+          "abs": 0.0,
+          "reason": "``exp``的双精度求值",
+          "rel": 1e-15
+        },
+        "discrete_16": {
+          "abs": 0.0,
+          "reason": "同上",
+          "rel": 1e-15
+        },
+        "discrete_32": {
+          "abs": 0.0,
+          "reason": "同上",
+          "rel": 1e-15
+        },
+        "discrete_64": {
+          "abs": 0.0,
+          "reason": "同上",
+          "rel": 1e-15
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

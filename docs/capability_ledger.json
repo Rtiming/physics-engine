@@ -466,12 +466,18 @@
         {
           "id": "S6.5",
           "label": "带材过导向轮的接触",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": true,
-          "evidence": [],
+          "evidence": [
+            "case:capstan_tension_ratio",
+            "test:tests/cases/test_capstan_tension_ratio.py::test_every_contact_sits_exactly_on_the_friction_cone",
+            "test:tests/cases/test_capstan_tension_ratio.py::test_the_node_tension_ratio_matches_the_exact_discrete_capstan_value",
+            "test:tests/test_contact_cylinder.py::test_the_hessian_is_exactly_zero_along_the_axis",
+            "test:tests/test_contact_multi_stepper.py::test_a_single_contact_matches_the_old_stepper_bit_for_bit"
+          ],
           "shared_gap": "接触",
-          "why": "两个导向轮是链路里最基本的接触对，几何已经有了。",
-          "missing": "`modelgen.generate_roller`产出真圆柱，但连续体绕过圆柱的接触为零——要S3.2的窄相与S5.5的连续体接触。"
+          "why": "两个导向轮是链路里最基本的接触对，几何已经有了。0062轨道甲已落`PenaltyCylinderContact`（有限长圆柱侧面罚法向，几何刚度只出现在周向、`H·a`恰为0）与`advance_contacts_quasistatic`（多槽位同时迭代，兑现0050第一节欠账）；`capstan_tension_ratio`用真机导轮尺寸（R=50mm、半宽8.5mm，2026-07-07现场确认）让8个接触在同一次载荷步连续化中同时滑移，全滑移下`|T|/(μN)`实测2.22e-16落在摩擦锥上，逐节点张力比对精确离散绞盘式一阶收敛（实测比2.10/2.06）。",
+          "missing": "**带材在这里是中心线上的点，没有宽度**——所以它碰不到法兰（那是S6.6），WDS的宽度方向五点采样引擎侧仍为零；轮是**固定**的，不自旋、无轴承阻力矩（要转动自由度，0051／0062第七节明确本轮不做）；接触对是**声明**的不是检测的，圆柱族窄相仍为零（S3.2）；摩擦是各向同性`μ_∥ = μ_⊥`，真实带-轮是椭圆锥；多轮路由（R4→R1）与活动小导轮未接。故只报partial。"
         },
         {
           "id": "S6.6",

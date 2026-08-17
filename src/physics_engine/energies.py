@@ -443,6 +443,22 @@ class AxialStretch:
         k = stiffness_n / rest_mm
         return 0.5 * k * elongation * elongation, direction, elongation, k
 
+    def axial_force_n(self, state: State) -> tuple[float, ...]:
+        """逐边的轴向力``(EA/l0)·(L − l0)``，拉为正、压为负。单位N。
+
+        与`contact.PenaltyNormalContact.normal_force_n`同一条理由做成公开面：
+        **它是案例判据要判的量**。绞盘判据判的正是这条张力沿包角的分布
+        （`cases/capstan_tension_ratio`），而判据不该去读私有闭包。
+
+        **它不是"轴力"的全部**：这里只有拉伸项的贡献，弯曲、接触与外载各有各的。
+        节点上的合力要从`EnergyRegistry`的梯度看，本方法只回答"这条边被拉了多少"。
+        """
+
+        return tuple(
+            self._edge_energy(state, edge)[2] * self._edge_energy(state, edge)[3]
+            for edge in self.edges
+        )
+
     def energy(self, state: State, context: EnergyContext) -> float:
         total = 0.0
         for edge in self.edges:

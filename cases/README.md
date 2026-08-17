@@ -42,15 +42,16 @@
 | [`friction_hysteresis_loop`](friction_hysteresis_loop/case.md) | **引擎第一次记住历史**：位移控制拖拽的弹塑性滑块。力饱和`|T|=μN`**零容差**（构造保证的等式）；整循环耗散对闭式`4μN(u_max−u_y)`三个幅值**实测偏差0**（分段线性+拐点落在步长边界，**不对齐时1e-5，机械是真的**）；**路径相关：同一位置两条路径力之比恰为1/2、判别相反、锚点各差0.5u_y**——这一条验的是形制不是公式，**锚点若可从位形导出则前一个接触案例照样全绿**；反向门：纯弹性往返不许挪锚点、不许产生耗散 | C | local_batch | 3条 | `tests/cases/test_friction_hysteresis_loop.py` |
 | [`three_sphere_pyramid`](three_sphere_pyramid/case.md) | **引擎第一个多体接触**（球-球两端都是自由度，Hessian第一次有跨节点耦合块）。临界摩擦`μc = 1/(3√3)`**纯几何、与质量重力刚度全无关**；Chrono形制两侧判据：`μ/μc=1.00001`撑住、`0.99999`塌（零容差）；静力分解`F=W/√3`、`N=3W/2`、`T=W/(2√3)`。**罚柔度让T/N带O(1/k)偏差**（穿透改变接触几何本身，与斜面案例的关键差别），故多一条**收敛阶门**：刚度涨10倍偏差降10.00/10.50倍，区间`[8,12]`不写死为10 | C | interactive | 3条 | `tests/cases/test_three_sphere_pyramid.py` |
 | [`peer_fcl_distance`](peer_fcl_distance/case.md) | 同行库对拍：球/胶囊解析距离对python-fcl 0.7.0.11（版本钉死，漂了就红），3类形状对×3构型带×300组=2700组；**判据正本是`criteria.json`不是本页**。抓到FCL两处大错（`enable_signed_distance`最坏相对误差45.6%、胶囊-胶囊接触深度最大偏2.11mm且**FCL自相矛盾**），本仓的数与Fraction精确值逐位相同 | A | local_batch | `criteria.json` | `tests/cases/test_peer_fcl_distance.py` |
+| [`capstan_tension_ratio`](capstan_tension_ratio/case.md) | **第一条多槽位同时滑移**：带材绕真机导轮（R=50mm、半宽8.5mm，现场实测尺寸）90°，8个接触同时走`advance_contacts_quasistatic`。两条**恒等式**（全滑移下`\|T\|/(μN)`实测**2.22e-16**落在锥面上；法向力＝两侧张力的法向合量，用**实际段方向**不用名义`sin(Δφ/2)`）＋两条**收敛结果**（逐节点比对精确离散式`(1+μtan(Δφ/2))/(1−μtan(Δφ/2))`，载荷步一阶收敛实测比2.10/2.06）。**不判端到端比**——两端是半节点，实测随载荷步非单调。永久`hypothesis_only` | B | local_batch | 4条 | `tests/cases/test_capstan_tension_ratio.py` |
 
 ## 一之二、每个案例穿过引擎的哪几层（决策0048第三节通则）
 
 **"验公式"与"验引擎"是两类，混在一个计数里计数就不再有意义。**
-本节是那条通则的执行面：26个案例按**穿过引擎哪几层**分类，**不按案例数报成绩**。
+本节是那条通则的执行面：27个案例按**穿过引擎哪几层**分类，**不按案例数报成绩**。
 
 | 穿过的层 | 条数 | 案例 |
 |---|---|---|
-| **`state`→`energies`→`solve`（整条路）** | **6** | `cantilever_self_weight`、`large_deflection_cantilever`、`euler_buckling`、**`incline_slide_threshold`（第一条带接触的）**、**`friction_hysteresis_loop`（第一条改写历史的）**、**`three_sphere_pyramid`（第一条多体接触的）** |
+| **`state`→`energies`→`solve`（整条路）** | **7** | `cantilever_self_weight`、`large_deflection_cantilever`、`euler_buckling`、**`incline_slide_threshold`（第一条带接触的）**、**`friction_hysteresis_loop`（第一条改写历史的）**、**`three_sphere_pyramid`（第一条多体接触的）**、**`capstan_tension_ratio`（第一条多槽位同时滑移的）** |
 | **`state`→`sections`→`section_beam`→`energies`→`solve`** | **1** | **`kirchhoff_section_vertex_springback`（第一条WDS运动学全局截面站点与收敛后历史提交）** |
 | **`state`→`sections`→局部平衡** | **1** | **`rectangular_section_springback`（第一条截面非线性与逐点材料历史）** |
 | `state`→`energies`→`integrate` | **3** | `two_body_spring`、**`bouncing_ball_restitution`（第一条瞬态阻尼接触）**、**`ten_ball_funnel`（第一条10球耗散组合）** |
@@ -64,8 +65,8 @@
 我们自己0029那条只对一半）。**但它们证明的是"这个公式我们抄对了"，
 不是"这个引擎算得对"。**
 
-真正锻炼引擎机械的是前四行那11条，其中**五条带接触**（静置阈值、历史迟滞、
-多体金字塔、单次弹跳、十球漏斗）。**新增案例时先问它落在哪一行**——
+真正锻炼引擎机械的是前四行那12条，其中**六条带接触**（静置阈值、历史迟滞、
+多体金字塔、单次弹跳、十球漏斗、绞盘张力比）。**新增案例时先问它落在哪一行**——
 若又是一条闭式计算器，它可以进仓，但**不许被算进"引擎能力"那本账**。
 
 ## 二、案例页六必填字段（缺一即红）

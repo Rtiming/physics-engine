@@ -220,8 +220,59 @@ def test_the_recorded_source_bytes_is_not_stale(baseline):
     )
 
 
+#: 陈旧度判据的三个结局。做成纯函数是因为**判据本身也要被验**
+#: （tests/governance是样板），而"跳过"这个分支用测试直接断言最省事。
+STALENESS_SKIP = "SKIP"
+STALENESS_PASS = "PASS"
+STALENESS_STALE = "STALE"
+
+
+def accept_timing_staleness(receipt: dict | None, recorded: float) -> tuple[str, str]:
+    """判"台账记的accept墙钟是不是过期了"，返回``(结论, 说明)``。
+
+    ## 为什么要看回执的``resource``（2026-08-17补，这是一次门本身的修正）
+
+    本文件的开头写着"**墙钟不进门**……这三条都不受宿主负载影响，
+    因此可以放心进功能路径——0014法则2禁止的是'负载改变功能结论'"。
+
+    **而这道门此前把墙钟放进了功能路径。** 2026-08-17实测：同一份代码、
+    同一套测试，机器空闲时回执``157.9s``（比值2.71，绿），
+    邻居项目开跑后``186.3s``（比值3.20，红）——**负载改变了功能结论**，
+    正是那条法则禁止的事，而且是本文件自己的开头声明禁止的事。
+
+    更难看的是：**运行器自己已经宣布过那个数没有意义**——
+    同一份回执里写着``performance = NOT_EVALUATED``、
+    ``performance_reason = resource_unqualified``、``resource = UNQUALIFIED``。
+    一道门拿另一道门明文作废的数去判红，判出来的红不带信息。
+
+    所以判据补一条前置：**回执必须是资源合格的**，否则跳过并说明。
+    这不是放松——记账义务一条没少，只是不再由一个作废的数来触发。
+    """
+
+    if receipt is None:
+        return STALENESS_SKIP, "还没跑过full档；本门判的是记账不是性能，没有回执就没有可比对象"
+    if receipt.get("elapsed_s") is None:
+        return STALENESS_STALE, "回执里没有elapsed_s——回执形制变了，本门要跟着改"
+    resource = receipt.get("resource")
+    if resource != "QUALIFIED":
+        load = receipt.get("resource_load_average_1m")
+        return STALENESS_SKIP, (
+            f"最近一次回执的resource是{resource!r}（1分钟负载{load}）——"
+            "运行器已把这次的墙钟判为不可评（performance=NOT_EVALUATED），"
+            "**拿一个作废的数判红不带信息**。等一次安静机器上的回执再判"
+        )
+    elapsed = receipt["elapsed_s"]
+    ratio = elapsed / recorded if recorded > 0 else float("inf")
+    if 1 / 3 <= ratio <= 3:
+        return STALENESS_PASS, f"比值{ratio:.2f}在[1/3, 3]内"
+    return STALENESS_STALE, (
+        f"台账记的accept_full是{recorded}s，最近一次**资源合格**的回执{elapsed}s，"
+        f"差{ratio:.1f}倍——**3倍容差远在墙钟噪声之上，这是记账过期不是性能波动**"
+    )
+
+
 def test_the_recorded_accept_timing_is_not_wildly_out_of_date(baseline):
-    """`accept_full.measured_median_s`必须与最近一次回执同量级。
+    """`accept_full.measured_median_s`必须与最近一次**资源合格**的回执同量级。
 
     **这不是墙钟门**——0018裁过墙钟不进门（共享runner CV=2.66%、2%阈值假阳率45%），
     那条仍然成立。本条判的是**记账义务**：容差取3倍，远在任何噪声之上。
@@ -229,22 +280,78 @@ def test_the_recorded_accept_timing_is_not_wildly_out_of_date(baseline):
     实测（2026-08-06对抗审核）：台账写0.5秒、实际21.5秒，**差43倍**，
     而README、plans/01、spec/13三处还在以现在时引"验收full 3.4s"。
     **三个数互不相同，没有一个有生产者。**
+
+    判据本体在`accept_timing_staleness`，那里也写着2026-08-17为什么补了
+    "回执必须资源合格"这条前置。
     """
 
     import json
 
+    import pytest
+
     receipt_path = ROOT / "work" / "acceptance" / "full-latest.json"
-    if not receipt_path.is_file():
-        import pytest
-
-        pytest.skip("还没跑过full档；本门判的是记账不是性能，没有回执就没有可比对象")
-    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-    elapsed = receipt.get("elapsed_s")
-    assert elapsed is not None, "回执里没有elapsed_s——回执形制变了，本门要跟着改"
-
-    recorded = baseline["wall_clock_budgets"]["accept_full"]["measured_median_s"]
-    ratio = elapsed / recorded if recorded > 0 else float("inf")
-    assert 1 / 3 <= ratio <= 3, (
-        f"台账记的accept_full是{recorded}s，最近一次回执{elapsed}s，差{ratio:.1f}倍——"
-        "**3倍容差远在墙钟噪声之上，这是记账过期不是性能波动**"
+    receipt = (
+        json.loads(receipt_path.read_text(encoding="utf-8"))
+        if receipt_path.is_file()
+        else None
     )
+    recorded = baseline["wall_clock_budgets"]["accept_full"]["measured_median_s"]
+    verdict, message = accept_timing_staleness(receipt, recorded)
+    if verdict == STALENESS_SKIP:
+        pytest.skip(message)
+    assert verdict == STALENESS_PASS, message
+
+
+# ---------------------------------------------------------------------------
+# 判据本身的必红：三个分支各一条（plans/09教训三）
+# ---------------------------------------------------------------------------
+
+
+def test_an_unqualified_receipt_cannot_declare_the_ledger_stale():
+    """**这一条就是2026-08-17那次误红。**
+
+    资源不合格的回执带着一个差3.2倍的墙钟，判据必须**跳过**而不是判红——
+    否则邻居项目一开跑，本仓的功能门就红，而代码一个字没动。
+    """
+
+    receipt = {
+        "elapsed_s": 186.348,
+        "resource": "UNQUALIFIED",
+        "resource_load_average_1m": 85.977,
+        "performance": "NOT_EVALUATED",
+        "performance_reason": "resource_unqualified",
+    }
+    verdict, message = accept_timing_staleness(receipt, 58.3)
+    assert verdict == STALENESS_SKIP
+    assert "UNQUALIFIED" in message
+
+
+def test_a_qualified_receipt_still_declares_the_ledger_stale():
+    """**记账义务一条没少**：同样的3.2倍，回执合格时必须判红。
+
+    没有这一条，上一条就等于把门关掉了。
+    """
+
+    receipt = {"elapsed_s": 186.348, "resource": "QUALIFIED"}
+    verdict, message = accept_timing_staleness(receipt, 58.3)
+    assert verdict == STALENESS_STALE
+    assert "3.2倍" in message
+
+
+def test_a_qualified_receipt_in_range_passes():
+    receipt = {"elapsed_s": 100.0, "resource": "QUALIFIED"}
+    verdict, _ = accept_timing_staleness(receipt, 58.3)
+    assert verdict == STALENESS_PASS
+
+
+def test_a_missing_receipt_skips_and_a_malformed_one_does_not():
+    """没有回执→跳过；**有回执但缺`elapsed_s`→判红**。
+
+    两者分开是因为它们说明的事不同：前者是还没跑过，
+    后者是**回执形制变了而这道门没跟上**——那必须是红。
+    """
+
+    assert accept_timing_staleness(None, 58.3)[0] == STALENESS_SKIP
+    verdict, message = accept_timing_staleness({"resource": "QUALIFIED"}, 58.3)
+    assert verdict == STALENESS_STALE
+    assert "回执形制变了" in message
