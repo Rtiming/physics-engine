@@ -1,0 +1,148 @@
+{
+  "arrays": {},
+  "case_id": "case/anisotropic_rod_twist",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/anisotropic_rod_twist",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/anisotropic_rod_twist/generate_oracle.py",
+    "sha256": "ee4b70c66485be0ffa5f431a535277f67522eca3dd2e07fd352c007fb2a4f6ff"
+  },
+  "load_tier": "local_batch",
+  "manifest_self_sha256": "b4e05c6e6d2c8212c30edb2c71a09fec23c5b0ca0617ec3cb07e06047fad09ea",
+  "oracles": [
+    {
+      "expected": {
+        "curvature_per_mm": 0.022935779816513763,
+        "hard_way_curvature": 0.0,
+        "torsion_per_mm": 0.006880733944954129
+      },
+      "id": "oracle:rod/helix_kinematics",
+      "inputs": {
+        "kind": "helix_curvature_torsion",
+        "material_m1": "analytic principal normal at the edge midpoint",
+        "pitch_mm": 12.0,
+        "radius_mm": 40.0
+      },
+      "tolerances": {
+        "curvature_per_mm": {
+          "abs": 0.0,
+          "reason": "离散弦近似是**二阶**：N=21/41/81/161实测相对偏差9.753e-4/2.437e-4/6.093e-5/1.523e-5，比值恒为4.00。本条判N=41那一档的落点，3e-4是实测2.437e-4的约1.2倍余量；**收敛阶另有一条门判**",
+          "rel": 0.0003
+        },
+        "hard_way_curvature": {
+          "abs": 1e-13,
+          "reason": "**判绝对不判相对**：期望值恰为零，相对容差没有意义。这一条是**结构零**不是收敛零——实测N=21/41/81/161上|κ2|=1.07/1.92/5.20/8.83e-15，**不随h下降**。1e-13留的是链长增长带来的舍入累积余量",
+          "rel": 0.0
+        },
+        "torsion_per_mm": {
+          "abs": 0.0,
+          "reason": "挠率由材料帧相对Bishop帧的扭率给出，同样二阶：1.531e-3/3.824e-4/9.557e-5/2.389e-5，比值4.00。5e-4是N=41实测3.824e-4的约1.3倍余量",
+          "rel": 0.0005
+        }
+      }
+    },
+    {
+      "expected": {
+        "deflection_ratio": 1000.0,
+        "easy_tip_mm": -0.026041666666666668,
+        "hard_tip_mm": -2.604166666666667e-05
+      },
+      "id": "oracle:rod/easy_hard_axis_swap",
+      "inputs": {
+        "ei_easy_nmm2": 80000.0,
+        "ei_hard_nmm2": 80000000.0,
+        "force_n": -0.05,
+        "kind": "tip_loaded_cantilever_with_frame_rotated_ninety_degrees",
+        "length_mm": 50.0
+      },
+      "tolerances": {
+        "deflection_ratio": {
+          "abs": 0.0,
+          "reason": "**比值比落点紧三个数量级**，因为离散误差在两个构型上完全相同、相除即消。实测999.99972、偏差2.79e-7，且它随载荷**平方**下降（F=0.05/0.005/0.0005 N → 2.79e-7/2.79e-9/2.65e-11）——那是几何非线性，不是这条门的噪声。1e-6是3.6倍余量",
+          "rel": 1e-06
+        },
+        "easy_tip_mm": {
+          "abs": 0.0,
+          "reason": "端载悬臂闭式；离散侧含**固支半格柔度**订正后二阶收敛（N=11/21/41/81实测2.350e-2/6.063e-3/1.539e-3/3.880e-4，比值3.876/3.939/3.968）。**本条判N=81那一档**，1e-3是实测3.880e-4的约2.6倍余量；N=41及更粗的档由收敛阶那条门判，不由本条判",
+          "rel": 0.001
+        },
+        "hard_tip_mm": {
+          "abs": 0.0,
+          "reason": "同上；hard轴挠度是easy的1/1000，判据同形",
+          "rel": 0.001
+        }
+      }
+    },
+    {
+      "expected": {
+        "effective_length_mm": 190.0,
+        "tip_twist_rad": 1.2337662337662338,
+        "uniform_twist_rate_per_mm": 0.006493506493506494
+      },
+      "id": "oracle:rod/end_torque_twist",
+      "inputs": {
+        "gj_nmm2": 77.0,
+        "kind": "cantilever_end_torque",
+        "moment_n_mm": 0.5,
+        "node_count": 21,
+        "rod_length_mm": 200.0
+      },
+      "tolerances": {
+        "effective_length_mm": {
+          "abs": 0.0,
+          "reason": "``Σ l̄_i = (边数−1)·h = 190 mm``，**杆长是200 mm**。那10 mm是形制不是误差，见案例页失效清单第2条",
+          "rel": 1e-15
+        },
+        "tip_twist_rad": {
+          "abs": 0.0,
+          "reason": "离散模型里这条方程是**线性**的，牛顿一步收敛，所以偏差应当在机器精度：实测4.885e-15。1e-13是约20倍余量，留给链长变化",
+          "rel": 1e-13
+        },
+        "uniform_twist_rate_per_mm": {
+          "abs": 0.0,
+          "reason": "等截面等分杆上扭率必须逐顶点相同（实测极差6.85e-17）；**这一条与上一条不是同一件事**——上一条判总量，本条判分布",
+          "rel": 1e-13
+        }
+      }
+    },
+    {
+      "expected": {
+        "holonomy_rad": 1.5707963267948966,
+        "series_spring_twist_energy_n_mm": 3.1664980786828356,
+        "twist_energy_without_retransport_n_mm": 0.0
+      },
+      "id": "oracle:rod/spherical_triangle_holonomy",
+      "inputs": {
+        "gj_nmm2": 77.0,
+        "kind": "gauss_bonnet_geodesic_triangle",
+        "segment_mm": 10.0,
+        "tangent_path": [
+          "+x",
+          "+y",
+          "+z",
+          "+x"
+        ]
+      },
+      "tolerances": {
+        "holonomy_rad": {
+          "abs": 0.0,
+          "reason": "球面三角形三个角都是直角，面积``4π/8 = π/2``；离散侧的平行输运是**精确转动的复合**，没有离散化误差——实测重输运后``γ₃−γ₀``与``−π/2``**逐位相同**",
+          "rel": 1e-15
+        },
+        "series_spring_twist_energy_n_mm": {
+          "abs": 0.0,
+          "reason": "两端夹持、中间自由的串联扭簧闭式``0.5·GJ·Θ²/Σl̄``；实测3.166498078682835 vs 闭式…356，相对偏差1.4e-16",
+          "rel": 1e-14
+        },
+        "twist_energy_without_retransport_n_mm": {
+          "abs": 0.0,
+          "reason": "**零容差、判绝对相等**：``m_ref``冻结时扭转项对位置没有依赖，单次求解拿到的扭转能量**恰是浮点零**。这一条是「抄了公式不抄外循环」的判据本身——它期望的就是那个错误答案，用来证明这道门真的在区分两条路",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

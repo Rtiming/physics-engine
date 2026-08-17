@@ -17,6 +17,14 @@
 曲率的一阶与二阶导数由零依赖二阶jet作解析链式法则，不在生产路径用有限差分。
 这与WDS当前二阶AD走的是同一条数学，但实现独立；WDS只读夹具和中心差分门分别验证
 运动学兼容与二阶导正确性。
+
+**jet已迁出本模块**（2026-08-17，决策0064第4.1节、0065）：`Jet1`/`Jet2`与六个
+`ad_*`包装现在住在`physics_engine.autodiff`，本模块与`physics_engine.rod`共用。
+搬运只挪位置不改数学——本模块的曲率值、梯度与Hessian逐字节不变
+（判据是`tests/test_section_beam.py`里那三串WDS对拍常数）。**一条行为差别**：
+jet内部失败（对非正数开方、除零、宽度不一致）现在抛`AutodiffError`而不是
+`KirchhoffSectionError`；两者都是`ValueError`子类，理由与影响面写在
+`autodiff.py`的模块docstring里。
 """
 
 from __future__ import annotations
@@ -25,6 +33,7 @@ import math
 from dataclasses import dataclass
 from typing import ClassVar, Literal
 
+from physics_engine.autodiff import Jet1, Jet2, ad_cos, ad_cross, ad_dot, ad_norm, ad_sin
 from physics_engine.canonical import WDS_PROFILE, canonical_sha256
 from physics_engine.energies import (
     POTENTIAL,
@@ -292,303 +301,6 @@ def build_kirchhoff_section_vertex_layout(
 
 
 @dataclass(frozen=True)
-class _Jet1:
-    """只携一阶导的轻量jet；残差装配不为未请求的121个二阶量付费。"""
-
-    value: float
-    gradient: tuple[float, ...]
-
-    @property
-    def size(self) -> int:
-        return len(self.gradient)
-
-    @classmethod
-    def constant(cls, value: float, size: int) -> _Jet1:
-        return cls(float(value), (0.0,) * size)
-
-    @classmethod
-    def variable(cls, value: float, index: int, size: int) -> _Jet1:
-        gradient = [0.0] * size
-        gradient[index] = 1.0
-        return cls(float(value), tuple(gradient))
-
-    def _coerce(self, other) -> _Jet1:
-        if isinstance(other, _Jet1):
-            if other.size != self.size:
-                raise KirchhoffSectionError("first-order jets have inconsistent widths")
-            return other
-        if isinstance(other, (int, float)) and not isinstance(other, bool):
-            return _Jet1.constant(float(other), self.size)
-        return NotImplemented
-
-    def __add__(self, other):
-        other = self._coerce(other)
-        if other is NotImplemented:
-            return NotImplemented
-        return _Jet1(
-            self.value + other.value,
-            tuple(a + b for a, b in zip(self.gradient, other.gradient, strict=True)),
-        )
-
-    __radd__ = __add__
-
-    def __neg__(self):
-        return _Jet1(-self.value, tuple(-value for value in self.gradient))
-
-    def __sub__(self, other):
-        other = self._coerce(other)
-        if other is NotImplemented:
-            return NotImplemented
-        return self + (-other)
-
-    def __rsub__(self, other):
-        other = self._coerce(other)
-        if other is NotImplemented:
-            return NotImplemented
-        return other + (-self)
-
-    def __mul__(self, other):
-        other = self._coerce(other)
-        if other is NotImplemented:
-            return NotImplemented
-        return _Jet1(
-            self.value * other.value,
-            tuple(
-                self.gradient[index] * other.value
-                + self.value * other.gradient[index]
-                for index in range(self.size)
-            ),
-        )
-
-    __rmul__ = __mul__
-
-    def reciprocal(self) -> _Jet1:
-        if self.value == 0.0:
-            raise KirchhoffSectionError("division by zero in Kirchhoff kinematics")
-        inverse = 1.0 / self.value
-        return _Jet1(
-            inverse,
-            tuple(-inverse * inverse * component for component in self.gradient),
-        )
-
-    def __truediv__(self, other):
-        other = self._coerce(other)
-        if other is NotImplemented:
-            return NotImplemented
-        inverse = other.reciprocal()
-        # 导数用乘倒数展开，但值通道保留Python直接除法的舍入；这样0/1/2阶
-        # 入口在屈服分支上逐位选择同一个标量曲率。
-        return _Jet1(
-            self.value / other.value,
-            tuple(
-                self.gradient[index] * inverse.value
-                + self.value * inverse.gradient[index]
-                for index in range(self.size)
-            ),
-        )
-
-    def __rtruediv__(self, other):
-        other = self._coerce(other)
-        if other is NotImplemented:
-            return NotImplemented
-        return other / self
-
-
-@dataclass(frozen=True)
-class _Jet2:
-    value: float
-    gradient: tuple[float, ...]
-    hessian: tuple[tuple[float, ...], ...]
-
-    @property
-    def size(self) -> int:
-        return len(self.gradient)
-
-    @classmethod
-    def constant(cls, value: float, size: int) -> _Jet2:
-        return cls(float(value), (0.0,) * size, tuple((0.0,) * size for _ in range(size)))
-
-    @classmethod
-    def variable(cls, value: float, index: int, size: int) -> _Jet2:
-        gradient = [0.0] * size
-        gradient[index] = 1.0
-        return cls(float(value), tuple(gradient), tuple((0.0,) * size for _ in range(size)))
-
-    def _coerce(self, other) -> _Jet2:
-        if isinstance(other, _Jet2):
-            if other.size != self.size:
-                raise KirchhoffSectionError("second-order jets have inconsistent widths")
-            return other
-        if isinstance(other, (int, float)) and not isinstance(other, bool):
-            return _Jet2.constant(float(other), self.size)
-        return NotImplemented
-
-    def __add__(self, other):
-        other = self._coerce(other)
-        if other is NotImplemented:
-            return NotImplemented
-        return _Jet2(
-            self.value + other.value,
-            tuple(a + b for a, b in zip(self.gradient, other.gradient, strict=True)),
-            tuple(
-                tuple(a + b for a, b in zip(left, right, strict=True))
-                for left, right in zip(self.hessian, other.hessian, strict=True)
-            ),
-        )
-
-    __radd__ = __add__
-
-    def __neg__(self):
-        return _Jet2(
-            -self.value,
-            tuple(-value for value in self.gradient),
-            tuple(tuple(-value for value in row) for row in self.hessian),
-        )
-
-    def __sub__(self, other):
-        other = self._coerce(other)
-        if other is NotImplemented:
-            return NotImplemented
-        return self + (-other)
-
-    def __rsub__(self, other):
-        other = self._coerce(other)
-        if other is NotImplemented:
-            return NotImplemented
-        return other + (-self)
-
-    def __mul__(self, other):
-        other = self._coerce(other)
-        if other is NotImplemented:
-            return NotImplemented
-        gradient = tuple(
-            self.gradient[index] * other.value + self.value * other.gradient[index]
-            for index in range(self.size)
-        )
-        hessian = tuple(
-            tuple(
-                self.hessian[row][column] * other.value
-                + self.gradient[row] * other.gradient[column]
-                + other.gradient[row] * self.gradient[column]
-                + self.value * other.hessian[row][column]
-                for column in range(self.size)
-            )
-            for row in range(self.size)
-        )
-        return _Jet2(self.value * other.value, gradient, hessian)
-
-    __rmul__ = __mul__
-
-    def reciprocal(self) -> _Jet2:
-        if self.value == 0.0:
-            raise KirchhoffSectionError("division by zero in Kirchhoff kinematics")
-        inverse = 1.0 / self.value
-        first = -inverse * inverse
-        second = 2.0 * inverse * inverse * inverse
-        return _jet_unary(self, inverse, first, second)
-
-    def __truediv__(self, other):
-        other = self._coerce(other)
-        if other is NotImplemented:
-            return NotImplemented
-        inverse = other.reciprocal()
-        gradient = tuple(
-            self.gradient[index] * inverse.value
-            + self.value * inverse.gradient[index]
-            for index in range(self.size)
-        )
-        hessian = tuple(
-            tuple(
-                self.hessian[row][column] * inverse.value
-                + self.gradient[row] * inverse.gradient[column]
-                + inverse.gradient[row] * self.gradient[column]
-                + self.value * inverse.hessian[row][column]
-                for column in range(self.size)
-            )
-            for row in range(self.size)
-        )
-        return _Jet2(self.value / other.value, gradient, hessian)
-
-    def __rtruediv__(self, other):
-        other = self._coerce(other)
-        if other is NotImplemented:
-            return NotImplemented
-        return other / self
-
-
-def _jet_unary(value: _Jet2, result: float, first: float, second: float) -> _Jet2:
-    return _Jet2(
-        result,
-        tuple(first * component for component in value.gradient),
-        tuple(
-            tuple(
-                second * value.gradient[row] * value.gradient[column]
-                + first * value.hessian[row][column]
-                for column in range(value.size)
-            )
-            for row in range(value.size)
-        ),
-    )
-
-
-def _ad_sqrt(value):
-    raw = value.value if isinstance(value, (_Jet1, _Jet2)) else value
-    if raw <= 0.0:
-        raise KirchhoffSectionError("Kirchhoff edge has zero length")
-    result = math.sqrt(raw)
-    if isinstance(value, _Jet2):
-        return _jet_unary(value, result, 0.5 / result, -0.25 / (raw * result))
-    if isinstance(value, _Jet1):
-        return _Jet1(
-            result,
-            tuple(0.5 / result * component for component in value.gradient),
-        )
-    return result
-
-
-def _ad_sin(value):
-    raw = value.value if isinstance(value, (_Jet1, _Jet2)) else value
-    result = math.sin(raw)
-    if isinstance(value, _Jet2):
-        return _jet_unary(value, result, math.cos(raw), -result)
-    if isinstance(value, _Jet1):
-        return _Jet1(
-            result,
-            tuple(math.cos(raw) * component for component in value.gradient),
-        )
-    return result
-
-
-def _ad_cos(value):
-    raw = value.value if isinstance(value, (_Jet1, _Jet2)) else value
-    result = math.cos(raw)
-    if isinstance(value, _Jet2):
-        return _jet_unary(value, result, -math.sin(raw), -result)
-    if isinstance(value, _Jet1):
-        return _Jet1(
-            result,
-            tuple(-math.sin(raw) * component for component in value.gradient),
-        )
-    return result
-
-
-def _ad_dot(left, right):
-    return sum(a * b for a, b in zip(left, right, strict=True))
-
-
-def _ad_cross(left, right):
-    return (
-        left[1] * right[2] - left[2] * right[1],
-        left[2] * right[0] - left[0] * right[2],
-        left[0] * right[1] - left[1] * right[0],
-    )
-
-
-def _ad_norm(vector):
-    return _ad_sqrt(_ad_dot(vector, vector))
-
-
-@dataclass(frozen=True)
 class KirchhoffVertexKinematics:
     curvature_per_mm: float
     gradient: tuple[float, ...]
@@ -652,33 +364,33 @@ class KirchhoffFiberSectionBending:
             local = state.vector[:11]
         elif order == 1:
             local = tuple(
-                _Jet1.variable(state.vector[index], index, 11) for index in range(11)
+                Jet1.variable(state.vector[index], index, 11) for index in range(11)
             )
         elif order == 2:
             local = tuple(
-                _Jet2.variable(state.vector[index], index, 11) for index in range(11)
+                Jet2.variable(state.vector[index], index, 11) for index in range(11)
             )
         else:
             raise KirchhoffSectionError(f"derivative order must be 0, 1 or 2: {order!r}")
         p0, p1, p2 = local[0:3], local[3:6], local[6:9]
         edge0 = tuple(p1[axis] - p0[axis] for axis in range(3))
         edge1 = tuple(p2[axis] - p1[axis] for axis in range(3))
-        length0 = _ad_norm(edge0)
-        length1 = _ad_norm(edge1)
-        denominator = length0 * length1 + _ad_dot(edge0, edge1)
+        length0 = ad_norm(edge0)
+        length1 = ad_norm(edge1)
+        denominator = length0 * length1 + ad_dot(edge0, edge1)
         denominator_value = (
-            denominator.value if isinstance(denominator, (_Jet1, _Jet2)) else denominator
+            denominator.value if isinstance(denominator, (Jet1, Jet2)) else denominator
         )
         if abs(denominator_value) < 1.0e-12:
             raise KirchhoffSectionError(
                 "adjacent Kirchhoff edges are near antiparallel; curvature is singular"
             )
         binormal = tuple(
-            2.0 * component / denominator for component in _ad_cross(edge0, edge1)
+            2.0 * component / denominator for component in ad_cross(edge0, edge1)
         )
         gamma_left, gamma_right = local[9], local[10]
-        cos_left, sin_left = _ad_cos(gamma_left), _ad_sin(gamma_left)
-        cos_right, sin_right = _ad_cos(gamma_right), _ad_sin(gamma_right)
+        cos_left, sin_left = ad_cos(gamma_left), ad_sin(gamma_left)
+        cos_right, sin_right = ad_cos(gamma_right), ad_sin(gamma_right)
         reference = self.vertex_layout.reference
         m2_left = tuple(
             -sin_left * reference.reference_d1[0][axis]
@@ -690,7 +402,7 @@ class KirchhoffFiberSectionBending:
             + cos_right * reference.reference_d2[1][axis]
             for axis in range(3)
         )
-        kappa1_discrete = 0.5 * _ad_dot(
+        kappa1_discrete = 0.5 * ad_dot(
             tuple(m2_left[axis] + m2_right[axis] for axis in range(3)),
             binormal,
         )
@@ -700,7 +412,7 @@ class KirchhoffFiberSectionBending:
 
     def kinematics(self, state: State) -> KirchhoffVertexKinematics:
         curvature = self._curvature(state, order=2)
-        assert isinstance(curvature, _Jet2)
+        assert isinstance(curvature, Jet2)
         return KirchhoffVertexKinematics(
             curvature.value,
             curvature.gradient,
@@ -731,7 +443,7 @@ class KirchhoffFiberSectionBending:
         order = 2 if need_hessian else (1 if need_gradient else 0)
         curvature = self._curvature(state, order=order)
         curvature_value = (
-            curvature.value if isinstance(curvature, (_Jet1, _Jet2)) else curvature
+            curvature.value if isinstance(curvature, (Jet1, Jet2)) else curvature
         )
         assert isinstance(curvature_value, float)
         response = self._section_response(curvature_value)
@@ -740,14 +452,14 @@ class KirchhoffFiberSectionBending:
         gradient = None
         hessian = None
         if need_gradient:
-            assert isinstance(curvature, (_Jet1, _Jet2))
+            assert isinstance(curvature, (Jet1, Jet2))
             result = [0.0] * len(state.vector)
             moment = response.bending_moment_n_mm
             for index in range(11):
                 result[index] = length * moment * curvature.gradient[index]
             gradient = tuple(result)
         if need_hessian:
-            assert isinstance(curvature, _Jet2)
+            assert isinstance(curvature, Jet2)
             result = [[0.0] * len(state.vector) for _ in state.vector]
             moment = response.bending_moment_n_mm
             tangent = response.bending_tangent_n_mm2
@@ -777,7 +489,7 @@ class KirchhoffFiberSectionBending:
         self, state: State, context: EnergyContext
     ) -> tuple[tuple[int, int, float], ...]:
         curvature = self._curvature(state, order=2)
-        assert isinstance(curvature, _Jet2)
+        assert isinstance(curvature, Jet2)
         response = self._section_response(curvature.value)
         length = self.vertex_layout.reference.dual_length_mm
         moment = response.bending_moment_n_mm

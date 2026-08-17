@@ -53,15 +53,18 @@
 
 | [`anisotropic_friction_ellipse`](anisotropic_friction_ellipse/case.md) | **各向异性摩擦椭圆的η-return，以及"径向缩"为什么是错的**：圆上"沿径向缩"、"欧氏最近点投影"、"最大耗散原理的外法向流动"三件事恰好重合，椭圆上互不相同而**只有第三件是物理**。四条独立闭式：支撑函数`h(ψ)`、椭圆半径`ρ(ψ)`、最高短缺`(a−b)²/(a²+b²)`、径向返回违反外法向的最大正弦`(a²−b²)/(a²+b²)`。`μ_∥:μ_⊥=5:1`下实测**混合角耗散最高短缺61.538%（在45°）**、径向返回的滑移方向最坏偏**67.38°**、**横向摩擦力被高估恰好5倍**；关联流动侧`\|sin\|≤4.9e-15`。**退化是构造出来的**：两系数逐位相等时原样转交`coulomb_return_map`（连报错一起），另有一条门强走通用路径防转交掩盖错误。混合角回线无闭式，改判**外功与塑性功两条独立记账相等**（O(h²)，细化比3.98/3.99/3.99/4.00）＋**稳态圈逐位闭合**，顺手补上`friction_hysteresis_loop`第六条"多圈稳态性没验" | B | local_batch | 6条 | `tests/cases/test_anisotropic_friction_ellipse.py` |
 
+| [`anisotropic_rod_twist`](anisotropic_rod_twist/case.md) | **第一条有材料帧的整杆，也是全仓第一条扭转金标**。四条闭式各自独立于内核：螺旋线`κ=R/(R²+p²)`、`τ=p/(R²+p²)`二阶收敛（比值恒4.00），**`κ2`是结构零**（1.07—8.83e-15，**不随h下降**，另有一条门专判它没在下降）；**易/难轴互换**——参考`d1`转90°挠度比实测999.99972 vs 1000（偏差2.79e-7，随载荷平方下降＝几何非线性），**同行点名了这个失效模式却没有门守着**；端扭矩`θ=M·L/GJ`偏差4.885e-15、牛顿一步收敛、扭率极差6.85e-17；**Gauss-Bonnet holonomy**——切向`x̂→ŷ→ẑ→x̂`围出三直角球面三角形，面积`4π/8=π/2`，重输运后`γ₃−γ₀`与`−π/2`**逐位相同**。**最后一条判据期望的是错误答案**（不重输运时扭转能量恒为`0.0`，零容差）——那是「抄了公式不抄retransport外层循环」的分辨力本身。顺带量到固支半格柔度的**第三例**（不订正只有一阶，`3h/2`订正后二阶3.876/3.939/3.968） | B | local_batch | 4条 | `tests/cases/test_anisotropic_rod_twist.py` |
+
 ## 一之二、每个案例穿过引擎的哪几层（决策0048第三节通则）
 
 **"验公式"与"验引擎"是两类，混在一个计数里计数就不再有意义。**
-本节是那条通则的执行面：32个案例按**穿过引擎哪几层**分类，**不按案例数报成绩**。
+本节是那条通则的执行面：33个案例按**穿过引擎哪几层**分类，**不按案例数报成绩**。
 
 | 穿过的层 | 条数 | 案例 |
 |---|---|---|
 | **`state`→`energies`→`solve`（整条路）** | **9** | `cantilever_self_weight`、`large_deflection_cantilever`、`euler_buckling`、**`incline_slide_threshold`（第一条带接触的）**、**`friction_hysteresis_loop`（第一条改写历史的）**、**`three_sphere_pyramid`（第一条多体接触的）**、**`capstan_tension_ratio`（第一条多槽位同时滑移的）**、**`winding_line_endtoend`（第一条把张力、接触、摩擦、蹭边装在一条链路上的）**、**`roller_skew_lateral_drift`（第一条弯曲＋张力的梁-弦边值问题）** |
 | **`state`→`sections`→`section_beam`→`energies`→`solve`** | **1** | **`kirchhoff_section_vertex_springback`（第一条WDS运动学全局截面站点与收敛后历史提交）** |
+| **`state`→`rod`→`energies`→`solve`＋外层重输运** | **1** | **`anisotropic_rod_twist`（第一条有材料帧的整杆：双轴弯曲＋扭转，且`solve_equilibrium`之上还有一层retransport循环——**它是唯一一条求解入口被包了一层的**）** |
 | **`state`→`sections`→局部平衡** | **1** | **`rectangular_section_springback`（第一条截面非线性与逐点材料历史）** |
 | `state`→`energies`→`integrate` | **3** | `two_body_spring`、**`bouncing_ball_restitution`（第一条瞬态阻尼接触）**、**`ten_ball_funnel`（第一条10球耗散组合）** |
 | `state`→`integrate`（不碰能量装配与求解器） | 3 | `ballistic_free_flight`、`harmonic_oscillator`、`rigid_body_free_flight` |

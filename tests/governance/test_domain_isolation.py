@@ -94,11 +94,18 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
     #: 它没有长在`actuators`里，正是因为那样会让基座反向依赖力学：
     #: 0035那次抓到的"方向反了"，判词是"我最初把它登记成基座接口，
     #: 是把愿望当成了事实"。判据仍是那条：**import决定环，不是愿望决定环**。
+    #: `autodiff`归力学（2026-08-17，决策0065）：它是`section_beam`私有jet的提升，
+    #: 包内import一条都没有（纯标准库），所以门①③对它无话可说；归力学而不是升基座，
+    #: 判据是0035那条**今天没有任何非力学代码需要它**——现在升格就是为想象中的
+    #: 第三个消费方预支通用性。触发条件：某个非力学域真的要求导时重开。
+    #: `rod`归力学（2026-08-17，决策0065）：它import `autodiff`/`energies`/`solve`/
+    #: `state`（全是力学）与`canonical`（基座）——没有一条边越到别的域。
     #: `transport`归力学（2026-08-17，决策0066）：它import基座`scene`圈的`motion`
     #: （只取`PauseInterval`，让暂停区间在两条时间线上是同一个形制）与标准库——
     #: **没有一条边越到别的域，也没有向上**。它没有长在`motion`里同样是方向问题：
     #: `motion`在基座，而跨段张力是力学。判据仍是0035那条。
     "mechanics": (
+        "autodiff",
         "contact",
         "contact_pipeline",
         "drives",
@@ -107,6 +114,7 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
         "integrate",
         "laydown",
         "rigidbody",
+        "rod",
         "section_beam",
         "sections",
         "sensors",
