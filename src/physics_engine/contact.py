@@ -546,16 +546,20 @@ __all__ = [
     "ContactDeclaration",
     "ContactError",
     "ContactLayout",
+    "ContactPoint",
     "ContactSlot",
     "ContactStep",
     "FrictionOutcome",
     "LinearDashpotParameters",
     "LinearNormalDashpot",
+    "MultiContactStep",
     "NORMAL_UNIT_TOLERANCE",
+    "PenaltyCylinderContact",
     "PenaltyNormalContact",
     "PenaltySphereContact",
     "TangentialStickSpring",
     "advance_contact_quasistatic",
+    "advance_contacts_quasistatic",
     "build_contact_layout",
     "coulomb_return_map",
     "damping_ratio_from_restitution",
@@ -1044,6 +1048,266 @@ def advance_contact_quasistatic(
 
 
 @dataclass(frozen=True)
+class ContactPoint:
+    """多槽位步进器的一个接触点：槽、节点、法向来源、法向力读数与两个材料常数。
+
+    把它做成一个记录而不是六条平行元组，是因为**它们必须同进同出**——
+    0050落地时`PenaltySphereContact`吃过的亏正是"节点号与槽位各说各的"，
+    而那两个参数当时就是分开传的。
+    """
+
+    slot: ContactSlot
+    node: int
+    normal: NormalSource
+    normal_force_of: Callable[[State], float]
+    tangential_stiffness_n_per_mm: float
+    friction_coefficient: float
+
+
+@dataclass(frozen=True)
+class MultiContactStep:
+    """多槽位一步的结果：新状态 + **逐点**的力、判别、滑移。
+
+    ``passes``与``max_yield_excess_n``是整步的，其余按``contacts``的声明次序逐点给出。
+    """
+
+    state: State
+    normal_force_n: tuple[float, ...]
+    tangential_force_n: tuple[tuple[float, float, float], ...]
+    regime: tuple[float, ...]
+    slip_increment_mm: tuple[float, ...]
+    passes: int
+    max_yield_excess_n: float
+
+
+def advance_contacts_quasistatic(
+    *,
+    registry_without_stick,
+    context: EnergyContext,
+    contact_layout: ContactLayout,
+    contacts: Sequence[ContactPoint],
+    vector: tuple[float, ...],
+    fixed_indices: frozenset[int],
+    residual_tol_n: float = 1.0e-12,
+    max_iterations: int = 60,
+    max_passes: int = 1,
+    yield_tol_n: float = 0.0,
+    require_pass_convergence: bool = False,
+) -> MultiContactStep:
+    """走一步准静态接触，**多个槽位同时迭代**——0050第一节登记的那笔欠账。
+
+    ## 为什么单槽位版本不够
+
+    `advance_contact_quasistatic`一次只处理一个槽。那对斜面、对拖拽都够，
+    对**带材贴在导轮上**不够：一条带材同时压在几十个节点上，
+    每个节点各有自己的锚点与粘/滑判别，**而它们通过带材的轴向刚度互相牵制**——
+    这正是绞盘公式里张力沿包角累积的机制。逐个槽轮流走会把这个耦合拆散，
+    算出来的张力比不再是``e^{μθ}``。
+
+    S3.6"多点同时接触"的`missing`里写的"步进器一次只处理一个槽位"，指的就是这里。
+
+    ## 与单槽位版本的关系：**新函数，老函数一个字不动**
+
+    三前提第三条要求既有产物逐字节不变，而合并两条路径必然要重排求和次序
+    （spec/12第3.3节：求和次序是形制）。所以这里是并列的第二条路径，
+    并由`test_contact_multi_stepper.py`守着"单个接触时两者逐字节相同"——
+    **那条门是这次泛化忠实与否的证据，不是装饰**。
+
+    ## 装配次序：所有粘着弹簧进**同一个**`TangentialStickSpring`
+
+    不是每个接触一个项。理由同上——项数随活动集变，
+    则`EnergyRegistry`的求和次序随活动集变，而活动集每趟都可能翻转。
+    一个项、按``contacts``的声明次序排列，**次序就只由声明决定**。
+
+    ## 收敛判据是**全体**，不是任一
+
+    只要还有一个接触的屈服残差超标就继续下一趟。实测的压缩因子见单槽位版本
+    的docstring（法向随位形转时约1/2）；多点耦合下不保证同样的因子，
+    所以``require_pass_convergence``在这里更该开——但默认仍是``False``，
+    与单槽位版本同口径。
+    """
+
+    from physics_engine.energies import EnergyRegistry
+    from physics_engine.solve import solve_equilibrium
+
+    if max_passes < 1:
+        raise ContactError(f"max_passes must be at least 1: {max_passes!r}")
+    if not contacts:
+        raise ContactError("advance_contacts_quasistatic needs at least one contact point")
+
+    node_dof_count = contact_layout.layout.node_dof_count
+    seen_slots: set[int] = set()
+    for index, point in enumerate(contacts):
+        #: 逐点复用单槽位版本那四条落位校验——它们挡的是**静默写坏状态**，
+        #: 而多槽位下写坏的概率恰好乘以点数。
+        if not isinstance(point.node, int) or isinstance(point.node, bool) or point.node < 0:
+            raise ContactError(f"contact node index must be a nonnegative int: {point.node!r}")
+        if 3 * point.node + 3 > node_dof_count:
+            raise ContactError(
+                f"contacts[{index}]的节点{point.node}落在节点块之外"
+                f"（节点块只有{node_dof_count}个自由度）——再往后是锚点槽"
+            )
+        if point.slot.base < node_dof_count:
+            raise ContactError(
+                f"contacts[{index}]的slot.base={point.slot.base}落在节点块之内"
+                f"（节点块{node_dof_count}个自由度）——写进节点块就是悄悄改位形"
+            )
+        if point.slot.regime_index >= len(vector):
+            raise ContactError(
+                f"contacts[{index}]的槽越过了状态向量末尾"
+                f"（需要下标{point.slot.regime_index}，向量只有{len(vector)}个）"
+            )
+        #: **两个接触点共用一个槽是静默灾难**：后写的覆盖先写的，
+        #: 于是一段历史凭空消失而两点都报"我记住了"。单槽位版本没有这条，
+        #: 因为它一次只有一个槽——**多槽位是这条检查第一次有意义的地方**。
+        if point.slot.anchor_base in seen_slots:
+            raise ContactError(
+                f"contacts[{index}]与前面某点共用锚点槽{point.slot.anchor_base}"
+                "——后写的会覆盖先写的，那段历史会凭空消失"
+            )
+        seen_slots.add(point.slot.anchor_base)
+        if not (
+            point.tangential_stiffness_n_per_mm > 0.0
+            and math.isfinite(point.tangential_stiffness_n_per_mm)
+        ):
+            raise ContactError(
+                f"contacts[{index}]的切向刚度必须为正："
+                f"{point.tangential_stiffness_n_per_mm!r}"
+            )
+
+    normal_of = tuple(
+        point.normal
+        if callable(point.normal)
+        else (lambda _v, fixed=point.normal: fixed)  # noqa: B008
+        for point in contacts
+    )
+    origins = tuple(
+        tuple(vector[point.slot.anchor_base : point.slot.anchor_base + 3])
+        for point in contacts
+    )
+    anchors = list(origins)
+    current = vector
+    count = len(contacts)
+
+    start_state = State(layout=contact_layout.layout, vector=current)
+    engaged = [point.normal_force_of(start_state) > 0.0 for point in contacts]
+    normal_forces = [0.0] * count
+    outcomes: list[FrictionOutcome | None] = [None] * count
+    excesses = [0.0] * count
+    passes = 0
+    solved = None
+
+    for _ in range(max_passes):
+        passes += 1
+        springs = tuple(
+            (
+                contacts[index].node,
+                anchors[index],
+                normal_of[index](current),
+                contacts[index].tangential_stiffness_n_per_mm,
+            )
+            for index in range(count)
+            if engaged[index]
+        )
+        terms = (
+            (*registry_without_stick.terms, TangentialStickSpring(springs=springs))
+            if springs
+            else registry_without_stick.terms
+        )
+        solved = solve_equilibrium(
+            EnergyRegistry(terms=terms),
+            context,
+            contact_layout.layout,
+            current,
+            fixed_indices=fixed_indices,
+            residual_tol_n=residual_tol_n,
+            max_iterations=max_iterations,
+        )
+        if not solved.converged:
+            raise ContactError(f"contact step did not converge: {solved.reason}")
+        current = solved.state.vector
+
+        #: 试探力要按**装配时**的活动集取——`tangential_force_n`按springs的次序返回，
+        #: 而springs只含当时engaged的那些。用求解后的新活动集去索引会错位。
+        trials: list[tuple[float, float, float]] = []
+        spring_cursor = 0
+        stick_forces = (
+            TangentialStickSpring(springs=springs).tangential_force_n(solved.state)
+            if springs
+            else ()
+        )
+        for index in range(count):
+            if engaged[index]:
+                trials.append(stick_forces[spring_cursor])
+                spring_cursor += 1
+            else:
+                trials.append((0.0, 0.0, 0.0))
+
+        for index, point in enumerate(contacts):
+            normal_force = point.normal_force_of(solved.state)
+            normal_forces[index] = normal_force
+            engaged[index] = normal_force > 0.0
+            trial = trials[index] if engaged[index] else (0.0, 0.0, 0.0)
+            outcome = coulomb_return_map(
+                trial_force_n=trial,
+                normal_force_n=normal_force,
+                friction_coefficient=point.friction_coefficient,
+                tangential_stiffness_n_per_mm=point.tangential_stiffness_n_per_mm,
+            )
+            outcomes[index] = outcome
+            anchors[index] = tuple(
+                anchors[index][axis] + outcome.anchor_correction_mm[axis] for axis in range(3)
+            )
+            excesses[index] = (
+                math.sqrt(sum(value * value for value in trial))
+                - point.friction_coefficient * normal_force
+            )
+        if max(excesses) <= yield_tol_n:
+            break
+    else:
+        if require_pass_convergence:
+            worst = max(range(count), key=lambda index: excesses[index])
+            raise ContactError(
+                f"预测-修正走满{max_passes}趟仍未收敛：最大屈服残差"
+                f"{excesses[worst]:.6g} N出现在contacts[{worst}]，容差{yield_tol_n:.6g} N"
+            )
+
+    assert solved is not None
+    updated = list(solved.state.vector)
+    slips: list[float] = []
+    for index, point in enumerate(contacts):
+        anchor = anchors[index]
+        #: 分离时清切向历史——与单槽位版本同一条理由（幽灵弹簧与凭空的摩擦功）。
+        if not engaged[index]:
+            anchor = (0.0, 0.0, 0.0)
+        for axis in range(3):
+            updated[point.slot.anchor_base + axis] = anchor[axis]
+        updated[point.slot.active_index] = 0.0 if normal_forces[index] == 0.0 else 1.0
+        outcome = outcomes[index]
+        assert outcome is not None
+        updated[point.slot.regime_index] = outcome.regime
+        slips.append(
+            0.0
+            if not engaged[index]
+            else math.sqrt(
+                sum((anchor[axis] - origins[index][axis]) ** 2 for axis in range(3))
+            )
+        )
+
+    return MultiContactStep(
+        state=State(layout=contact_layout.layout, vector=tuple(updated)),
+        normal_force_n=tuple(normal_forces),
+        tangential_force_n=tuple(
+            outcome.tangential_force_n for outcome in outcomes if outcome is not None
+        ),
+        regime=tuple(outcome.regime for outcome in outcomes if outcome is not None),
+        slip_increment_mm=tuple(slips),
+        passes=passes,
+        max_yield_excess_n=max(excesses),
+    )
+
+
+@dataclass(frozen=True)
 class PenaltySphereContact:
     """两球之间的罚函数法向接触：``U = Σ ½·k·g²``（仅``g < 0``），单位N·mm。
 
@@ -1199,6 +1463,282 @@ class PenaltySphereContact:
             gap, _, _ = self._pair_state(state.vector, pair)
             forces.append(pair[3] * -gap if gap < 0.0 else 0.0)
         return tuple(forces)
+
+
+@dataclass(frozen=True)
+class PenaltyCylinderContact:
+    """罚函数式法向接触（**有限长圆柱的侧面**）：``U = Σ ½·k·g²``（仅活动），单位N·mm。
+
+    决策0062轨道甲第一片，守能力位S6.5（带材过导向轮的接触）。
+
+    记``d = x − p``（``p``是轴上一点）、``s = d·a``（轴向坐标，``a``是轴单位方向）、
+    ``w = d − s·a``（径向矢量）、``ρ = |w|``。则
+
+        g = ρ − (R + r_节点)，   n = w/ρ
+
+    ``g > 0``分离、``g < 0``穿透；``n``是**由轴指向外**的径向单位矢量，恒有``n·a = 0``。
+
+    ## 活动条件是**两条**，不是一条
+
+    ``g < 0``**且**``|s| ≤ half_width``。第二条不是可选的修饰：
+    本项只表达**侧面**，节点轴向越出筒宽之后侧面在那里根本不存在，
+    继续按``g``出力等于凭空造一个无限长圆柱。
+
+    **这条边界是硬切，力在``|s| = half_width``处从``k|g|``跳到``0``。**
+    不平滑不是疏忽——把它做成圆角要引入端面圆环与环面两套几何，
+    而那是0062第七节明确不做的。代价如实登记：**节点贴着端沿时牛顿会抖**，
+    所以本项给出``axial_clearance_mm``，案例必须为它设门（`cases/`里的门判它，
+    不判位置）。**"力会跳"如果没有门看着，就等于一条没有门的分支**（plans/09教训三）。
+
+    ## Hessian：几何刚度**只出现在周向**
+
+    ``∂g/∂x = n``、``∂n/∂x = (P − n⊗n)/ρ``（``P = I − a⊗a``），而
+    ``P − n⊗n = t⊗t``，``t = a × n``是周向单位矢量。于是
+
+        H = k·(n⊗n) + (k·g/ρ)·(t⊗t)
+
+    第二块在接触时``g < 0``故**是负的**——**周向**softening，与`PenaltySphereContact`
+    的横向softening同源（那里是``(kg/L)(I − d⊗d)``，各向同性的两个横向）。
+
+    **这里只有一个横向而不是两个**，因为沿轴移动不改变``ρ``：
+    ``H``在``a``方向上恒为零。这不是近似，是圆柱的几何——
+    **它同时是一条可测判据**（沿轴的方向导数必须恰为0），本模块的门判它。
+
+    ## 精度的地板：``k·ulp(R)``——**半空间那条"力精确"在这里不成立**
+
+    `PenaltyNormalContact`记着"跨六个数量级刚度，法向力一个ulp都不动"。
+    **那条不能搬过来。** 半空间的间隙是``z − 0``，圆柱的间隙是``ρ − R``——
+    后者是两个``O(R)``量相减，**灾难性相消**。于是：
+
+    * 可达残差的地板是``0.5·k·ulp(R)``（2026-08-17实测两半径×五档刚度共10组，
+      比值全在``[0.15, 0.48]``，无一超过0.5）；
+    * 法向力的可达精度因此是``k·ulp(R)``的**绝对**量，不是相对量。
+
+    绕线机导轮``R = 50 mm``、``k = 1e4 N/mm``时地板是``3.6e-11 N``，
+    而链路上要分辨的张力是10—30 N——**够用，但求解器容差必须按它定**。
+
+    **它同时是一条设计约束**：想把残差压到``1e-13``就得把``k``压到``30 N/mm``以下，
+    那时穿透``N/k``约0.65 mm。**精度与穿透是同一个旋钮的两头**，
+    这一点在半空间上看不出来，因为那里没有``R``。
+
+    ## 轴上奇点：失败关闭
+
+    ``ρ = 0``（节点正好在轴上）时法向**没有定义**，本项当场抛。
+    它不是数值噪声：罚接触的穿透量级是``O(N/k)``，穿到轴上意味着模型早已离开
+    定义域，此时静默取一个方向比抛更坏——那个方向会被牛顿当成真的。
+
+    近轴处法向的相对精度约``eps·|d|/ρ``，这条写在这里而不是靠使用者猜。
+    """
+
+    name: str = "cylinder_contact"
+    kind: ClassVar[Literal["potential"]] = POTENTIAL
+    #: (节点索引, 轴上一点mm, 轴单位方向, 圆柱半径mm, 轴向半宽mm, 罚刚度N/mm, 节点半径mm)
+    #: **节点半径必填**，质点写``0.0``——理由同`PenaltyNormalContact`第二节。
+    cylinders: tuple[
+        tuple[
+            int,
+            tuple[float, float, float],
+            tuple[float, float, float],
+            float,
+            float,
+            float,
+            float,
+        ],
+        ...,
+    ] = ()
+
+    def __post_init__(self) -> None:
+        if not self.cylinders:
+            raise ContactError("cylinder_contact needs at least one cylinder")
+        for node, point, axis, radius, half_width, stiffness, node_radius in self.cylinders:
+            if isinstance(node, bool) or not isinstance(node, int) or node < 0:
+                raise ContactError(
+                    f"cylinder contact node index must be a nonnegative int: {node!r}"
+                )
+            if len(point) != 3 or not all(math.isfinite(value) for value in point):
+                raise ContactError(f"cylinder axis point must be a finite 3-vector: {point!r}")
+            if len(axis) != 3 or not all(math.isfinite(value) for value in axis):
+                raise ContactError(f"cylinder axis must be a finite 3-vector: {axis!r}")
+            norm = math.sqrt(sum(component * component for component in axis))
+            if abs(norm - 1.0) > NORMAL_UNIT_TOLERANCE:
+                raise ContactError(
+                    f"cylinder axis must be a unit vector (|a| = {norm!r}) — "
+                    "不归一化会同时改掉轴向投影与径向距离，而调用方以为自己给的是几何"
+                )
+            if not (radius > 0.0 and math.isfinite(radius)):
+                raise ContactError(f"cylinder radius must be positive: {radius!r}")
+            if not (half_width > 0.0 and math.isfinite(half_width)):
+                raise ContactError(f"cylinder half width must be positive: {half_width!r}")
+            if not (stiffness > 0.0 and math.isfinite(stiffness)):
+                raise ContactError(f"penalty stiffness must be positive: {stiffness!r}")
+            if node_radius < 0.0 or not math.isfinite(node_radius):
+                raise ContactError(
+                    f"contact radius must be finite and nonnegative: {node_radius!r}"
+                )
+
+    def node_index_bound(self) -> int:
+        return max(node for node, _, _, _, _, _, _ in self.cylinders) + 1
+
+    @staticmethod
+    def _frame(
+        vector: tuple[float, ...],
+        node: int,
+        point: tuple[float, float, float],
+        axis: tuple[float, float, float],
+        radius: float,
+        node_radius: float,
+    ) -> tuple[float, float, float, tuple[float, float, float]]:
+        """返回``(间隙g, 轴向坐标s, 径向距离ρ, 径向单位法向n)``。
+
+        ``ρ = 0``时抛——理由见类docstring末节。
+        """
+
+        base = 3 * node
+        delta = tuple(vector[base + component] - point[component] for component in range(3))
+        axial = sum(delta[component] * axis[component] for component in range(3))
+        radial = tuple(delta[component] - axial * axis[component] for component in range(3))
+        distance = math.sqrt(sum(component * component for component in radial))
+        if distance == 0.0:
+            raise ContactError(
+                f"node {node} sits on the cylinder axis (rho = 0) — 法向没有定义。"
+                "罚接触的穿透量级是O(N/k)，穿到轴上说明模型已离开定义域；"
+                "此处静默取一个方向会被牛顿当成真的"
+            )
+        normal = tuple(component / distance for component in radial)
+        return distance - (radius + node_radius), axial, distance, normal  # type: ignore[return-value]
+
+    @classmethod
+    def _is_active(cls, gap: float, axial: float, half_width: float) -> bool:
+        """活动条件是**两条**：穿透且轴向仍在筒宽内。"""
+
+        return gap < 0.0 and abs(axial) <= half_width
+
+    def energy(self, state: State, context: EnergyContext) -> float:
+        total = 0.0
+        for node, point, axis, radius, half_width, stiffness, node_radius in self.cylinders:
+            gap, axial, _, _ = self._frame(state.vector, node, point, axis, radius, node_radius)
+            if self._is_active(gap, axial, half_width):
+                total += 0.5 * stiffness * gap * gap
+        return total
+
+    def gradient(self, state: State, context: EnergyContext) -> Vector:
+        result = [0.0] * len(state.vector)
+        for node, point, axis, radius, half_width, stiffness, node_radius in self.cylinders:
+            gap, axial, _, normal = self._frame(
+                state.vector, node, point, axis, radius, node_radius
+            )
+            if self._is_active(gap, axial, half_width):
+                force = stiffness * gap
+                base = 3 * node
+                for component in range(3):
+                    result[base + component] += force * normal[component]
+        return tuple(result)
+
+    def hessian(self, state: State, context: EnergyContext) -> Matrix:
+        size = len(state.vector)
+        result = [[0.0] * size for _ in range(size)]
+        for row, column, value in self.hessian_entries(state, context):
+            result[row][column] += value
+        return tuple(tuple(row) for row in result)
+
+    def hessian_entries(
+        self, state: State, context: EnergyContext
+    ) -> tuple[tuple[int, int, float], ...]:
+        """``k·(n⊗n) + (k·g/ρ)·(t⊗t)``，``t = a × n``。**分离的接触一个非零项都不出**。"""
+
+        entries: list[tuple[int, int, float]] = []
+        for node, point, axis, radius, half_width, stiffness, node_radius in self.cylinders:
+            gap, axial, distance, normal = self._frame(
+                state.vector, node, point, axis, radius, node_radius
+            )
+            if not self._is_active(gap, axial, half_width):
+                continue
+            circumferential = (
+                axis[1] * normal[2] - axis[2] * normal[1],
+                axis[2] * normal[0] - axis[0] * normal[2],
+                axis[0] * normal[1] - axis[1] * normal[0],
+            )
+            geometric = stiffness * gap / distance
+            base = 3 * node
+            for a in range(3):
+                for b in range(3):
+                    value = stiffness * normal[a] * normal[b] + geometric * (
+                        circumferential[a] * circumferential[b]
+                    )
+                    entries.append((base + a, base + b, value))
+        return tuple(entries)
+
+    def quantities(self, state, context, *, need_gradient, need_hessian):
+        """融合路径。**能量值必须与单独调`energy`逐字节相同**（spec/12第3.1节）。"""
+
+        vector = state.vector
+        total = 0.0
+        gradient = [0.0] * len(vector) if need_gradient else None
+        for node, point, axis, radius, half_width, stiffness, node_radius in self.cylinders:
+            gap, axial, _, normal = self._frame(vector, node, point, axis, radius, node_radius)
+            if self._is_active(gap, axial, half_width):
+                total += 0.5 * stiffness * gap * gap
+                if gradient is not None:
+                    force = stiffness * gap
+                    base = 3 * node
+                    for component in range(3):
+                        gradient[base + component] += force * normal[component]
+        return (
+            total,
+            tuple(gradient) if gradient is not None else None,
+            self.hessian(state, context) if need_hessian else None,
+        )
+
+    def normal_force_n(self, state: State) -> tuple[float, ...]:
+        """每个圆柱上的法向力大小``N = k·|g|``（不活动时为0）。
+
+        与半空间项同理：**平衡时它精确等于理论法向力，与罚刚度无关**。
+        绞盘判据要用的正是它，所以它是公开面。
+        """
+
+        forces = []
+        for node, point, axis, radius, half_width, stiffness, node_radius in self.cylinders:
+            gap, axial, _, _ = self._frame(state.vector, node, point, axis, radius, node_radius)
+            forces.append(
+                stiffness * -gap if self._is_active(gap, axial, half_width) else 0.0
+            )
+        return tuple(forces)
+
+    def axial_clearance_mm(self, state: State) -> tuple[float, ...]:
+        """每个圆柱上``half_width − |s|``：**离端沿还有多远**，可正可负。
+
+        本项在``|s| > half_width``处力硬跳到零（类docstring第二节），
+        所以案例必须为这个量设门。**给出它，是为了让那条不连续有门看着而不是靠记性。**
+        """
+
+        clearances = []
+        for node, point, axis, radius, half_width, _, node_radius in self.cylinders:
+            _, axial, _, _ = self._frame(state.vector, node, point, axis, radius, node_radius)
+            clearances.append(half_width - abs(axial))
+        return tuple(clearances)
+
+    def radial_distance_mm(self, state: State) -> tuple[float, ...]:
+        """每个圆柱上的``ρ``。近轴处法向精度约``eps·|d|/ρ``，门判它才能发现失精。"""
+
+        distances = []
+        for node, point, axis, radius, _, _, node_radius in self.cylinders:
+            _, _, distance, _ = self._frame(state.vector, node, point, axis, radius, node_radius)
+            distances.append(distance)
+        return tuple(distances)
+
+    def outward_normal(self, state: State) -> tuple[tuple[float, float, float], ...]:
+        """每个圆柱上的径向单位外法向``n``。
+
+        摩擦项要的正是它：`TangentialStickSpring`吃`NormalSource`，
+        曲面接触必须给**随位形转**的那一种（0050第四节实测：法向不随位形转时
+        一趟预测-修正就够，转时不够）。本方法是绞盘接线的接口。
+        """
+
+        normals = []
+        for node, point, axis, radius, _, _, node_radius in self.cylinders:
+            _, _, _, normal = self._frame(state.vector, node, point, axis, radius, node_radius)
+            normals.append(normal)
+        return tuple(normals)
 
 
 @dataclass(frozen=True)
