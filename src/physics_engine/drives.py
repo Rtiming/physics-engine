@@ -92,6 +92,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, replace
+from typing import Protocol, runtime_checkable
 
 from physics_engine.actuators import ActuatorError
 
@@ -276,6 +277,48 @@ class SpoolTension:
         return torque
 
 
+@runtime_checkable
+class TensionController(Protocol):
+    """张力控制器的协议：**吃测量与设定，吐一个新控制器和一条命令**。
+
+        step(*, measurement_n, setpoint_n, dt_s) -> (新控制器, 命令)
+
+    ## 为什么协议吃的是两个量而不是一个误差
+
+    `PidController`原来的入口是``step(error, dt_s)``。**误差是一个有损的接口**：
+    从``e``推不回``(y, r)``，于是下面这些控制器**在只给误差的协议上写不出来**：
+
+    * **设定值加权**（2自由度PID，``u = Kp(b·r − y) + Ki∫e − Kd·dy/dt``）——
+      工业张力控制器的标准配置，比例项与微分项各自看的不是``e``；
+    * **对测量做非线性处理**（死区、限速、卷径/锥度调度）；
+    * **前馈**（``u = f(r) + 反馈``）——真机ATC600的锥度张力就是这一类。
+
+    本协议因此按plans/15第三节1.1那条原话取``(measurement, setpoint, dt)``。
+    **它同时是真机口径**：用户的环跑在Trio上，读`VR451`（张力测量）、
+    写`VR481`（手动量），ATC600置手动模式后只当功率级——
+    **那个环的内部结构本仓不知道，也不该知道**。协议的形状必须容得下它。
+
+    ## 不可变：一步一个新对象
+
+    与`ContactStep`同源：**控制器的积分项是历史**，历史在本仓一律显式传递。
+    协议因此返回``(新控制器, 命令)``而不是就地改。
+    实现方可以是任何东西——`dataclass`、闭包对象、外部库的包装——
+    只要它返回一个同样支持``step``的对象。
+
+    ## ``runtime_checkable``只判方法在不在
+
+    ``isinstance``对Protocol只查**属性存在**，不查签名（这是`typing`的既定行为，
+    不是本仓的偷懒）。所以`TensionLoop`那条构造期检查挡得住"传了个没有``step``
+    的东西"，挡不住"``step``的参数名写错了"——后者在第一次调用时当场炸，
+    而**那正是失败关闭该发生的地方**。
+    """
+
+    def step(
+        self, *, measurement_n: float, setpoint_n: float, dt_s: float
+    ) -> tuple[TensionController, float]:  # pragma: no cover - 协议声明
+        ...
+
+
 @dataclass(frozen=True)
 class PidController:
     """理想PID：``u = Kp·e + Ki·∫e + Kd·de/dt``，积分带限幅。
@@ -311,12 +354,33 @@ class PidController:
         if not (self.integral_limit > 0.0 and math.isfinite(self.integral_limit)):
             raise DriveError(f"integral_limit must be positive: {self.integral_limit!r}")
 
-    def step(self, error: float, dt_s: float) -> tuple[PidController, float]:
+    def step(
+        self, *, measurement_n: float, setpoint_n: float, dt_s: float
+    ) -> tuple[PidController, float]:
+        """`TensionController`协议入口：由测量与设定算出误差，再走`step_on_error`。
+
+        **本类是"误差型"控制器**——它把``(y, r)``立刻压成``e = r − y``，
+        于是设定值加权、对测量的非线性处理、前馈这三类在它身上都不存在。
+        那不是协议的限制，是**这一个实现**的选择：协议给的信息更多，
+        本实现用不上而已。换一个实现进来就能用上，这正是可插拔要换的东西。
+        """
+
+        if not math.isfinite(measurement_n):
+            raise DriveError(f"measurement must be finite: {measurement_n!r}")
+        if not math.isfinite(setpoint_n):
+            raise DriveError(f"setpoint must be finite: {setpoint_n!r}")
+        return self.step_on_error(setpoint_n - measurement_n, dt_s)
+
+    def step_on_error(self, error: float, dt_s: float) -> tuple[PidController, float]:
         """走一步：**前向Euler积分、后向差分微分**。
 
         微分项第一步为零（没有``previous_error``就没有差分），
         **不拿零当上一次误差**——那会在第一步造出一个与阶跃幅值成正比的冲击，
         而真机上那个冲击不存在。
+
+        **这个方法体是0062落地时``step``的原文，一个字没动**（2026-08-17，
+        决策0070把``step``这个名字让给了协议）：本类的数值行为逐位不变，
+        变的只是外面那层入口。
         """
 
         if not math.isfinite(error):
@@ -498,6 +562,9 @@ class TensionSample:
     measured_n: float
     torque_nmm: float
     current_a: float
+    #: ``设定值 − 读数``。**这是回路自己的记账，不是控制器看到的量**——
+    #: 协议给控制器的是测量与设定两个量（决策0070），一个做设定值加权的
+    #: 控制器不会用到这个差。
     error_n: float
 
 
@@ -545,7 +612,9 @@ class TensionLoop:
 
     clutch: MagneticParticleClutch
     spool: SpoolTension
-    controller: PidController
+    #: **协议不是具体类**（决策0070）：任何满足`TensionController`的东西都能进来，
+    #: 包括用户自己写的、本仓不知道内部结构的那一个。
+    controller: TensionController
     setpoint_n: float
     dt_s: float
     delay_line: object | None
@@ -558,6 +627,12 @@ class TensionLoop:
     step_index: int = 0
 
     def __post_init__(self) -> None:
+        if not isinstance(self.controller, TensionController):
+            raise DriveError(
+                f"controller must satisfy TensionController (a callable ``step``): "
+                f"{self.controller!r} —— 协议只查方法在不在，签名对不对要到第一次"
+                "调用才知道，那正是失败关闭该发生的地方"
+            )
         if not (self.dt_s > 0.0 and math.isfinite(self.dt_s)):
             raise DriveError(f"dt_s must be positive and finite: {self.dt_s!r}")
         if not (self.setpoint_n > MIN_TENSION_N and math.isfinite(self.setpoint_n)):
@@ -587,8 +662,13 @@ class TensionLoop:
         true_tension = self.tension_n
         at_sensor = true_tension * self.measurement_transfer
         measured = at_sensor if self.sensor is None else self.sensor.read_n(at_sensor)
+        #: **协议吃的是测量与设定两个量，不是误差**（决策0070）。
+        #: 下面这个``error``只进观测样本，是**本回路自己的记账**——
+        #: 一个做设定值加权的控制器根本不会用到这个数。
         error = self.setpoint_n - measured
-        controller, current = self.controller.step(error, self.dt_s)
+        controller, current = self.controller.step(
+            measurement_n=measured, setpoint_n=self.setpoint_n, dt_s=self.dt_s
+        )
 
         delay_line = self.delay_line
         if delay_line is None:
@@ -654,6 +734,7 @@ __all__ = [
     "MagneticParticleClutch",
     "PidController",
     "SpoolTension",
+    "TensionController",
     "TensionLoop",
     "TensionSample",
     "TensionSensor",

@@ -386,7 +386,7 @@ def test_the_integral_is_clamped_and_the_controller_is_immutable():
     )
     current = controller
     for _ in range(100):
-        current, _ = current.step(1.0, 0.1)
+        current, _ = current.step_on_error(1.0, 0.1)
     assert current.integral == 2.0, "积分没有被限幅——执行器饱和时会一直积"
     assert controller.integral == 0.0, "原控制器被就地改了——历史必须显式传递"
 
@@ -394,7 +394,7 @@ def test_the_integral_is_clamped_and_the_controller_is_immutable():
         proportional=0.0, integral_gain=1.0, derivative=0.0, integral_limit=2.0
     )
     for _ in range(100):
-        negative, _ = negative.step(-1.0, 0.1)
+        negative, _ = negative.step_on_error(-1.0, 0.1)
     assert negative.integral == -2.0, "限幅必须是双边的"
 
 
@@ -408,11 +408,11 @@ def test_the_derivative_is_zero_on_the_very_first_step():
     controller = PidController(
         proportional=0.0, integral_gain=0.0, derivative=1.0, integral_limit=1.0
     )
-    _, first = controller.step(5.0, 0.1)
+    _, first = controller.step_on_error(5.0, 0.1)
     assert first == 0.0
 
-    stepped, _ = controller.step(5.0, 0.1)
-    _, second = stepped.step(7.0, 0.1)
+    stepped, _ = controller.step_on_error(5.0, 0.1)
+    _, second = stepped.step_on_error(7.0, 0.1)
     assert second == pytest.approx((7.0 - 5.0) / 0.1)
 
 
@@ -462,6 +462,118 @@ def test_a_nonpositive_setpoint_fails_closed():
 def test_a_missing_integral_limit_fails_closed():
     with pytest.raises(TypeError):
         PidController(proportional=1.0, integral_gain=1.0, derivative=0.0)  # type: ignore[call-arg]
+
+
+# ---------------------------------------------------------------------------
+# 控制器协议（决策0070，plans/15第三节1.1）
+# ---------------------------------------------------------------------------
+
+
+def test_the_protocol_entry_and_the_error_entry_agree_bit_for_bit():
+    """``step(测量, 设定, dt)``与``step_on_error(设定−测量, dt)``**逐位相同**。
+
+    `PidController`是**误差型**控制器：它把``(y, r)``立刻压成``e = r − y``。
+    这一条判的就是"压"这一步没有引入任何别的东西——
+    0062落地时的那个方法体一个字没动，变的只是外面那层入口。
+
+    **逐位判不判近似**：两条路算的是同一串浮点运算，
+    差一个ulp就说明有人在入口上多做了一次减法或换了次序。
+    """
+
+    controller = PidController(
+        proportional=0.7, integral_gain=3.0, derivative=0.05, integral_limit=10.0
+    )
+    protocol_state, protocol_command = controller.step(
+        measurement_n=27.5, setpoint_n=SETPOINT_N, dt_s=1.0e-3
+    )
+    error_state, error_command = controller.step_on_error(SETPOINT_N - 27.5, 1.0e-3)
+    assert protocol_command == error_command
+    assert protocol_state == error_state
+
+
+def test_a_controller_without_a_step_method_fails_closed():
+    """**必须红**：不满足协议的东西不许进`TensionLoop`。
+
+    这道门挡的是"传了个没有``step``的东西"。它挡不住"``step``的参数名写错了"——
+    ``isinstance``对Protocol只查属性存在、不查签名（`typing`的既定行为）。
+    **那一半由下一条门明写**：签名不对时第一次调用当场炸，
+    而那正是失败关闭该发生的地方。
+    """
+
+    class NotAController:
+        """连``step``都没有。"""
+
+    with pytest.raises(DriveError, match="TensionController"):
+        TensionLoop(
+            clutch=CLUTCH, spool=SPOOL, controller=NotAController(),
+            setpoint_n=SETPOINT_N, dt_s=1.0e-3, delay_line=None,
+            sensor=None, measurement_transfer=1.0,
+        )
+
+
+def test_a_controller_with_the_wrong_signature_passes_construction_and_dies_on_use():
+    """协议检查的**边界写在这里**，不藏着。
+
+    一个有``step``但签名是位置参数的控制器**构造得过去**（``isinstance``只查
+    属性存在），到第一次``step``当场``TypeError``。
+    **把这条边界写成一条门，比在docstring里说一句更难被忘掉**——
+    本仓已经因为"门认得'被提到'、认不得'被登记'"吃过亏（0049第六节）。
+    """
+
+    class PositionalOnly:
+        def step(self, error, dt_s):  # 签名不对：协议要的是关键字三件套
+            return self, 0.0
+
+    loop = TensionLoop(
+        clutch=CLUTCH, spool=SPOOL, controller=PositionalOnly(),
+        setpoint_n=SETPOINT_N, dt_s=1.0e-3, delay_line=None,
+        sensor=None, measurement_transfer=1.0,
+    )
+    with pytest.raises(TypeError):
+        loop.step()
+
+
+def test_a_foreign_controller_that_never_heard_of_this_repo_runs_the_loop():
+    """**可插拔的正面**：一个不是`PidController`、也不import本仓任何东西的控制器。
+
+    它是真机口径的最小模型——用户的环跑在Trio上，读`VR451`、写`VR481`，
+    **内部结构本仓不知道**。这里用一个带设定值加权的比例控制器
+    （``u = Kp·(b·r − y)``，``b = 0.5``）当替身：
+    **它用得上协议给的两个量，而误差型接口根本写不出它**
+    （给定``e``推不回``(y, r)``）。
+
+    判它真的在控制：稳态张力必须落在设定值与"完全不控"之间，
+    且比零增益那次更靠近设定值。
+    """
+
+    class SetpointWeightedProportional:
+        """``u = Kp·(b·r − y)``。**不是**误差型——这就是协议要两个量的理由。"""
+
+        def __init__(self, gain: float, weight: float) -> None:
+            self.gain = gain
+            self.weight = weight
+
+        def step(self, *, measurement_n, setpoint_n, dt_s):
+            return self, self.gain * (self.weight * setpoint_n - measurement_n)
+
+    loop = TensionLoop(
+        clutch=CLUTCH, spool=SPOOL,
+        controller=SetpointWeightedProportional(gain=0.02, weight=0.5),
+        setpoint_n=SETPOINT_N, dt_s=1.0e-3, delay_line=None,
+        sensor=None, measurement_transfer=1.0,
+    )
+    _, samples = loop.run(2000)
+    #: 设定值加权``b = 0.5``下，比例环的不动点是``u = Kp(0.5·r − T)``、
+    #: ``T = k_M·u/R``，解出``T = 0.5·r/(1 + R/(Kp·k_M))``——**判它落在闭式上**。
+    settled = samples[-1].tension_n
+    closed_form = 0.5 * SETPOINT_N / (
+        1.0 + BARREL_RADIUS_MM / (0.02 * TORQUE_PER_AMPERE_NMM)
+    )
+    assert settled == pytest.approx(closed_form, rel=1.0e-6), (
+        f"外来控制器跑出{settled!r}，闭式说{closed_form!r} —— "
+        "协议把设定值传进去了吗？"
+    )
+    assert 0.0 < settled < SETPOINT_N
 
 
 def test_negative_turns_fail_closed():
