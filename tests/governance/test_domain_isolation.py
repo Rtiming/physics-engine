@@ -82,9 +82,15 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
     #: 本构与N/M截面合力也都是力学语义；不是域中立的通用求积器。
     #: `section_beam`归力学（2026-08-13，决策0060）：它把`sections`的本构响应经
     #: WDS式杆运动学装进`energies`/`solve`，全部依赖都留在同一力学域。
+    #: `drives`归力学（2026-08-17，决策0062）：它只import基座的`actuators`
+    #: （取时延线与命令校验）与标准库——**没有一条边越到别的域，也没有向上**。
+    #: 它没有长在`actuators`里，正是因为那样会让基座反向依赖力学：
+    #: 0035那次抓到的"方向反了"，判词是"我最初把它登记成基座接口，
+    #: 是把愿望当成了事实"。判据仍是那条：**import决定环，不是愿望决定环**。
     "mechanics": (
         "contact",
         "contact_pipeline",
+        "drives",
         "energies",
         "integrate",
         "rigidbody",

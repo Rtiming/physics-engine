@@ -46,7 +46,10 @@
   节点/边扭角运动学→全局残差/Hessian→收敛后历史提交（力学域，决策0060；
   0061有WDS默认关闭的线弹性单站候选，**不是整杆或正式迁移完成**）
 - `physics_engine.motion` —— 位姿时间线（spec/10 `MotionSource`）
-- `physics_engine.actuators` —— 驱动器声明层（spec/10 `Actuator`；**`apply`的物理未实现**）
+- `physics_engine.actuators` —— 驱动器声明层（spec/10 `Actuator`；**`apply`的物理未实现**——
+  物理在`drives`，理由是`actuators`在基座、基座不依赖物理域，见决策0062）
+- `physics_engine.drives` —— 张力驱动链：磁粉离合器电流→扭矩、卷径换算、理想PID
+  与闭环推进（力学域，决策0062；**不复现ATC600**，真机回路是拿不到参数的黑箱）
 - `physics_engine.sensors` —— 传感器声明层（spec/10 `Sensor`）
 - `physics_engine.modelgen` —— 参数化模型生成器（spec/11）
 - `physics_engine.cli` —— `pe-scene`命令行的实现（数据层入口；

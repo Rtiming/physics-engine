@@ -448,11 +448,16 @@
         {
           "id": "S6.3",
           "label": "执行器的物理（张力轮的控制量变成力）",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": true,
-          "evidence": [],
-          "why": "张力轮是这条链路唯一的控制环节，`Actuator`接口就是从它蒸馏来的。",
-          "missing": "0038只落了**声明层**（时延线、下发与生效时刻），`apply`的物理未实现。0038登记：落地那天它会import `state`，域登记要同批改。"
+          "evidence": [
+            "test:tests/test_drives.py::test_the_integral_only_loop_hits_the_second_order_closed_form",
+            "test:tests/test_drives.py::test_delay_monotonically_inflates_the_overshoot",
+            "test:tests/test_drives.py::test_the_radius_growth_drops_the_tension_at_constant_torque",
+            "test:tests/test_drives.py::test_the_zero_order_hold_lag_is_exact_not_an_euler_step"
+          ],
+          "why": "张力轮是这条链路唯一的控制环节，`Actuator`接口就是从它蒸馏来的。0062轨道乙已落`drives`：磁粉离合器电流→扭矩（线性段＋截断饱和＋零阶保持的精确一阶磁滞）、卷径换算`T = M/R(n)`（半径随匝数生长，同扭矩下500匝张力掉45%）、理想PID（积分双边限幅、首步微分为零）、以及经`actuators.ActuationDelayLine`把下发时延接进闭环。判据取纯积分闭环——它精确是二阶系统，三档阻尼比下超调、峰值时刻与零静差全中，整环收敛阶实测二阶（比值4.025/3.845/4.527）。**时延从规范里的一句话变成一个数**：20ms把超调从0.163抬到0.382（×2.35）。",
+          "missing": "**张力还没有进求解器**：`drives`产出的是一个力的数值，尚无案例让它经`PointLoad`真的加载在带材上并与接触联立——那是丙2端到端的活。spec/10的`Actuator.apply`这个方法名仍不存在（0062第9.1节：物理长在力学域的`drives`，不长在基座的`actuators`）。**不复现ATC600**：官方无公开的完整通信/参数/寄存器手册，复现拿不到参数的黑箱回路等于编系数（0062第二节裁决3）。离合器三个参数（23256 N·mm/A、50000 N·mm、磁滞0.05s）是POC-050基型外推与假设，L后缀线圈参数厂家资料没有。无各向异性、无温升、无滑差功率限、无抗饱和条件积分。故只报partial。"
         },
         {
           "id": "S6.4",
