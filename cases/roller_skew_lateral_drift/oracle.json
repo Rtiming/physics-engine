@@ -1,0 +1,167 @@
+{
+  "arrays": {},
+  "case_id": "case/roller_skew_lateral_drift",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/roller_skew_lateral_drift",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/roller_skew_lateral_drift/generate_oracle.py",
+    "sha256": "67dc9beef1d861b2d0ce637de4b74194d44e33590b8e7ad59c98cd232c40d0c2"
+  },
+  "load_tier": "local_batch",
+  "manifest_self_sha256": "a52ed0f7a2797290746f9bde0f95b93a354d57a28fed9402b01c74c7504d72f1",
+  "oracles": [
+    {
+      "expected": {
+        "at_100": 0.99,
+        "at_1p6": 0.6927157602586291,
+        "at_8": 0.875587481822903,
+        "pure_beam_limit": 0.6666666666666666
+      },
+      "id": "oracle:drift/beam_string_factor_limits",
+      "inputs": {
+        "kind": "f_of_u_limits"
+      },
+      "tolerances": {
+        "at_100": {
+          "abs": 0.0,
+          "reason": "``u → ∞``趋于1（纯弦）；100处已到0.99",
+          "rel": 1e-15
+        },
+        "at_1p6": {
+          "abs": 0.0,
+          "reason": "闭式求值",
+          "rel": 1e-15
+        },
+        "at_8": {
+          "abs": 0.0,
+          "reason": "同上",
+          "rel": 1e-15
+        },
+        "pure_beam_limit": {
+          "abs": 0.0,
+          "reason": "``u → 0``的解析极限，纯梁；判据是闭式自洽不是数值过程",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "drift_mm": 2.611449784926865,
+        "factor": 0.7481252554332796,
+        "u": 3.162277660168379
+      },
+      "id": "oracle:drift/steady_state_at_one_degree",
+      "inputs": {
+        "bending_stiffness_nmm2": 80000.0,
+        "free_span_mm": 200.0,
+        "kind": "shelton_normal_entry",
+        "skew_deg": 1.0,
+        "tension_n": 20.0
+      },
+      "tolerances": {
+        "drift_mm": {
+          "abs": 0.0,
+          "reason": "引擎侧是DER弯曲＋轴向张力的准静态解，**二阶收敛**（N=20/40/80/160/320实测比值3.739/3.861/3.928/3.964）。3e-4是N=160实测1.319e-4的约2.3倍余量；**收敛阶另有一条门判**，这一条只判落点",
+          "rel": 0.0003
+        },
+        "factor": {
+          "abs": 0.0,
+          "reason": "闭式求值",
+          "rel": 1e-15
+        },
+        "u": {
+          "abs": 0.0,
+          "reason": "纯几何与材料常数",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "drift_at_10n": 2.4913827552906636,
+        "drift_at_20n": 2.611449784926865,
+        "drift_at_30n": 2.7025090282562076,
+        "drift_at_40n": 2.773685956979117
+      },
+      "id": "oracle:drift/tension_makes_it_worse_not_better",
+      "inputs": {
+        "free_span_mm": 200.0,
+        "kind": "monotonicity_of_f",
+        "skew_deg": 1.0,
+        "tensions_n": [
+          10.0,
+          20.0,
+          30.0,
+          40.0
+        ]
+      },
+      "tolerances": {
+        "drift_at_10n": {
+          "abs": 0.0,
+          "reason": "闭式求值；本条判的是**单调性方向**，值本身只是它的载体",
+          "rel": 1e-15
+        },
+        "drift_at_20n": {
+          "abs": 0.0,
+          "reason": "闭式求值；本条判的是**单调性方向**，值本身只是它的载体",
+          "rel": 1e-15
+        },
+        "drift_at_30n": {
+          "abs": 0.0,
+          "reason": "闭式求值；本条判的是**单调性方向**，值本身只是它的载体",
+          "rel": 1e-15
+        },
+        "drift_at_40n": {
+          "abs": 0.0,
+          "reason": "闭式求值；本条判的是**单调性方向**，值本身只是它的载体",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "critical_skew_deg_at_100mm": 5.380617515425923,
+        "critical_skew_deg_at_200mm": 2.4890388616766135,
+        "critical_skew_deg_at_300mm": 1.5455739013844922,
+        "critical_skew_deg_at_500mm": 0.8520759808737839
+      },
+      "id": "oracle:drift/skew_that_reaches_the_flange",
+      "inputs": {
+        "half_clearance_mm": 6.5,
+        "kind": "critical_skew_for_rub",
+        "spans_mm": [
+          100.0,
+          200.0,
+          300.0,
+          500.0
+        ],
+        "tension_n": 20.0
+      },
+      "tolerances": {
+        "critical_skew_deg_at_100mm": {
+          "abs": 0.0,
+          "reason": "闭式反解；**它是装配公差的直接输入**，所以单列一条",
+          "rel": 1e-15
+        },
+        "critical_skew_deg_at_200mm": {
+          "abs": 0.0,
+          "reason": "闭式反解；**它是装配公差的直接输入**，所以单列一条",
+          "rel": 1e-15
+        },
+        "critical_skew_deg_at_300mm": {
+          "abs": 0.0,
+          "reason": "闭式反解；**它是装配公差的直接输入**，所以单列一条",
+          "rel": 1e-15
+        },
+        "critical_skew_deg_at_500mm": {
+          "abs": 0.0,
+          "reason": "闭式反解；**它是装配公差的直接输入**，所以单列一条",
+          "rel": 1e-15
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
