@@ -911,6 +911,252 @@ class RodTwist(_RodEnergyTerm):
             for vertex in range(self.layout.interior_vertex_count)
         )
 
+#: 两条边的``m2``合成出的带宽方向，其**和**的最短可辨长度。
+#: 两条边的材料帧几乎反向时（相邻边扭角差接近π）这个和趋于零，
+#: 平分线由舍入决定——**拿噪声当带宽方向用比报错坏得多**（与
+#: `contact.friction.IN_PLANE_DIRECTION_MIN_SINE`同一条纪律）。
+#: 取1e-6：此时两条边的扭角差已到``π − 2e-6``，那不是一段带材是一次折叠。
+WIDTH_DIRECTION_MIN_LENGTH = 1.0e-6
+
+
+@dataclass(frozen=True)
+class PenaltyGrooveWall(_RodEnergyTerm):
+    """槽壁挡住扭转：``U = Σ ½·k·g²``（仅``g < 0``），单位N·mm。
+
+    决策0072（plans/15第1.6—1.7条的乙线第二条），关掉0065第九节第4条
+    与第八节"**没有槽壁接触**"那条欠账。
+
+    ## 它是这个仓里第一个**同时看得见位置与边扭角**的接触项
+
+    在它之前，接触把自由度硬分成两类并互相拒绝：`PenaltyNormalContact`一族
+    只按``3·node + axis``索引位置块，而准静态步进器的落位校验明写
+    "节点块之外是锚点槽，写进去就是改别人的历史"。**边扭角γ两边都不属于**，
+    于是`PenaltyAnnulusLimit`只能声明"无扭转假设"——它的docstring原话是
+    边缘点由``x + e·a``生成，即"假定带材的宽度方向平行于轴、材料标架不绕切线转"，
+    并写着"一旦有扭转，边缘点位置就错了``(w/2)·sin(扭角)``"。
+
+    **本项开的就是那第三类。** 局部模板是5个变量：
+
+        [x_i(3), γ_{i−1}, γ_i]
+
+    位置块3个、γ块2个。γ进来之后"带材扭了多少"才**在接触的能量里**有内容。
+
+    ## 采样点：带材的两条材料边，宽度方向由**相邻两条边合成**
+
+    一个内顶点``i``夹在边``i−1``与边``i``之间，两条边各有自己的材料帧：
+
+        m2(e) = −sin(γ_e)·d1[e] + cos(γ_e)·d2[e]
+        m̂2_i = (m2(i−1) + m2(i)) / |m2(i−1) + m2(i)|      ← **平分线，要归一**
+        q = x_i + offset·m̂2_i                              ← 采样点（offset是带符号半宽）
+
+    归一化不是可省的：两条单位矢量的和长度是``cos(Δγ/2)``，不归一就等于
+    让带材的半宽随扭角悄悄缩水。这一条与`AnisotropicRodBending._curvatures`
+    里那个``0.5·(m2_l + m2_r)``**不同**——那里要的是曲率的对偶元平均
+    （**已经在对偶元上积分过**，见模块docstring第二节），这里要的是一个**方向**。
+    两处都不许照抄对方。
+
+    ## 槽壁是半空间：``g = (q − p)·n``，``n``指向**允许区**
+
+    ``g > 0``离壁、``g < 0``压上。朝向是显式的单位法向而**不是从``limit``的符号推**——
+    `PenaltyAnnulusLimit`的docstring记着那次端到端事故：方向编码在位置符号里，
+    几何一平移就翻了，蹭边力凭空归零。**位置的符号与朝向是两件事。**
+
+    一条槽＝两片壁，各声明一次；带材的两条边各声明一次；
+    于是一个顶点上典型有**四条**face。逐条声明看着啰嗦，
+    但它让"哪条边压哪片壁"是读得出来的，而不是靠一个``±``猜。
+
+    ## ``offset = 0``拒收
+
+    偏移为零时采样点退回中心线，``m̂2``被乘上零——**本项对γ的依赖当场消失**，
+    而它仍然会安静地算出一个法向接触。那正是本项要修的那种静默退化，
+    所以构造期就拒。要中心线接触请用`contact.PenaltyNormalContact`。
+
+    ## Hessian：走`physics_engine.autodiff`的二阶jet，不写解析闭式
+
+    与`AnisotropicRodBending`同一条裁决（0064第4.1节）：归一化 + 两次三角函数
+    的二阶链式法则手写一遍是在零实测下押注常数因子。5变量的``Jet2``每次乘除
+    建一个25项的tuple-of-tuples，比弯曲项那个121项便宜将近5倍。
+
+    ## 边界：**它只有法向，没有壁上的摩擦**
+
+    槽壁给的是把带材推回去的法向力。壁面摩擦要一个新的锚点槽与一条切向本构，
+    而准静态步进器今天的落位校验按"节点块/锚点槽"两类切，
+    γ在它那里仍然进不去。**本项没有假装有摩擦**——触发条件写在决策0072。
+    """
+
+    layout: RodLayout
+    frame: RodMaterialFrame
+    #: (内顶点, 带符号边缘偏移mm, 壁上一点mm, **指向允许区**的单位法向, 罚刚度N/mm)
+    faces: tuple[tuple[int, float, Vec3, Vec3, float], ...] = ()
+    name: str = "groove_wall"
+    kind: ClassVar[Literal["potential"]] = POTENTIAL
+
+    def __post_init__(self) -> None:
+        if self.frame.edge_count != self.layout.edge_count:
+            raise RodError("groove wall frame and layout disagree on the edge count")
+        if not self.faces:
+            raise RodError("groove_wall needs at least one face")
+        checked: list[tuple[int, float, Vec3, Vec3, float]] = []
+        for order, entry in enumerate(self.faces):
+            if len(entry) != 5:
+                raise RodError(f"faces[{order}] must be (vertex, offset, point, normal, k)")
+            vertex, offset, point, normal, stiffness = entry
+            if isinstance(vertex, bool) or not isinstance(vertex, int):
+                raise RodError(f"faces[{order}] vertex must be an int: {vertex!r}")
+            if not 0 <= vertex < self.layout.interior_vertex_count:
+                raise RodError(
+                    f"faces[{order}] vertex {vertex} 落在内顶点之外"
+                    f"（只有{self.layout.interior_vertex_count}个）——"
+                    "端顶点只有一条边，带宽方向的平分线在那里没有定义"
+                )
+            value = _finite(f"faces[{order}] offset", offset)
+            if value == 0.0:
+                raise RodError(
+                    f"faces[{order}]的边缘偏移是零——采样点退回中心线，"
+                    "**本项对γ的依赖当场消失**而它仍会安静地算出一个法向接触。"
+                    "中心线接触请用contact.PenaltyNormalContact"
+                )
+            wall_point = _vector3(f"faces[{order}] point", point)
+            inward = _vector3(f"faces[{order}] normal", normal)
+            deviation = abs(_norm(inward) - 1.0)
+            if deviation > FRAME_TOLERANCE:
+                raise RodError(
+                    f"faces[{order}]的法向不是单位矢量（|n| − 1 = {deviation!r}）——"
+                    "不归一化等于把刚度悄悄乘上|n|²，而调用方以为自己给的是k"
+                )
+            checked.append(
+                (
+                    vertex,
+                    value,
+                    wall_point,
+                    inward,
+                    _positive_finite(f"faces[{order}] stiffness", stiffness),
+                )
+            )
+        object.__setattr__(self, "faces", tuple(checked))
+        #: 按内顶点分组：一个顶点上的几片壁共用同一次jet求值。
+        #: 次序取**首次出现**的次序，与`faces`的声明次序一致——
+        #: 求和次序是形制（spec/12第3.3节），不许由`set`或`sorted`决定。
+        order_of: dict[int, int] = {}
+        groups: list[tuple[int, list]] = []
+        for entry in checked:
+            vertex = entry[0]
+            if vertex not in order_of:
+                order_of[vertex] = len(groups)
+                groups.append((vertex, []))
+            groups[order_of[vertex]][1].append(entry)
+        object.__setattr__(
+            self, "_groups", tuple((vertex, tuple(items)) for vertex, items in groups)
+        )
+        object.__setattr__(
+            self, "_face_slots", tuple(order_of[entry[0]] for entry in checked)
+        )
+
+    def node_index_bound(self) -> int:
+        return self.layout.node_count
+
+    def _vertex_count(self) -> int:
+        return len(self._groups)  # type: ignore[attr-defined]
+
+    def _local_indices(self, vertex: int) -> tuple[int, ...]:
+        interior = self._groups[vertex][0]  # type: ignore[attr-defined]
+        node = interior + 1
+        return (
+            3 * node,
+            3 * node + 1,
+            3 * node + 2,
+            self.layout.twist_index(interior),
+            self.layout.twist_index(interior + 1),
+        )
+
+    def width_direction(self, state: State) -> tuple[Vec3, ...]:
+        """诊断面：逐个**被声明的**内顶点的单位带宽方向``m̂2``，按声明次序。
+
+        它是"带材扭到哪去了"最直接的观测量，而门要判的正是它——
+        判位置有``O(1/k)``的穿透误差，判方向没有。
+        """
+
+        self.layout.assert_state(state)
+        return tuple(
+            self._width_direction(state, slot, order=0)
+            for slot in range(self._vertex_count())
+        )
+
+    def gaps_mm(self, state: State) -> tuple[float, ...]:
+        """诊断面：逐face的``g``，**按声明次序**。正为离壁、负为已压上。
+
+        与`PenaltyAnnulusLimit.edge_clearance_mm`同一条理由：
+        力在活动集边界上跳，**没有门看着的分支等于没有分支**。
+        """
+
+        self.layout.assert_state(state)
+        widths = self.width_direction(state)
+        result: list[float] = []
+        for order, (vertex, offset, point, inward, _) in enumerate(self.faces):
+            width = widths[self._face_slots[order]]  # type: ignore[attr-defined]
+            base = 3 * (vertex + 1)
+            result.append(
+                sum(
+                    (state.vector[base + a] + offset * width[a] - point[a]) * inward[a]
+                    for a in range(3)
+                )
+            )
+        return tuple(result)
+
+    def wall_force_n(self, state: State) -> tuple[float, ...]:
+        """逐face的法向力``|k·g|``（没压上时为0）。**平衡时它精确**，与罚刚度无关。
+
+        "槽壁挡住多少"这句话的可观测形式就是它。
+        """
+
+        return tuple(
+            stiffness * -gap if gap < 0.0 else 0.0
+            for gap, (_, _, _, _, stiffness) in zip(
+                self.gaps_mm(state), self.faces, strict=True
+            )
+        )
+
+    def _width_direction(self, state: State, slot: int, *, order: int):
+        """一个被声明顶点上的``m̂2``。**归一化的平分线，不是对偶元平均。**"""
+
+        interior = self._groups[slot][0]  # type: ignore[attr-defined]
+        local = _local_jets(state, self._local_indices(slot), order)
+        cos_left, sin_left = ad_cos(local[3]), ad_sin(local[3])
+        cos_right, sin_right = ad_cos(local[4]), ad_sin(local[4])
+        d1_left, d2_left = self.frame.d1[interior], self.frame.d2[interior]
+        d1_right, d2_right = self.frame.d1[interior + 1], self.frame.d2[interior + 1]
+        total = tuple(
+            -sin_left * d1_left[a] + cos_left * d2_left[a]
+            - sin_right * d1_right[a] + cos_right * d2_right[a]
+            for a in range(3)
+        )
+        length = ad_norm(total)
+        raw = length.value if isinstance(length, (Jet1, Jet2)) else length
+        if raw < WIDTH_DIRECTION_MIN_LENGTH:
+            raise RodError(
+                f"内顶点{interior}两条边的材料帧几乎反向（|m2_l + m2_r| = {raw!r}）——"
+                "带宽方向的平分线在这里由舍入决定，那不是方向是噪声"
+            )
+        return tuple(component / length for component in total)
+
+    def _vertex_energy(self, state: State, vertex: int, *, order: int):
+        local = _local_jets(state, self._local_indices(vertex), order)
+        width = self._width_direction(state, vertex, order=order)
+        #: 零元素必须与被加项**同型**：``order ≥ 1``时它得是一个jet，
+        #: 否则一个"这个顶点上没有一片壁是活动的"的顶点会返回裸``float``，
+        #: 而装配层紧接着去读它的``.gradient``。``x − x``一举取到正确的型与``+0.0``。
+        total = local[0] - local[0]
+        for entry in self._groups[vertex][1]:  # type: ignore[attr-defined]
+            _, offset, point, inward, stiffness = entry
+            gap = sum(
+                (local[a] + offset * width[a] - point[a]) * inward[a] for a in range(3)
+            )
+            raw = gap.value if isinstance(gap, (Jet1, Jet2)) else gap
+            if raw < 0.0:
+                total = total + 0.5 * stiffness * gap * gap
+        return total
+
+
 @dataclass(frozen=True)
 class RodEndMoment:
     """端扭矩载荷：``U = −M·γ_e``。恒定外力矩，梯度是常量、Hessian恒为零。
@@ -1177,6 +1423,7 @@ def solve_rod_with_retransport(
 __all__ = [
     "AnisotropicRodBending",
     "FRAME_TOLERANCE",
+    "PenaltyGrooveWall",
     "RodEndMoment",
     "RodEquilibrium",
     "RodError",
@@ -1188,6 +1435,7 @@ __all__ = [
     "RodSolveRound",
     "RodSolveStage",
     "RodTwist",
+    "WIDTH_DIRECTION_MIN_LENGTH",
     "build_bishop_frame",
     "build_material_frame",
     "build_rod_layout",
