@@ -339,11 +339,102 @@ def step_response_peak_time_s(*, natural_frequency_rad_s: float, damping_ratio: 
 
 
 @dataclass(frozen=True)
+class TensionSensor:
+    """悬臂式张力传感器（BOSENSE LTS族）：满量程截断＋mV输出＋ADC量化。
+
+    真机（`ED3L_张力控制资料包`2026-06-08已核）：LTS1-5，**5 kg满量程、
+    20 mV max输出**，直接接入ATC600的``0—20mV``传感器输入。
+
+    ## 它给对了什么、给错了什么
+
+    * **量化是真误差**：ADC把连续的mV切成台阶，于是闭环再准也停不到台阶之间。
+      `resolution_n`是那个台阶折算到牛顿的大小——**它是这条回路精度的地板**；
+    * **满量程是截断不是压缩**：超过量程读数停在满量程，与磁粉离合器的饱和同理；
+    * **没有的**：零漂、温漂、非线性、蠕变、安装角误差、动态响应。
+      真机的LTS装在一只悬臂上，读的是**合力在悬臂方向的分量**，
+      而那个方向由两侧包角决定——本类**不建那一层**，
+      它把"传感器读到多少张力"当成一个已经标定好的标量。
+      真机标定比例`VR451`的换算至今"仍需现场标定确认"（`HARDWARE_TOPOLOGY.md`）。
+    """
+
+    full_scale_n: float
+    output_at_full_scale_mv: float
+    adc_bits: int
+
+    def __post_init__(self) -> None:
+        for name in ("full_scale_n", "output_at_full_scale_mv"):
+            value = getattr(self, name)
+            if not (value > 0.0 and math.isfinite(value)):
+                raise DriveError(f"{name} must be positive and finite: {value!r}")
+        if isinstance(self.adc_bits, bool) or not isinstance(self.adc_bits, int):
+            raise DriveError(f"adc_bits must be an int: {self.adc_bits!r}")
+        if not (1 <= self.adc_bits <= 32):
+            raise DriveError(
+                f"adc_bits must be in [1, 32]: {self.adc_bits!r} —— "
+                "位数是硬件定死的；32位以上的张力ADC不存在"
+            )
+
+    @property
+    def counts(self) -> int:
+        """量化级数``2^bits − 1``。"""
+
+        return (1 << self.adc_bits) - 1
+
+    @property
+    def resolution_n(self) -> float:
+        """一个ADC台阶折算到牛顿——**这条回路精度的地板**。"""
+
+        return self.full_scale_n / self.counts
+
+    def millivolts(self, tension_n: float) -> float:
+        """线性输出，超过满量程**截断**。"""
+
+        if not math.isfinite(tension_n):
+            raise DriveError(f"tension must be finite: {tension_n!r}")
+        clamped = max(0.0, min(self.full_scale_n, tension_n))
+        return clamped / self.full_scale_n * self.output_at_full_scale_mv
+
+    def read_n(self, tension_n: float) -> float:
+        """读数：截断→量化→折回牛顿。
+
+        量化取**就近**（`round`）而不是截尾：真机ADC是就近舍入的，
+        截尾会给出一个系统性偏低的读数，而那会被闭环当成真实的张力不足去补。
+        """
+
+        clamped = max(0.0, min(self.full_scale_n, tension_n))
+        step = self.resolution_n
+        return round(clamped / step) * step
+
+
+def capstan_transfer_ratio(*, friction_coefficient: float, wrap_angle_rad: float) -> float:
+    """一段包角上的张力比``exp(μθ)``（Euler-Eytelwein，全滑移）。
+
+    **这是`cases/capstan_tension_ratio`验的那条式子的连续极限**，
+    在这里被用作"传感器测到的张力"与"落位点上的张力"之间的换算。
+
+    符号约定：返回的是**张紧端比松弛端**，恒``≥ 1``。
+    调用方按带材走向决定乘还是除——**那个方向搞反，误差是平方**。
+    """
+
+    if not math.isfinite(friction_coefficient) or friction_coefficient < 0.0:
+        raise DriveError(
+            f"friction coefficient must be finite and nonnegative: {friction_coefficient!r}"
+        )
+    if not math.isfinite(wrap_angle_rad) or wrap_angle_rad < 0.0:
+        raise DriveError(f"wrap angle must be finite and nonnegative: {wrap_angle_rad!r}")
+    return math.exp(friction_coefficient * wrap_angle_rad)
+
+
+@dataclass(frozen=True)
 class TensionSample:
     """一步的观测：时刻、张力、扭矩、电流命令、误差。**产物是这个，不是内部状态。**"""
 
     time_s: float
+    #: **被控点上的真实张力**（离合器扭矩除以当前卷径）。
     tension_n: float
+    #: **传感器读到的张力**：真实张力经包角换算到传感器位置，再过量程截断与量化。
+    #: 它与``tension_n``不同不是噪声——见`TensionLoop`第二节。
+    measured_n: float
     torque_nmm: float
     current_a: float
     error_n: float
@@ -370,6 +461,25 @@ class TensionLoop:
     ``delay_line``为``None``表示**没有下发时延**。它不是默认值：
     构造时必须显式传``None``，理由与`ActuatorDeclaration`要求
     ``zero_delay_rationale``同源——**零时延是一条声明，不是一次省略**。
+
+    ## 二、闭环调的是它**测到**的量，不是要紧的那个量
+
+    真机的张力传感器（LTS1-5）装在链路中的某一只轮上，而要紧的张力在**落位点**。
+    两者之间隔着若干包角，**每个包角把张力乘一个``exp(μθ)``**——
+    这正是`cases/capstan_tension_ratio`验的那条式子。
+
+    于是稳态时``T_传感器 = 设定值``，而
+
+        T_落位点 = 设定值 / measurement_transfer
+
+    ``measurement_transfer``就是``T_传感器 / T_被控点``。取``μ = 0.3``、
+    总包角90°时它是``1/1.602 = 0.624``——**设定30 N，被控点上是48.1 N，超60%**。
+
+    **这个误差不是控制器不好，是它看不见。** 再好的PID也只能把它测到的量调准。
+
+    ``measurement_transfer``**必须显式给**，没有默认值。给``1.0``是一条声明——
+    "传感器就在被控点上、中间一个包角都没有"，而那在真机上通常不成立。
+    **把它做成默认1.0，等于让这条误差默默消失。**
     """
 
     clutch: MagneticParticleClutch
@@ -378,6 +488,10 @@ class TensionLoop:
     setpoint_n: float
     dt_s: float
     delay_line: object | None
+    #: ``None``表示**理想传感器**（无量程、无量化）。同样必须显式给。
+    sensor: TensionSensor | None
+    #: ``T_传感器 / T_被控点``。见类docstring第二节——**没有默认值是有意的**。
+    measurement_transfer: float
     torque_nmm: float = 0.0
     turns: float = 0.0
     step_index: int = 0
@@ -392,6 +506,12 @@ class TensionLoop:
             )
         if not math.isfinite(self.torque_nmm):
             raise DriveError(f"torque must be finite: {self.torque_nmm!r}")
+        if not (self.measurement_transfer > 0.0 and math.isfinite(self.measurement_transfer)):
+            raise DriveError(
+                f"measurement_transfer must be positive and finite: "
+                f"{self.measurement_transfer!r} —— 它是T_传感器/T_被控点，"
+                "零或负的传递比意味着传感器读到的不是张力"
+            )
 
     @property
     def tension_n(self) -> float:
@@ -402,7 +522,10 @@ class TensionLoop:
     def step(self, *, turns_increment: float = 0.0) -> tuple[TensionLoop, TensionSample]:
         """走一步，返回``(新回路, 本步观测)``。"""
 
-        measured = self.tension_n
+        #: **被控点上的真实张力**，与传感器读到的不是同一个数。
+        true_tension = self.tension_n
+        at_sensor = true_tension * self.measurement_transfer
+        measured = at_sensor if self.sensor is None else self.sensor.read_n(at_sensor)
         error = self.setpoint_n - measured
         controller, current = self.controller.step(error, self.dt_s)
 
@@ -433,7 +556,8 @@ class TensionLoop:
         torque = self.clutch.advance_torque_nmm(self.torque_nmm, effective_current, self.dt_s)
         sample = TensionSample(
             time_s=self.step_index * self.dt_s,
-            tension_n=measured,
+            tension_n=true_tension,
+            measured_n=measured,
             torque_nmm=self.torque_nmm,
             current_a=effective_current,
             error_n=error,
@@ -471,6 +595,8 @@ __all__ = [
     "SpoolTension",
     "TensionLoop",
     "TensionSample",
+    "TensionSensor",
+    "capstan_transfer_ratio",
     "second_order_damping_ratio",
     "second_order_natural_frequency_rad_s",
     "step_response_overshoot",

@@ -52,6 +52,8 @@ from physics_engine.drives import (
     PidController,
     SpoolTension,
     TensionLoop,
+    TensionSensor,
+    capstan_transfer_ratio,
     second_order_damping_ratio,
     second_order_natural_frequency_rad_s,
     step_response_overshoot,
@@ -113,7 +115,15 @@ def _delay_line(delay_s: float, dt_s: float) -> ActuationDelayLine:
     )
 
 
-def _run(*, integral_gain: float, dt_s: float, horizon_s: float, delay_line=None):
+def _run(
+    *,
+    integral_gain: float,
+    dt_s: float,
+    horizon_s: float,
+    delay_line=None,
+    sensor=None,
+    measurement_transfer: float = 1.0,
+):
     loop = TensionLoop(
         clutch=CLUTCH,
         spool=SPOOL,
@@ -126,6 +136,11 @@ def _run(*, integral_gain: float, dt_s: float, horizon_s: float, delay_line=None
         setpoint_n=SETPOINT_N,
         dt_s=dt_s,
         delay_line=delay_line,
+        sensor=sensor,
+        #: **1.0是一条声明**："传感器就在被控点上、中间一个包角都没有"。
+        #: 本文件多数门验的是控制器本身，所以刻意取这个理想构型；
+        #: 传感器位置带来的误差由`test_the_loop_regulates_what_it_measures_not_what_matters`验。
+        measurement_transfer=measurement_transfer,
     )
     return loop.run(int(round(horizon_s / dt_s)))
 
@@ -251,6 +266,8 @@ def test_the_loop_without_a_delay_line_must_say_so_explicitly():
             ),
             setpoint_n=SETPOINT_N,
             dt_s=1.0e-3,
+            sensor=None,
+            measurement_transfer=1.0,
         )
 
 
@@ -437,6 +454,8 @@ def test_a_nonpositive_setpoint_fails_closed():
                 setpoint_n=setpoint,
                 dt_s=1.0e-3,
                 delay_line=None,
+                sensor=None,
+                measurement_transfer=1.0,
             )
 
 
@@ -491,3 +510,209 @@ def test_drives_only_reaches_downwards():
     assert "physics_engine.drives" not in text, "基座反向依赖了力学域"
     assert "physics_engine.actuators" in (drives.__file__ or "") or True
     assert drives.__name__ == "physics_engine.drives"
+
+
+# ---------------------------------------------------------------------------
+# 乙2：传感器读出，以及这条链路上最大的一个误差源
+# ---------------------------------------------------------------------------
+
+#: LTS1-5：5 kg满量程、20 mV max输出（`ED3L_张力控制资料包`2026-06-08已核）。
+#: ADC位数**不是实测**——ATC600的内部转换位数手册没给，取12位是常见量级。
+LTS1_5 = TensionSensor(
+    full_scale_n=5.0 * 9.80665, output_at_full_scale_mv=20.0, adc_bits=12
+)
+
+
+def test_the_load_cell_spans_five_kilograms_over_twenty_millivolts():
+    """真机铭牌：5 kg ⟹ 49.033 N满量程，20 mV满输出。"""
+
+    assert LTS1_5.full_scale_n == pytest.approx(49.033, rel=1e-4)
+    assert LTS1_5.millivolts(LTS1_5.full_scale_n) == 20.0
+    assert LTS1_5.millivolts(0.0) == 0.0
+    assert LTS1_5.millivolts(0.5 * LTS1_5.full_scale_n) == pytest.approx(10.0)
+    #: 满量程是**截断**：超量程读数停住，不继续线性外推。
+    assert LTS1_5.millivolts(1000.0) == 20.0
+    assert LTS1_5.read_n(1000.0) == pytest.approx(LTS1_5.full_scale_n, rel=1e-12)
+
+
+def test_the_adc_resolution_is_the_floor_of_the_whole_loop():
+    """**量化台阶是这条回路精度的地板**：闭环再准也停不到台阶之间。
+
+    2026-08-17实测（`ζ=0.5`、设定30 N、`transfer=1`、5秒）：
+
+    | 位数 | 分辨率 | 末态与设定的偏差 |
+    |---|---|---|
+    | 8 | 192.287 mN | 92.424 mN |
+    | 10 | 47.931 mN | 19.271 mN |
+    | 12 | 11.974 mN | 0.685 mN |
+    | 16 | 0.748 mN | 0.179 mN |
+
+    **偏差恒不超过半个台阶**——那正是就近量化的定义。
+    门判这一条，而不判具体的偏差值（它随设定值落在台阶哪个位置而变）。
+    """
+
+    integral_gain = _integral_gain_for(0.5)
+    for bits in (8, 10, 12, 16):
+        sensor = TensionSensor(
+            full_scale_n=5.0 * 9.80665, output_at_full_scale_mv=20.0, adc_bits=bits
+        )
+        _, samples = _run(
+            integral_gain=integral_gain, dt_s=1.0e-3, horizon_s=5.0, sensor=sensor
+        )
+        deviation = abs(samples[-1].tension_n - SETPOINT_N)
+        assert deviation <= 0.5 * sensor.resolution_n * 1.001, (
+            f"{bits}位：末态偏差{deviation * 1000:.3f} mN超过半个台阶"
+            f"{sensor.resolution_n * 500:.3f} mN——就近量化不该给出这个"
+        )
+    #: 位数翻倍，台阶按``2^n``缩——这一条挡住把``2^bits``写成``bits``一类的错。
+    coarse = TensionSensor(full_scale_n=49.0, output_at_full_scale_mv=20.0, adc_bits=8)
+    fine = TensionSensor(full_scale_n=49.0, output_at_full_scale_mv=20.0, adc_bits=12)
+    assert coarse.resolution_n / fine.resolution_n == pytest.approx(
+        (2**12 - 1) / (2**8 - 1), rel=1e-12
+    )
+
+
+def test_the_loop_regulates_what_it_measures_not_what_matters():
+    """**这条链路上最大的一个误差源，而它不是控制器的错。**
+
+    真机的张力传感器装在链路中的某一只轮上，要紧的张力在**落位点**。
+    两者之间每隔一个包角，张力就乘一个``exp(μθ)``——
+    正是`cases/capstan_tension_ratio`验的那条式子。
+
+    闭环把**测到的**量调到设定值，于是被控点上的真实张力差了``1/transfer``。
+    2026-08-17实测（``μ = 0.3``、设定30 N）：
+
+    | 传感器与被控点之间的包角 | transfer | 被控点真实张力 | 误差 |
+    |---|---|---|---|
+    | 0° | 1.00000 | 30.000 N | — |
+    | 30° | 0.85464 | 35.103 N | **+17.0%** |
+    | 60° | 0.73040 | 41.073 N | **+36.9%** |
+    | 90° | 0.62423 | 48.059 N | **+60.2%** |
+    | 180° | 0.38966 | 76.990 N | **+156.6%** |
+
+    **90°包角就让实际张力超出设定六成。** REBCO带材的许用应变很窄，
+    60%的张力超出不是一个可以忽略的量。
+
+    这条门判的是**误差恰好等于``1/transfer``**——它是可预测的、
+    因而是**可补偿的**：只要包角与μ已知，前馈乘上去就抵消了。
+    而`research/05`把μ列在"只有现场实测能补"的五项里，
+    **所以今天补不了，只能量出来**。
+    """
+
+    integral_gain = _integral_gain_for(0.5)
+    for degrees in (0.0, 30.0, 60.0, 90.0, 180.0):
+        ratio = capstan_transfer_ratio(
+            friction_coefficient=0.3, wrap_angle_rad=math.radians(degrees)
+        )
+        _, samples = _run(
+            integral_gain=integral_gain,
+            dt_s=1.0e-3,
+            horizon_s=5.0,
+            measurement_transfer=1.0 / ratio,
+        )
+        final = samples[-1]
+        assert final.measured_n == pytest.approx(SETPOINT_N, abs=1e-6), (
+            "闭环没有把**测到的**量调到设定值——那本门的前提就不成立"
+        )
+        assert final.tension_n == pytest.approx(SETPOINT_N * ratio, rel=1e-6), (
+            f"包角{degrees}°：被控点真实张力{final.tension_n!r}"
+            f"不等于设定值乘{ratio!r}"
+        )
+
+    #: 90°那一档单独钉一个数——散文里的"超六成"必须有一条门看着。
+    ninety = capstan_transfer_ratio(friction_coefficient=0.3, wrap_angle_rad=math.pi / 2)
+    assert SETPOINT_N * ninety == pytest.approx(48.059, rel=1e-4)
+    assert ninety - 1.0 == pytest.approx(0.602, rel=1e-2)
+
+
+def test_the_transfer_ratio_direction_matters_quadratically():
+    """**方向搞反，误差是平方。**
+
+    ``capstan_transfer_ratio``返回的恒是张紧端比松弛端（``≥ 1``）；
+    调用方按带材走向决定乘还是除。把``transfer``写成``ratio``而不是``1/ratio``
+    时，被控点张力从``设定·r``变成``设定/r``——**两者相差``r²``**。
+
+    ``μ = 0.3``、90°时``r² = 2.566``：真实张力从48.06 N变成18.73 N，
+    **一个偏高六成、一个偏低四成，而两者都"看起来像个合理的张力"**。
+    这正是这类符号错最难被发现的原因。
+    """
+
+    ratio = capstan_transfer_ratio(friction_coefficient=0.3, wrap_angle_rad=math.pi / 2)
+    integral_gain = _integral_gain_for(0.5)
+    _, correct = _run(
+        integral_gain=integral_gain, dt_s=1.0e-3, horizon_s=5.0,
+        measurement_transfer=1.0 / ratio,
+    )
+    _, flipped = _run(
+        integral_gain=integral_gain, dt_s=1.0e-3, horizon_s=5.0,
+        measurement_transfer=ratio,
+    )
+    assert correct[-1].tension_n / flipped[-1].tension_n == pytest.approx(
+        ratio * ratio, rel=1e-6
+    )
+    assert ratio * ratio == pytest.approx(2.566, rel=1e-3)
+
+
+def test_the_capstan_transfer_matches_the_case_closed_form():
+    """本模块的``exp(μθ)``与`cases/capstan_tension_ratio`判的是同一条式子。
+
+    **两处不共享实现**（一个在`drives`、一个在案例的金标生成器里），
+    所以这条门是它们的互钉：任何一边改了式子都会在这里红。
+    """
+
+    for mu, degrees in ((0.3, 90.0), (0.15, 180.0), (0.5, 45.0)):
+        angle = math.radians(degrees)
+        assert capstan_transfer_ratio(
+            friction_coefficient=mu, wrap_angle_rad=angle
+        ) == pytest.approx(math.exp(mu * angle), rel=1e-15)
+    #: 零摩擦或零包角都给1——张力穿过去不变。
+    assert capstan_transfer_ratio(friction_coefficient=0.0, wrap_angle_rad=9.9) == 1.0
+    assert capstan_transfer_ratio(friction_coefficient=0.9, wrap_angle_rad=0.0) == 1.0
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"full_scale_n": 0.0}, "full_scale_n"),
+        ({"output_at_full_scale_mv": -1.0}, "output_at_full_scale_mv"),
+        ({"adc_bits": 0}, r"\[1, 32\]"),
+        ({"adc_bits": 33}, r"\[1, 32\]"),
+        ({"adc_bits": True}, "must be an int"),
+        ({"adc_bits": 12.0}, "must be an int"),
+    ],
+)
+def test_a_malformed_sensor_fails_closed(kwargs, message):
+    base = {"full_scale_n": 49.0, "output_at_full_scale_mv": 20.0, "adc_bits": 12}
+    with pytest.raises(DriveError, match=message):
+        TensionSensor(**{**base, **kwargs})
+
+
+@pytest.mark.parametrize("transfer", [0.0, -1.0, float("inf"), float("nan")])
+def test_a_malformed_measurement_transfer_fails_closed(transfer):
+    with pytest.raises(DriveError, match="measurement_transfer"):
+        TensionLoop(
+            clutch=CLUTCH, spool=SPOOL,
+            controller=PidController(
+                proportional=0.0, integral_gain=1.0, derivative=0.0, integral_limit=1.0
+            ),
+            setpoint_n=SETPOINT_N, dt_s=1.0e-3, delay_line=None,
+            sensor=None, measurement_transfer=transfer,
+        )
+
+
+def test_the_measurement_transfer_has_no_default():
+    """**没有默认值是有意的**：给``1.0``是一条声明——"传感器就在被控点上"。
+
+    做成默认1.0等于让上面那条60%的误差默默消失，
+    而这个仓已经因为"默认值替调用方做了声明"吃过亏
+    （`ActuatorDeclaration`的``zero_delay_rationale``就是那次的产物）。
+    """
+
+    with pytest.raises(TypeError):
+        TensionLoop(  # type: ignore[call-arg]
+            clutch=CLUTCH, spool=SPOOL,
+            controller=PidController(
+                proportional=0.0, integral_gain=1.0, derivative=0.0, integral_limit=1.0
+            ),
+            setpoint_n=SETPOINT_N, dt_s=1.0e-3, delay_line=None, sensor=None,
+        )

@@ -462,11 +462,15 @@
         {
           "id": "S6.4",
           "label": "传感器读出",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": true,
-          "evidence": [],
-          "why": "闭环要测量。spec/10六接口里它与`Actuator`成对。",
-          "missing": "只有声明层（观测维度不随场景规模变、点名状态自由度必须拒收）；`read`的物理未实现。"
+          "evidence": [
+            "test:tests/test_drives.py::test_the_load_cell_spans_five_kilograms_over_twenty_millivolts",
+            "test:tests/test_drives.py::test_the_adc_resolution_is_the_floor_of_the_whole_loop",
+            "test:tests/test_drives.py::test_the_loop_regulates_what_it_measures_not_what_matters"
+          ],
+          "why": "闭环要测量。spec/10六接口里它与`Actuator`成对。0062轨道乙已落`drives.TensionSensor`：按真机LTS1-5（5kg满量程、20mV max，2026-06-08已核）建满量程截断＋线性mV输出＋ADC就近量化，并接进`TensionLoop`。**量化台阶是整条回路精度的地板**——8/10/12/16位实测末态偏差92.4/19.3/0.685/0.179 mN，恒不超过半个台阶。同批量出了这条链路上最大的一个误差源：**闭环调的是它测到的量，不是要紧的那个量**。传感器与被控点之间每隔一个包角张力乘`exp(μθ)`，μ=0.3、90°时被控点真实张力比设定高**60.2%**（30N设定给出48.06N）；方向搞反误差是平方（r²=2.566）。",
+          "missing": "**没有接`sensors.SensorDeclaration`**：`read()`这个方法名仍不存在，本片是`drives`里的一个换算器而不是spec/10 `Sensor`接口的实现（与S6.3同一形状，0062第9.1节）。**测量路径没有时延**：命令路径有`ActuationDelayLine`，采样与转换延迟没建，真机ATC600的采样周期与内部转换位数手册都没给。无计米/匝数读出（真机`MPOS AXIS(0)`，比例仍需现场标定）、无零漂/温漂/非线性/蠕变、无悬臂安装角（真机LTS读的是合力在悬臂方向的分量，方向由两侧包角决定）。`VR451`的换算比例至今仍需现场标定确认。故只报partial。"
         },
         {
           "id": "S6.5",
@@ -505,7 +509,7 @@
           "exercises_physics": true,
           "evidence": [],
           "why": "这是场景⑥本身，也是plans/05第一节那句「端到端能跑通的是零」的度量点。",
-          "missing": "前六位里有四位未做。这条场景把spec/10六接口里的五个同时用上（Scene/MotionSource/Actuator/Sensor/CollisionQuery），其中两个只有声明层。"
+          "missing": "前六位里有一位未做（S6.7自己）、四位partial、两位done。这条场景把spec/10六接口里的五个同时用上（Scene/MotionSource/Actuator/Sensor/CollisionQuery）。**2026-08-17审计新增三条不落在任何单一位上的缺漏**（0062轨道乙的副产物）：① **传感器位置≠被控点**——它是装配属性不是某一位的能力，而实测它是这条链路上最大的单一误差源（90°包角给+60.2%）；② **真机是双执行器**——ED3L伺服（CSP位置模式）定线速、POC磁粉离合器定张力，而S6.3只表达了后者；③ **多轮路由**——R4→R3→R2→R1加两只竖直可调小导轮再到`entry_boundary`，`PenaltyCylinderContact`已能表达多圆柱，缺的是哪个节点贴哪只轮、包多少角这层装配。**这三条不改42这个分母**（0057已冻结每场景位数），登记在plans/13第六节，并入0056那笔『主分母42没有外部锚』的账。"
         }
       ]
     }
