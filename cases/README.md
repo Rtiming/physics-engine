@@ -48,10 +48,12 @@
 
 | [`roller_skew_lateral_drift`](roller_skew_lateral_drift/case.md) | **导轮轴偏斜引起的稳态横漂，而且它不需要材料输运**——Shelton正规入轮条件`y'(L)=θ_r`本身就是输运的结果，写成边界条件后稳态是静力边值问题。引擎DER弯曲＋轴向张力对闭式`y_ss = θ_r·L·f(KL)`，`f(u)=(sinh u−u cosh u)/(u(1−cosh u))`，**二阶收敛**（实测比3.739/3.861/3.928）。与WDS `research/04`引的**五个独立数字**逐条对拍。**反直觉结论：张力越大横漂越大**（`f`单调增，10→40N给+11.3%），闭式与引擎各判一次。振幅二次律两档一致（9.97e-3/9.93e-3 per mm²），1mm处+0.9%由张力自升解释、验算对上。**装配公差直接输出**：半间隙6.5mm下，跨长100/200/300/500mm的临界偏斜为5.381°/2.489°/1.546°/**0.852°** | B | local_batch | 4条 | `tests/cases/test_roller_skew_lateral_drift.py` |
 
+| [`anisotropic_friction_ellipse`](anisotropic_friction_ellipse/case.md) | **各向异性摩擦椭圆的η-return，以及"径向缩"为什么是错的**：圆上"沿径向缩"、"欧氏最近点投影"、"最大耗散原理的外法向流动"三件事恰好重合，椭圆上互不相同而**只有第三件是物理**。四条独立闭式：支撑函数`h(ψ)`、椭圆半径`ρ(ψ)`、最高短缺`(a−b)²/(a²+b²)`、径向返回违反外法向的最大正弦`(a²−b²)/(a²+b²)`。`μ_∥:μ_⊥=5:1`下实测**混合角耗散最高短缺61.538%（在45°）**、径向返回的滑移方向最坏偏**67.38°**、**横向摩擦力被高估恰好5倍**；关联流动侧`\|sin\|≤4.9e-15`。**退化是构造出来的**：两系数逐位相等时原样转交`coulomb_return_map`（连报错一起），另有一条门强走通用路径防转交掩盖错误。混合角回线无闭式，改判**外功与塑性功两条独立记账相等**（O(h²)，细化比3.98/3.99/3.99/4.00）＋**稳态圈逐位闭合**，顺手补上`friction_hysteresis_loop`第六条"多圈稳态性没验" | B | local_batch | 6条 | `tests/cases/test_anisotropic_friction_ellipse.py` |
+
 ## 一之二、每个案例穿过引擎的哪几层（决策0048第三节通则）
 
 **"验公式"与"验引擎"是两类，混在一个计数里计数就不再有意义。**
-本节是那条通则的执行面：29个案例按**穿过引擎哪几层**分类，**不按案例数报成绩**。
+本节是那条通则的执行面：30个案例按**穿过引擎哪几层**分类，**不按案例数报成绩**。
 
 | 穿过的层 | 条数 | 案例 |
 |---|---|---|
@@ -63,6 +65,7 @@
 | `energies`协议层（梯度与Hessian，不求解） | 1 | `axial_stretch_hessian` |
 | **闭式计算器（不碰引擎的任何一层）** | **5** | `scalar_diffraction_airy`、`fts_instrument_line_shape`、`two_beam_interference`、`mutual_inductance_coaxial`、`norris_thin_strip` |
 | 几何查询／资产治理／模型生成（基座，不碰物理求解） | 6 | `segment_distance`、`rotated_aabb`、`broadphase_superset`、`mesh_asset_integrity`、`generator_determinism`、`peer_fcl_distance` |
+| **`contact`切向本构层（驱动return-map，不装配能量也不求解）** | **1** | **`anisotropic_friction_ellipse`（第一条各向异性摩擦椭圆）**——**它不在上面任何一行，是因为步进器今天接不上椭圆映射**（决策0068裁定不改`advance_contact_quasistatic`的既有行为）。这一行是**欠账的位置**，不是一个新的分类成绩 |
 
 **怎么读这张表**：闭式计算器那5条**判据强度很高**（第1档解析闭式、容差是算出来的、
 必红门逐条实测），而且它们**抓到过两个真缺陷**（`materials.py`的长度制漏项、
