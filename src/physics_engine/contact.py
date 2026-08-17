@@ -1752,12 +1752,26 @@ class PenaltyAnnulusLimit:
     带材边缘点在``x + e·a``处（``e``是**带符号**的半宽偏移），其轴向坐标是
     ``s_e = s + e``，**而径向距离与中心线的完全相同**（沿轴平移不改变到轴的距离）。
 
-    限位面用**带符号的**``limit``声明，符号即哪一片法兰：
+    限位面用``limit``（面的轴向位置）加``inward``（**朝里是哪一边**，取``±1``）声明：
 
-        limit > 0：边缘必须满足 s_e ≤ limit，  g = limit − s_e
-        limit < 0：边缘必须满足 s_e ≥ limit，  g = s_e − limit
+        inward = +1：边缘必须满足 s_e ≤ limit
+        inward = −1：边缘必须满足 s_e ≥ limit
 
-    合起来``g = sign(limit)·(limit − s_e)``。``g < 0``即**蹭上了**。
+    合起来``g = inward·(limit − s_e)``。``g < 0``即**蹭上了**。
+
+    ## ``inward``为什么必须是独立字段——这是端到端跑出来的一个真bug
+
+    第一版把方向编码在``limit``的**符号**里（"正号那片管上侧、负号那片管下侧"），
+    看起来省一个字段。**2026-08-17的端到端装配当场打红**：收线盘排线横动到9 mm时，
+    下侧法兰的位置变成``9 − 8.5 = +0.5``——**符号翻了**，那一片被当成上侧法兰，
+    于是判据方向反了、**蹭边力凭空归零**（横动7 mm与8 mm都算得出2.46 N与7.44 N，
+    唯独9 mm给0）。
+
+    病根：**位置的符号与朝向是两件事**，只在几何恰好跨过原点两侧时才碰巧一致。
+    任何一次平移都会拆散它们，而收线盘横动就是一次平移。
+
+    这条只有端到端装配才发现得了——单元门里的构型永远是槽心在原点的，
+    那里两者恒等。**它是"端到端跑一次"这件事本身的价值证明。**
 
     ## 为什么不改spec/11的形状词汇（0034第四节重开后的裁决）
 
@@ -1805,12 +1819,13 @@ class PenaltyAnnulusLimit:
     name: str = "annulus_limit"
     kind: ClassVar[Literal["potential"]] = POTENTIAL
     #: (节点索引, 轴上一点mm, 轴单位方向, 环带内半径mm, 环带外半径mm,
-    #:  带符号的限位轴向坐标mm, 带符号的边缘偏移mm, 罚刚度N/mm)
+    #:  限位面的轴向位置mm, 朝里方向±1, 带符号的边缘偏移mm, 罚刚度N/mm)
     faces: tuple[
         tuple[
             int,
             tuple[float, float, float],
             tuple[float, float, float],
+            float,
             float,
             float,
             float,
@@ -1823,7 +1838,7 @@ class PenaltyAnnulusLimit:
     def __post_init__(self) -> None:
         if not self.faces:
             raise ContactError("annulus_limit needs at least one face")
-        for node, point, axis, inner, outer, limit, offset, stiffness in self.faces:
+        for node, point, axis, inner, outer, limit, inward, offset, stiffness in self.faces:
             if isinstance(node, bool) or not isinstance(node, int) or node < 0:
                 raise ContactError(
                     f"annulus limit node index must be a nonnegative int: {node!r}"
@@ -1844,10 +1859,13 @@ class PenaltyAnnulusLimit:
                     f"annulus outer radius must exceed the inner one: {outer!r} <= {inner!r}"
                     " —— 环带塌成一条线时法兰的径向范围为零，那不是一片法兰"
                 )
-            if not math.isfinite(limit) or limit == 0.0:
+            if not math.isfinite(limit):
+                raise ContactError(f"annulus limit must be finite: {limit!r}")
+            if inward not in (1.0, -1.0):
                 raise ContactError(
-                    f"annulus limit must be finite and nonzero: {limit!r} —— "
-                    "**符号即哪一片法兰**，零号法兰没有朝向"
+                    f"annulus inward must be exactly +1.0 or -1.0: {inward!r} —— "
+                    "**朝向是一条声明，不是从limit的符号推出来的**"
+                    "（那条推断在几何平移过原点时失效，见类docstring）"
                 )
             if not math.isfinite(offset):
                 raise ContactError(f"edge offset must be finite: {offset!r}")
@@ -1855,7 +1873,7 @@ class PenaltyAnnulusLimit:
                 raise ContactError(f"penalty stiffness must be positive: {stiffness!r}")
 
     def node_index_bound(self) -> int:
-        return max(node for node, _, _, _, _, _, _, _ in self.faces) + 1
+        return max(node for node, _, _, _, _, _, _, _, _ in self.faces) + 1
 
     @staticmethod
     def _frame(
@@ -1864,6 +1882,7 @@ class PenaltyAnnulusLimit:
         point: tuple[float, float, float],
         axis: tuple[float, float, float],
         limit: float,
+        inward: float,
         offset: float,
     ) -> tuple[float, float, float]:
         """返回``(间隙g, 边缘轴向坐标s_e, 径向距离ρ)``。
@@ -1878,8 +1897,7 @@ class PenaltyAnnulusLimit:
         radial = tuple(delta[component] - axial * axis[component] for component in range(3))
         distance = math.sqrt(sum(component * component for component in radial))
         edge_axial = axial + offset
-        sign = 1.0 if limit > 0.0 else -1.0
-        return sign * (limit - edge_axial), edge_axial, distance
+        return inward * (limit - edge_axial), edge_axial, distance
 
     @staticmethod
     def _is_active(gap: float, distance: float, inner: float, outer: float) -> bool:
@@ -1889,19 +1907,19 @@ class PenaltyAnnulusLimit:
 
     def energy(self, state: State, context: EnergyContext) -> float:
         total = 0.0
-        for node, point, axis, inner, outer, limit, offset, stiffness in self.faces:
-            gap, _, distance = self._frame(state.vector, node, point, axis, limit, offset)
+        for node, point, axis, inner, outer, limit, inward, offset, stiffness in self.faces:
+            gap, _, distance = self._frame(state.vector, node, point, axis, limit, inward, offset)
             if self._is_active(gap, distance, inner, outer):
                 total += 0.5 * stiffness * gap * gap
         return total
 
     def gradient(self, state: State, context: EnergyContext) -> Vector:
         result = [0.0] * len(state.vector)
-        for node, point, axis, inner, outer, limit, offset, stiffness in self.faces:
-            gap, _, distance = self._frame(state.vector, node, point, axis, limit, offset)
+        for node, point, axis, inner, outer, limit, inward, offset, stiffness in self.faces:
+            gap, _, distance = self._frame(state.vector, node, point, axis, limit, inward, offset)
             if self._is_active(gap, distance, inner, outer):
                 #: ``∂g/∂x = −sign(limit)·a``，故``∇U = k·g·(−sign·a)``。
-                scale = -stiffness * gap * (1.0 if limit > 0.0 else -1.0)
+                scale = -stiffness * gap * inward
                 base = 3 * node
                 for component in range(3):
                     result[base + component] += scale * axis[component]
@@ -1920,8 +1938,8 @@ class PenaltyAnnulusLimit:
         """``k·(a ⊗ a)``，仅活动。**没有几何刚度**——``g``是位置的线性函数。"""
 
         entries: list[tuple[int, int, float]] = []
-        for node, point, axis, inner, outer, limit, offset, stiffness in self.faces:
-            gap, _, distance = self._frame(state.vector, node, point, axis, limit, offset)
+        for node, point, axis, inner, outer, limit, inward, offset, stiffness in self.faces:
+            gap, _, distance = self._frame(state.vector, node, point, axis, limit, inward, offset)
             if not self._is_active(gap, distance, inner, outer):
                 continue
             base = 3 * node
@@ -1936,12 +1954,12 @@ class PenaltyAnnulusLimit:
         vector = state.vector
         total = 0.0
         gradient = [0.0] * len(vector) if need_gradient else None
-        for node, point, axis, inner, outer, limit, offset, stiffness in self.faces:
-            gap, _, distance = self._frame(vector, node, point, axis, limit, offset)
+        for node, point, axis, inner, outer, limit, inward, offset, stiffness in self.faces:
+            gap, _, distance = self._frame(vector, node, point, axis, limit, inward, offset)
             if self._is_active(gap, distance, inner, outer):
                 total += 0.5 * stiffness * gap * gap
                 if gradient is not None:
-                    scale = -stiffness * gap * (1.0 if limit > 0.0 else -1.0)
+                    scale = -stiffness * gap * inward
                     base = 3 * node
                     for component in range(3):
                         gradient[base + component] += scale * axis[component]
@@ -1959,8 +1977,8 @@ class PenaltyAnnulusLimit:
         """
 
         forces = []
-        for node, point, axis, inner, outer, limit, offset, stiffness in self.faces:
-            gap, _, distance = self._frame(state.vector, node, point, axis, limit, offset)
+        for node, point, axis, inner, outer, limit, inward, offset, stiffness in self.faces:
+            gap, _, distance = self._frame(state.vector, node, point, axis, limit, inward, offset)
             forces.append(
                 stiffness * -gap if self._is_active(gap, distance, inner, outer) else 0.0
             )
@@ -1974,16 +1992,16 @@ class PenaltyAnnulusLimit:
         """
 
         return tuple(
-            self._frame(state.vector, node, point, axis, limit, offset)[0]
-            for node, point, axis, _, _, limit, offset, _ in self.faces
+            self._frame(state.vector, node, point, axis, limit, inward, offset)[0]
+            for node, point, axis, _, _, limit, inward, offset, _ in self.faces
         )
 
     def radial_distance_mm(self, state: State) -> tuple[float, ...]:
         """每个限位面上边缘点的``ρ``。环带边界上力会跳，门要看得见它在哪。"""
 
         return tuple(
-            self._frame(state.vector, node, point, axis, limit, offset)[2]
-            for node, point, axis, _, _, limit, offset, _ in self.faces
+            self._frame(state.vector, node, point, axis, limit, inward, offset)[2]
+            for node, point, axis, _, _, limit, inward, offset, _ in self.faces
         )
 
 

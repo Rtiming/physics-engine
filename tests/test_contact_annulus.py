@@ -6,7 +6,7 @@
 |---|---|---|
 | `PenaltyNormalContact`（半空间） | `(x−p)·n − r`，**线性** | `k·(n⊗n)` |
 | `PenaltyCylinderContact`（圆柱侧面） | `ρ − R`，**非线性** | `k·(n⊗n) + (kg/ρ)(t⊗t)` |
-| `PenaltyAnnulusLimit`（本项） | `sign(L)(L − s_e)`，**线性** | `k·(a⊗a)`，**没有几何刚度** |
+| `PenaltyAnnulusLimit`（本项） | `inward·(L − s_e)`，**线性** | `k·(a⊗a)`，**没有几何刚度** |
 
 **别照抄圆柱那一项的Hessian**——本项的间隙是位置的线性函数，二阶导恰为零。
 有一条门判它。
@@ -78,10 +78,10 @@ def _flanges(
 
     return PenaltyAnnulusLimit(
         faces=(
-            (0, ORIGIN, axis, inner, outer, CHANNEL_HALF_WIDTH_MM, TAPE_HALF_WIDTH_MM,
-             stiffness),
-            (0, ORIGIN, axis, inner, outer, -CHANNEL_HALF_WIDTH_MM, -TAPE_HALF_WIDTH_MM,
-             stiffness),
+            (0, ORIGIN, axis, inner, outer, CHANNEL_HALF_WIDTH_MM, 1.0,
+             TAPE_HALF_WIDTH_MM, stiffness),
+            (0, ORIGIN, axis, inner, outer, -CHANNEL_HALF_WIDTH_MM, -1.0,
+             -TAPE_HALF_WIDTH_MM, stiffness),
         )
     )
 
@@ -168,8 +168,8 @@ def test_ignoring_the_edge_offset_moves_the_threshold_by_half_the_tape_width():
     term = _flanges()
     centreline = PenaltyAnnulusLimit(
         faces=tuple(
-            (node, point, axis, inner, outer, limit, 0.0, stiffness)
-            for node, point, axis, inner, outer, limit, _, stiffness in term.faces
+            (node, point, axis, inner, outer, limit, inward, 0.0, stiffness)
+            for node, point, axis, inner, outer, limit, inward, _, stiffness in term.faces
         )
     )
     for offset in (6.6, 7.5, 8.4):
@@ -395,14 +395,16 @@ def test_the_gradient_pushes_the_edge_back_into_the_channel():
 @pytest.mark.parametrize(
     ("face", "message"),
     [
-        ((0, ORIGIN, AXIS_Z, 60.0, 75.0, 0.0, 2.0, 1.0), "nonzero"),
-        ((0, ORIGIN, AXIS_Z, 75.0, 60.0, 8.5, 2.0, 1.0), "outer radius must exceed"),
-        ((0, ORIGIN, AXIS_Z, 60.0, 60.0, 8.5, 2.0, 1.0), "outer radius must exceed"),
-        ((0, ORIGIN, (0.0, 0.0, 2.0), 60.0, 75.0, 8.5, 2.0, 1.0), "unit vector"),
-        ((0, ORIGIN, AXIS_Z, -1.0, 75.0, 8.5, 2.0, 1.0), "inner radius"),
-        ((0, ORIGIN, AXIS_Z, 60.0, 75.0, 8.5, 2.0, 0.0), "stiffness must be"),
-        ((-1, ORIGIN, AXIS_Z, 60.0, 75.0, 8.5, 2.0, 1.0), "nonnegative int"),
-        ((0, ORIGIN, AXIS_Z, 60.0, 75.0, 8.5, float("nan"), 1.0), "edge offset"),
+        ((0, ORIGIN, AXIS_Z, 60.0, 75.0, 8.5, 0.0, 2.0, 1.0), "inward must be exactly"),
+        ((0, ORIGIN, AXIS_Z, 60.0, 75.0, 8.5, 2.0, 2.0, 1.0), "inward must be exactly"),
+        ((0, ORIGIN, AXIS_Z, 60.0, 75.0, float("nan"), 1.0, 2.0, 1.0), "limit must be finite"),
+        ((0, ORIGIN, AXIS_Z, 75.0, 60.0, 8.5, 1.0, 2.0, 1.0), "outer radius must exceed"),
+        ((0, ORIGIN, AXIS_Z, 60.0, 60.0, 8.5, 1.0, 2.0, 1.0), "outer radius must exceed"),
+        ((0, ORIGIN, (0.0, 0.0, 2.0), 60.0, 75.0, 8.5, 1.0, 2.0, 1.0), "unit vector"),
+        ((0, ORIGIN, AXIS_Z, -1.0, 75.0, 8.5, 1.0, 2.0, 1.0), "inner radius"),
+        ((0, ORIGIN, AXIS_Z, 60.0, 75.0, 8.5, 1.0, 2.0, 0.0), "stiffness must be"),
+        ((-1, ORIGIN, AXIS_Z, 60.0, 75.0, 8.5, 1.0, 2.0, 1.0), "nonnegative int"),
+        ((0, ORIGIN, AXIS_Z, 60.0, 75.0, 8.5, 1.0, float("nan"), 1.0), "edge offset"),
     ],
 )
 def test_malformed_faces_fail_closed(face, message):
@@ -420,26 +422,81 @@ def test_the_mutation_matrix_is_measured():
 
     | 注错 | 红掉 |
     |---|---|
-    | 单边写成双边（``abs(g)``） | 20 |
-    | 边缘偏移被忽略（拿中心线判蹭边） | 18 |
-    | 限位符号写反（``limit − s``不带``sign``） | 17 |
+    | 单边写成双边（``abs(g)``） | 21 |
+    | 边缘偏移被忽略（拿中心线判蹭边） | 19 |
     | Hessian照抄圆柱的几何刚度 | 3 |
     | 环带判据丢掉（法兰变成无限大圆盘） | 2 |
     | 环带边界写成开区间 | 2 |
+    | **朝向从``limit``的符号推出来**（横动过原点即失效） | **1** |
     | 能量漏掉``½`` | 1 |
 
-    **七条全被抓到，最低一条。**
+    **七条全被抓到，最低一条。** 前两行红得多，是因为它们改掉了**间隙本身**，
+    而本文件几乎每条门都读间隙。要紧的是红得少的那四行：
 
-    前三行红得多，是因为它们都改掉了**间隙本身**，而本文件几乎每条门都读间隙。
-    要紧的是最后四行——它们各自只被两三条门抓住：
-
+    * **朝向从``limit``符号推出来只红1条**，而那一条
+      （`test_a_traversed_channel_keeps_both_faces_pointing_the_right_way`）
+      **是端到端装配跑出来之后才补的**。在它之前这条注错**红0条**——
+      本文件所有构型的槽心都在原点，那里位置的符号与朝向恒等。
+      **只有端到端才发现得了它**；
     * **Hessian照抄圆柱的几何刚度**只红3条。梯度照样对、平衡点照样对，
-      只有`test_the_hessian_is_exactly_the_axis_outer_product`与有限差分那条看得见。
-      这与`test_contact_cylinder.py`里"照抄球-球的几何刚度"是**同一个形态的反向**：
-      那边是该有而抄漏了一维，这边是不该有而抄多了两维；
-    * **能量漏掉``½``只红1条**——因为力与阈值判据都只看梯度，
-      而梯度里那个``½``已经被求导吃掉了。**唯一看得见它的是判能量值的那条门**。
+      与`test_contact_cylinder.py`里"照抄球-球的几何刚度"是同一形态的反向；
+    * **能量漏掉``½``只红1条**——力与阈值判据都只看梯度，
+      而``½``已被求导吃掉，唯一看得见它的是判能量值的那条门。
 
     本条只承载这张表，不做断言——数字的证据是实测脚本，
     与`test_contact_cylinder.py`同一形制。
     """
+
+
+def test_a_traversed_channel_keeps_both_faces_pointing_the_right_way():
+    """**这一条就是2026-08-17端到端跑出来的那个bug。**
+
+    第一版把朝向编码在``limit``的**符号**里。收线盘排线横动到9 mm时，
+    下侧法兰的位置变成``9 − 8.5 = +0.5``——**符号翻了**，那一片被当成上侧法兰，
+    于是判据方向反了、**蹭边力凭空归零**：横动7 mm与8 mm都算得出2.46 N与7.44 N，
+    唯独9 mm给0。
+
+    病根是**位置的符号与朝向是两件事**，只在槽心恰好在原点时才碰巧一致。
+    单元门里的构型永远是槽心在原点的，**所以只有端到端装配发现得了它**。
+
+    本门把槽心横动到9 mm（整条槽``[0.5, 17.5]``都在正半轴），
+    逐点判两片法兰各自朝向正确。
+    """
+
+    traverse = 9.0
+    term = PenaltyAnnulusLimit(
+        faces=(
+            (0, ORIGIN, AXIS_Z, 0.0, FLANGE_OUTER_MM,
+             traverse + CHANNEL_HALF_WIDTH_MM, 1.0, TAPE_HALF_WIDTH_MM,
+             STIFFNESS_N_PER_MM),
+            (0, ORIGIN, AXIS_Z, 0.0, FLANGE_OUTER_MM,
+             traverse - CHANNEL_HALF_WIDTH_MM, -1.0, -TAPE_HALF_WIDTH_MM,
+             STIFFNESS_N_PER_MM),
+        )
+    )
+    #: 槽中心在9.0，带材可待的区间是``[9−6.5, 9+6.5] = [2.5, 15.5]``。
+    low_bound = traverse - HALF_CLEARANCE_MM
+    high_bound = traverse + HALF_CLEARANCE_MM
+    assert low_bound == 2.5 and high_bound == 15.5
+
+    for inside in (2.5, 9.0, 15.5):
+        assert term.rub_force_n(_state((60.0, 0.0, inside))) == (0.0, 0.0), (
+            f"z={inside}在槽内却报了蹭边力"
+        )
+    #: 低于下界 → **下侧**那片出力；高于上界 → **上侧**那片。
+    low = term.rub_force_n(_state((60.0, 0.0, low_bound - 0.5)))
+    assert low[0] == 0.0 and low[1] == pytest.approx(0.5 * STIFFNESS_N_PER_MM)
+    high = term.rub_force_n(_state((60.0, 0.0, high_bound + 0.5)))
+    assert high[0] == pytest.approx(0.5 * STIFFNESS_N_PER_MM) and high[1] == 0.0
+
+    #: **旧写法在这里给零**——把朝向从limit符号推出来，两片都变成"朝下"。
+    inferred = PenaltyAnnulusLimit(
+        faces=tuple(
+            (node, point, axis, inner, outer, limit,
+             1.0 if limit > 0.0 else -1.0, offset, stiffness)
+            for node, point, axis, inner, outer, limit, _, offset, stiffness in term.faces
+        )
+    )
+    assert inferred.rub_force_n(_state((60.0, 0.0, low_bound - 0.5))) == (0.0, 0.0), (
+        "旧写法在横动过原点的槽上不再给零——那本门记的病根就要重写"
+    )

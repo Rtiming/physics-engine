@@ -505,11 +505,16 @@
         {
           "id": "S6.7",
           "label": "端到端跑通一次（放线→导向→张力→收线，含各轮偏移）",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": true,
-          "evidence": [],
-          "why": "这是场景⑥本身，也是plans/05第一节那句「端到端能跑通的是零」的度量点。",
-          "missing": "前六位里有一位未做（S6.7自己）、四位partial、两位done。这条场景把spec/10六接口里的五个同时用上（Scene/MotionSource/Actuator/Sensor/CollisionQuery）。**2026-08-17审计新增三条不落在任何单一位上的缺漏**（0062轨道乙的副产物）：① **传感器位置≠被控点**——它是装配属性不是某一位的能力，而实测它是这条链路上最大的单一误差源（90°包角给+60.2%）；② **真机是双执行器**——ED3L伺服（CSP位置模式）定线速、POC磁粉离合器定张力，而S6.3只表达了后者；③ **多轮路由**——R4→R3→R2→R1加两只竖直可调小导轮再到`entry_boundary`，`PenaltyCylinderContact`已能表达多圆柱，缺的是哪个节点贴哪只轮、包多少角这层装配。**这三条不改42这个分母**（0057已冻结每场景位数），登记在plans/13第六节，并入0056那笔『主分母42没有外部锚』的账。"
+          "evidence": [
+            "case:winding_line_endtoend",
+            "test:tests/cases/test_winding_line_endtoend.py::test_the_lay_point_tension_is_the_payout_times_the_capstan_ratio",
+            "test:tests/cases/test_winding_line_endtoend.py::test_the_rub_force_is_the_lateral_component_of_the_tension",
+            "test:tests/cases/test_winding_line_endtoend.py::test_the_tape_stays_clear_until_the_traverse_exceeds_the_half_clearance"
+          ],
+          "why": "这是场景⑥本身，也是plans/05第一节那句『端到端能跑通的是零』的度量点。0062丙2已把四件事装在一条链路上跑一次：放线端张力（力边界条件）＋导向轮罚接触与多槽位库仑摩擦＋收线端位移控制＋排线横动把带材边缘顶上法兰内环面。**混合控制照真机来**——力在放线端（磁粉离合器）、位移在收线端（伺服卷走）。四条闭式全中：放线端轴力＝外载；落位点/放线端＝`exp(μθ)`（480步实测1.604693、偏差1.695e-3）；半间隙6.5mm阈值两侧零容差；蹭边力＝`T·δ/L`（7mm与8mm两档实测差0.11%）。**它还跑出了`PenaltyAnnulusLimit`的一个真bug**：法兰朝向原先从限位坐标的符号推出来，收线盘横动过原点时符号翻了、蹭边力凭空归零——单元门里槽心恒在原点，只有端到端发现得了。",
+          "missing": "**这一位是partial，场景⑥因此仍未完成，主分母仍0/6**——七位里S6.3/S6.4/S6.5/S6.6都是partial。本案例只有**一只**导轮，不是R4→R3→R2→R1加两只活动小导轮；没有放线盘转动、没有伺服、没有KUKA；**控制回路与准静态平衡分离处理**（张力取稳态值当力边界条件，不做同步耦合）；带材是固定长度的一段，**没有喂料、没有匝数增长、没有半径生长、没有匝间接触**（S5.4/S5.2）；带材只有`AxialStretch`、**没有弯曲刚度**，落位点的横向平衡是一根张紧的弦不是一根梁；`Scene`与`CollisionQuery`两个接口没有进这条回路（接触对是声明的不是检测的）。**2026-08-17审计的三条不落在任何单一位上的缺漏**（传感器位置≠被控点、真机双执行器、多轮路由）见plans/13第六节；它们不改42这个分母。"
         }
       ]
     }

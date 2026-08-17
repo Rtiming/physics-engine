@@ -1,0 +1,109 @@
+{
+  "arrays": {},
+  "case_id": "case/winding_line_endtoend",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/winding_line_endtoend",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/winding_line_endtoend/generate_oracle.py",
+    "sha256": "a94fb7c891e1521122221936428daf56a25d01066a016716a640214324f249bb"
+  },
+  "load_tier": "local_batch",
+  "manifest_self_sha256": "69bca4d115d46804d83b7921d854c85c6c1855408a6ffcf116a7a36115ecbcdc",
+  "oracles": [
+    {
+      "expected": {
+        "payout_tension_n": 30.0
+      },
+      "id": "oracle:line/payout_tension_is_the_boundary_condition",
+      "inputs": {
+        "kind": "applied_load",
+        "tension_n": 30.0
+      },
+      "tolerances": {
+        "payout_tension_n": {
+          "abs": 0.0,
+          "reason": "它是**力边界条件**不是解出来的量：外载多大，第一段的轴力就多大。相对1e-9只留给准静态残差，**不留给建模误差**——这一条红了说明装配里有一段力丢了或乘错了",
+          "rel": 1e-09
+        }
+      }
+    },
+    {
+      "expected": {
+        "capstan_ratio": 1.6019776512823565,
+        "lay_point_tension_n": 48.05932953847069
+      },
+      "id": "oracle:line/lay_point_tension_over_payout",
+      "inputs": {
+        "friction_coefficient": 0.3,
+        "kind": "euler_eytelwein_along_the_line",
+        "wrap_angle_rad": 1.5707963267948966
+      },
+      "tolerances": {
+        "capstan_ratio": {
+          "abs": 0.0,
+          "reason": "``exp``的双精度求值",
+          "rel": 1e-15
+        },
+        "lay_point_tension_n": {
+          "abs": 0.0,
+          "reason": "引擎侧是位移控制的收线连续化到全滑移，**误差随收线步数下降**。480步实测比值1.604693、相对偏差1.695e-3，取约3.5倍余量。**这一条同时是本轮审计缺漏A的落点**：传感器在放线端读30 N，而落位点上是48 N——闭环调的是它测到的量",
+          "rel": 0.006
+        }
+      }
+    },
+    {
+      "expected": {
+        "half_clearance_mm": 6.5
+      },
+      "id": "oracle:line/half_clearance",
+      "inputs": {
+        "channel_half_width_mm": 8.5,
+        "kind": "channel_minus_tape",
+        "tape_half_width_mm": 2.0
+      },
+      "tolerances": {
+        "half_clearance_mm": {
+          "abs": 0.0,
+          "reason": "**零容差**：它是两个声明尺寸的差，没有任何数值过程参与。排线横动不到6.5 mm就一点蹭边力都没有，超过就有——阈值两侧定性相反，与`incline_slide_threshold`同口径",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "free_span_mm": 9.80171403295606,
+        "overshoot_at_eight_mm": 1.5,
+        "overshoot_at_seven_mm": 0.5
+      },
+      "id": "oracle:line/rub_force_scales_with_tension",
+      "inputs": {
+        "free_span_mm": 9.80171403295606,
+        "kind": "lateral_component_of_tension",
+        "traverse_mm": [
+          7.0,
+          8.0
+        ]
+      },
+      "tolerances": {
+        "free_span_mm": {
+          "abs": 0.0,
+          "reason": "弦长闭式，纯几何",
+          "rel": 1e-15
+        },
+        "overshoot_at_eight_mm": {
+          "abs": 0.0,
+          "reason": "同上",
+          "rel": 1e-15
+        },
+        "overshoot_at_seven_mm": {
+          "abs": 0.0,
+          "reason": "两个声明尺寸的差",
+          "rel": 1e-15
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
