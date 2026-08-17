@@ -11,8 +11,8 @@ rtime的**物理引擎**：多域物理（力学、光学、电磁，将来热�
 `benchmarks/engine_budgets.baseline.json`，有门守着陈旧度，不在README复制易漂移墙钟）、
 功能操作不因宿主负载拒绝或变形、零设施假设是承诺。
 **wheel体积随版本记账不写死数**（正本`benchmarks/engine_budgets.baseline.json`）：
-0.5.0实测193066字节；0.6.0正式wheel的体积与SHA随发布提交记入同一账本。此前写的
-"30KB离线装"在0.5.0已经不成立，见spec/13第一条。
+0.5.0实测193066、0.6.0实测248306、**0.7.0实测274678字节**（连续构建两次SHA一致，
+48个条目全是源码、无夹带数据）。此前写的"30KB离线装"在0.5.0已经不成立，见spec/13第一条。
 
 目标模块图与各能力现居地见[docs/spec/01_模块地图与域划分_v0.md](docs/spec/01_模块地图与域划分_v0.md)。
 仓内依赖图与产品级工程设计/计算平台拓扑要同时看：入口见
@@ -173,7 +173,7 @@ WDS随后在R25固定材料顶点完成逐纤维塑性history事务，再完成�
 | 0 | 建仓、章程、统一接口规范总纲v0、远程与包骨架 | 2026-08-04完成 |
 | 1 | 规范逐轴冻结——七轴全部v1.0：轴1版本冻结制、轴2稳定ID与单位量、轴3内容寻址、轴4 run package布局与生命周期、轴5原子发布与严格复读、轴6验收预算与元门禁、轴7 oracle纪律 | **2026-08-04完成** |
 | 2 | 新代码先行：M-E1契约基座、M-E2溯源/run package、M-E3首轮形状/碰撞/场景/运动/执行器/传感接口均已落地；当前不再按旧M-E编号猜下一手，而以plans/09→plans/08阶段1的真实场景主线为准 | **进行中** |
-| 3 | 存量迁移：消费方把既有引擎层改为依赖本仓，各自附逐字节不变证据；操作单在`docs/migration/` | **进行中**——`winding-deviation-sim`已推进到正式0.6.0的线弹性、塑性history与轴向—弯曲N/M三个单站身份（main `bef42882...`），但轴3—轴7、其余契约/storage与完整力学域仍未迁移；`fts-digital-twin`闸门0已过（其ADR 0036）但引擎层未切换。逐行事实以[spec/90消费方登记](docs/spec/90_消费方登记.md)为正本 |
+| 3 | 存量迁移：消费方把既有引擎层改为依赖本仓，各自附逐字节不变证据；操作单在`docs/migration/` | **进行中**——`winding-deviation-sim`已推进到正式0.6.0的线弹性、塑性history与轴向—弯曲N/M三个单站身份（main `bef42882...`）；**0.7.0已发但WDS尚未采纳**（绕线机端到端主线的能力全在0.7.0里，消费侧切换要走其冻结diff→重签回执→全量门禁），轴3—轴7、其余契约/storage与完整力学域仍未迁移；`fts-digital-twin`闸门0已过（其ADR 0036）但引擎层未切换。逐行事实以[spec/90消费方登记](docs/spec/90_消费方登记.md)为正本 |
 
 ## 消费方采纳的治理前提
 
@@ -186,7 +186,7 @@ WDS随后在R25固定材料顶点完成逐纤维塑性history事务，再完成�
 
 ```bash
 git clone ts-orangepi:wheelhouse.git ~/wheelhouse   # 每台机器一次，更新=git pull
-uv add "physics-engine==0.6.0" --find-links ~/wheelhouse
+uv add "physics-engine==0.7.0" --find-links ~/wheelhouse
 ```
 
 上面是**最新已发布版**。已发布版本在wheelhouse中永久共存；更新依赖时仍须钉精确版本
@@ -217,7 +217,7 @@ patch只含兼容修复且不回port；消费方钉精确版本、经自己门�
 ```python
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["physics-engine==0.6.0"]
+# dependencies = ["physics-engine==0.7.0"]
 # ///
 ```
 
