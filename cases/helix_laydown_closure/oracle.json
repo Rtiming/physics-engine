@@ -1,0 +1,316 @@
+{
+  "arrays": {},
+  "case_id": "case/helix_laydown_closure",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/helix_laydown_closure",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/helix_laydown_closure/generate_oracle.py",
+    "sha256": "18b0c915a4d18edbd26eb7179f806d016e918f78bb43d153a6cf14d5de70b5c5"
+  },
+  "load_tier": "local_batch",
+  "manifest_self_sha256": "2caf44ff88d8aa8dbf08dabf0a062a3ce1eabd00b05e0d3620afbfc8efcb707e",
+  "oracles": [
+    {
+      "expected": {
+        "arc_per_turn_mm": 408.4070449666731,
+        "curvature_per_mm": 0.014201183431952662,
+        "helix_scale_mm": 65.0,
+        "required_feed_rate_mm_s": 52.0,
+        "torsion_per_mm": 0.005917159763313609,
+        "triad_spin_rad_s": 0.4
+      },
+      "id": "oracle:laydown/helix_kinematics",
+      "inputs": {
+        "feed_rate_mm_s": 52.0,
+        "kind": "circular_helix",
+        "pitch_mm_per_rad": 25.0,
+        "radius_mm": 60.0,
+        "spin_rad_s": 0.4
+      },
+      "tolerances": {
+        "arc_per_turn_mm": {
+          "abs": 0.0,
+          "reason": "``2πa = 408.4 mm``。真实工件每匝850—1966 mm，本档偏短，**因为它验的是几何层不是工件本身**",
+          "rel": 1e-15
+        },
+        "curvature_per_mm": {
+          "abs": 0.0,
+          "reason": "``κ = R/a²``，闭式；螺旋线上κ与τ都是常数，与弧长无关",
+          "rel": 1e-15
+        },
+        "helix_scale_mm": {
+          "abs": 0.0,
+          "reason": "``sqrt(60² + 25²) = 65``是精确整数，闭式自洽",
+          "rel": 1e-15
+        },
+        "required_feed_rate_mm_s": {
+          "abs": 1e-06,
+          "reason": "``dσ_pose/dt``由**位姿**独立算出，闭式是``u = 2aω``。引擎侧走离散中心线上的最近点搜索再差分，实测（Hermite＋2步细化、512站点/匝、中心差分h=1e-3 s）最大偏差**2.03e-09 mm/s**；1e-6是其五百倍余量。**收敛阶另有一条门判**",
+          "rel": 0.0
+        },
+        "torsion_per_mm": {
+          "abs": 0.0,
+          "reason": "``τ = p/a²``，闭式。折成0.339 °/mm，落在真实工件0.454—6.648 °/mm（plans/14第2.2节）的下沿——**量级对得上，但这是设定不是实测**",
+          "rel": 1e-15
+        },
+        "triad_spin_rad_s": {
+          "abs": 0.0,
+          "reason": "世界系三标架的转速``u/a − ω``。**这个数不为零是刻意的**：取``u = aω``会让三标架恒定（螺旋对称），入射角退化成常数",
+          "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "in_plane_rad_at_t0p5": 0.007199106960416824,
+        "in_plane_rad_at_t1p5": 0.07272507727562308,
+        "in_plane_rad_at_t2p5": 0.26212370884710134,
+        "in_plane_rad_at_t3p5": 0.78868896468291,
+        "incidence_rad_at_t0p5": 0.18456971575848102,
+        "incidence_rad_at_t1p5": 0.5525792597158726,
+        "incidence_rad_at_t2p5": 0.9168731431520053,
+        "incidence_rad_at_t3p5": 1.273691540666617,
+        "out_of_plane_rad_at_t0p5": 0.1844308591368703,
+        "out_of_plane_rad_at_t1p5": 0.5482663171042323,
+        "out_of_plane_rad_at_t2p5": 0.8894769821200437,
+        "out_of_plane_rad_at_t3p5": 1.1424308125873783
+      },
+      "id": "oracle:laydown/incidence_over_time",
+      "inputs": {
+        "entry_point_mm": [
+          1126.0,
+          0.0,
+          300.0
+        ],
+        "free_span_direction": "落位点在t=0处的世界系切向（无折角）",
+        "free_span_length_mm": 200.0,
+        "kind": "incidence_against_a_fixed_free_span",
+        "sample_times_s": [
+          0.5,
+          1.5,
+          2.5,
+          3.5
+        ]
+      },
+      "tolerances": {
+        "in_plane_rad_at_t0p5": {
+          "abs": 1e-05,
+          "reason": "闭式``cos θ_inc = (R² cos φ + p²)/a²``（φ = (u/a − ω)t）。引擎侧的偏差**全部来自中心线帧的插值**，位置那一路早就到1e-9量级了。512站点/匝实测最大绝对偏差逐量不同：总角6.7e-07、离面2.1e-08、**槽面内方位6.7e-06** rad。方位角那一路最差，因为它是两个大量之差（``(Rp/a²)(1 − cos φ)``在小φ处只有7e-03 rad），**相对判据在它身上没有意义**——所以abs给到1e-5、rel 3e-4只对大角那几档起作用。**先量后写。**",
+          "rel": 0.0003
+        },
+        "in_plane_rad_at_t1p5": {
+          "abs": 1e-05,
+          "reason": "闭式``cos θ_inc = (R² cos φ + p²)/a²``（φ = (u/a − ω)t）。引擎侧的偏差**全部来自中心线帧的插值**，位置那一路早就到1e-9量级了。512站点/匝实测最大绝对偏差逐量不同：总角6.7e-07、离面2.1e-08、**槽面内方位6.7e-06** rad。方位角那一路最差，因为它是两个大量之差（``(Rp/a²)(1 − cos φ)``在小φ处只有7e-03 rad），**相对判据在它身上没有意义**——所以abs给到1e-5、rel 3e-4只对大角那几档起作用。**先量后写。**",
+          "rel": 0.0003
+        },
+        "in_plane_rad_at_t2p5": {
+          "abs": 1e-05,
+          "reason": "闭式``cos θ_inc = (R² cos φ + p²)/a²``（φ = (u/a − ω)t）。引擎侧的偏差**全部来自中心线帧的插值**，位置那一路早就到1e-9量级了。512站点/匝实测最大绝对偏差逐量不同：总角6.7e-07、离面2.1e-08、**槽面内方位6.7e-06** rad。方位角那一路最差，因为它是两个大量之差（``(Rp/a²)(1 − cos φ)``在小φ处只有7e-03 rad），**相对判据在它身上没有意义**——所以abs给到1e-5、rel 3e-4只对大角那几档起作用。**先量后写。**",
+          "rel": 0.0003
+        },
+        "in_plane_rad_at_t3p5": {
+          "abs": 1e-05,
+          "reason": "闭式``cos θ_inc = (R² cos φ + p²)/a²``（φ = (u/a − ω)t）。引擎侧的偏差**全部来自中心线帧的插值**，位置那一路早就到1e-9量级了。512站点/匝实测最大绝对偏差逐量不同：总角6.7e-07、离面2.1e-08、**槽面内方位6.7e-06** rad。方位角那一路最差，因为它是两个大量之差（``(Rp/a²)(1 − cos φ)``在小φ处只有7e-03 rad），**相对判据在它身上没有意义**——所以abs给到1e-5、rel 3e-4只对大角那几档起作用。**先量后写。**",
+          "rel": 0.0003
+        },
+        "incidence_rad_at_t0p5": {
+          "abs": 1e-05,
+          "reason": "闭式``cos θ_inc = (R² cos φ + p²)/a²``（φ = (u/a − ω)t）。引擎侧的偏差**全部来自中心线帧的插值**，位置那一路早就到1e-9量级了。512站点/匝实测最大绝对偏差逐量不同：总角6.7e-07、离面2.1e-08、**槽面内方位6.7e-06** rad。方位角那一路最差，因为它是两个大量之差（``(Rp/a²)(1 − cos φ)``在小φ处只有7e-03 rad），**相对判据在它身上没有意义**——所以abs给到1e-5、rel 3e-4只对大角那几档起作用。**先量后写。**",
+          "rel": 0.0003
+        },
+        "incidence_rad_at_t1p5": {
+          "abs": 1e-05,
+          "reason": "闭式``cos θ_inc = (R² cos φ + p²)/a²``（φ = (u/a − ω)t）。引擎侧的偏差**全部来自中心线帧的插值**，位置那一路早就到1e-9量级了。512站点/匝实测最大绝对偏差逐量不同：总角6.7e-07、离面2.1e-08、**槽面内方位6.7e-06** rad。方位角那一路最差，因为它是两个大量之差（``(Rp/a²)(1 − cos φ)``在小φ处只有7e-03 rad），**相对判据在它身上没有意义**——所以abs给到1e-5、rel 3e-4只对大角那几档起作用。**先量后写。**",
+          "rel": 0.0003
+        },
+        "incidence_rad_at_t2p5": {
+          "abs": 1e-05,
+          "reason": "闭式``cos θ_inc = (R² cos φ + p²)/a²``（φ = (u/a − ω)t）。引擎侧的偏差**全部来自中心线帧的插值**，位置那一路早就到1e-9量级了。512站点/匝实测最大绝对偏差逐量不同：总角6.7e-07、离面2.1e-08、**槽面内方位6.7e-06** rad。方位角那一路最差，因为它是两个大量之差（``(Rp/a²)(1 − cos φ)``在小φ处只有7e-03 rad），**相对判据在它身上没有意义**——所以abs给到1e-5、rel 3e-4只对大角那几档起作用。**先量后写。**",
+          "rel": 0.0003
+        },
+        "incidence_rad_at_t3p5": {
+          "abs": 1e-05,
+          "reason": "闭式``cos θ_inc = (R² cos φ + p²)/a²``（φ = (u/a − ω)t）。引擎侧的偏差**全部来自中心线帧的插值**，位置那一路早就到1e-9量级了。512站点/匝实测最大绝对偏差逐量不同：总角6.7e-07、离面2.1e-08、**槽面内方位6.7e-06** rad。方位角那一路最差，因为它是两个大量之差（``(Rp/a²)(1 − cos φ)``在小φ处只有7e-03 rad），**相对判据在它身上没有意义**——所以abs给到1e-5、rel 3e-4只对大角那几档起作用。**先量后写。**",
+          "rel": 0.0003
+        },
+        "out_of_plane_rad_at_t0p5": {
+          "abs": 1e-05,
+          "reason": "闭式``cos θ_inc = (R² cos φ + p²)/a²``（φ = (u/a − ω)t）。引擎侧的偏差**全部来自中心线帧的插值**，位置那一路早就到1e-9量级了。512站点/匝实测最大绝对偏差逐量不同：总角6.7e-07、离面2.1e-08、**槽面内方位6.7e-06** rad。方位角那一路最差，因为它是两个大量之差（``(Rp/a²)(1 − cos φ)``在小φ处只有7e-03 rad），**相对判据在它身上没有意义**——所以abs给到1e-5、rel 3e-4只对大角那几档起作用。**先量后写。**",
+          "rel": 0.0003
+        },
+        "out_of_plane_rad_at_t1p5": {
+          "abs": 1e-05,
+          "reason": "闭式``cos θ_inc = (R² cos φ + p²)/a²``（φ = (u/a − ω)t）。引擎侧的偏差**全部来自中心线帧的插值**，位置那一路早就到1e-9量级了。512站点/匝实测最大绝对偏差逐量不同：总角6.7e-07、离面2.1e-08、**槽面内方位6.7e-06** rad。方位角那一路最差，因为它是两个大量之差（``(Rp/a²)(1 − cos φ)``在小φ处只有7e-03 rad），**相对判据在它身上没有意义**——所以abs给到1e-5、rel 3e-4只对大角那几档起作用。**先量后写。**",
+          "rel": 0.0003
+        },
+        "out_of_plane_rad_at_t2p5": {
+          "abs": 1e-05,
+          "reason": "闭式``cos θ_inc = (R² cos φ + p²)/a²``（φ = (u/a − ω)t）。引擎侧的偏差**全部来自中心线帧的插值**，位置那一路早就到1e-9量级了。512站点/匝实测最大绝对偏差逐量不同：总角6.7e-07、离面2.1e-08、**槽面内方位6.7e-06** rad。方位角那一路最差，因为它是两个大量之差（``(Rp/a²)(1 − cos φ)``在小φ处只有7e-03 rad），**相对判据在它身上没有意义**——所以abs给到1e-5、rel 3e-4只对大角那几档起作用。**先量后写。**",
+          "rel": 0.0003
+        },
+        "out_of_plane_rad_at_t3p5": {
+          "abs": 1e-05,
+          "reason": "闭式``cos θ_inc = (R² cos φ + p²)/a²``（φ = (u/a − ω)t）。引擎侧的偏差**全部来自中心线帧的插值**，位置那一路早就到1e-9量级了。512站点/匝实测最大绝对偏差逐量不同：总角6.7e-07、离面2.1e-08、**槽面内方位6.7e-06** rad。方位角那一路最差，因为它是两个大量之差（``(Rp/a²)(1 − cos φ)``在小φ处只有7e-03 rad），**相对判据在它身上没有意义**——所以abs给到1e-5、rel 3e-4只对大角那几档起作用。**先量后写。**",
+          "rel": 0.0003
+        }
+      }
+    },
+    {
+      "expected": {
+        "across_normal_mm": 0.0034792563146868183,
+        "across_width_mm": 4.803725513963348e-06,
+        "along_tangent_mm": 0.6999884710587665,
+        "arc_gap_mm": 0.7,
+        "magnitude_mm": 0.6999971177531865,
+        "transverse_mm": 0.0034792596308793793
+      },
+      "id": "oracle:laydown/closure_from_a_drifted_feed_account",
+      "inputs": {
+        "drift_mm": 0.7,
+        "kind": "feed_account_origin_shifted",
+        "note": "位姿没动，只把送带账的原点挪了；病因是账不是臂"
+      },
+      "tolerances": {
+        "across_normal_mm": {
+          "abs": 0.0,
+          "reason": "``R(1 − cos δ)``，纯曲率效应，量级只有沿槽那份的1/200。实测rel 4.7e-06——这一路吃的是帧的角误差",
+          "rel": 0.0001
+        },
+        "across_width_mm": {
+          "abs": 0.0,
+          "reason": "``(Rp/a)(δ − sin δ)``，**三阶小量**，本档只有4.80e-06 mm。**512站点/匝根本判不了它**——实测相对偏差96%，因为残差(0.7 mm)乘上帧的角误差(约2e-06 rad)就已经和它同量级。所以本条**只在2048站点/匝那一档判**，实测相对偏差6.0e-02，rel 1e-1是其1.7倍余量。收敛实测：256/512/1024/2048/4096档相对偏差3.64/0.96/0.24/0.060/0.015——**二阶**。已知失效清单第2条登记了这一条",
+          "rel": 0.1
+        },
+        "along_tangent_mm": {
+          "abs": 0.0,
+          "reason": "``(R² sin δ + p² δ)/a``，**与θ无关**（螺旋线齐次）。实测rel 1.1e-10：投影方向几乎与残差平行，帧的角误差只以二阶进来。**这一份是送带账修得掉的**",
+          "rel": 1e-06
+        },
+        "arc_gap_mm": {
+          "abs": 1e-08,
+          "reason": "``σ_feed − σ_pose``**恰等于**挪动量``Δ``——512站点/匝实测4.4e-12，abs 1e-8是其两千倍余量",
+          "rel": 0.0
+        },
+        "magnitude_mm": {
+          "abs": 0.0,
+          "reason": "闭式弦长``sqrt(4R² sin²(δ/2) + p²δ²)``；512站点/匝实测rel **2.7e-11**（位置那一路是四阶）",
+          "rel": 1e-06
+        },
+        "transverse_mm": {
+          "abs": 0.0,
+          "reason": "横向合成，由``across_normal``主导。**这一份送带账修不掉**，但它只有0.0035 mm。实测rel 5.4e-06",
+          "rel": 0.0001
+        }
+      }
+    },
+    {
+      "expected": {
+        "across_normal_mm": -1.5,
+        "along_tangent_mm": 0.0,
+        "arc_gap_mm": 0.0,
+        "incidence_rad": 0.0,
+        "magnitude_mm": 1.5,
+        "pose_only_offset_mm": 1.5,
+        "transverse_mm": 1.5
+      },
+      "id": "oracle:laydown/closure_from_a_lifted_pose",
+      "inputs": {
+        "curvature_radius_mm": 70.41666666666667,
+        "kind": "entry_point_offset_along_the_groove_surface_normal",
+        "lift_mm": 1.5,
+        "note": "送带账没动，只把入带点沿槽面法向挪了；病因是臂不是账"
+      },
+      "tolerances": {
+        "across_normal_mm": {
+          "abs": 1e-07,
+          "reason": "带符号：落位点在入带点的**里侧**（残差指向曲线）。符号丢了就分不清'举高了'与'压低了'",
+          "rel": 0.0
+        },
+        "along_tangent_mm": {
+          "abs": 1e-06,
+          "reason": "**恰为零**：法向偏移在切向上没有分量。实测3.2e-08",
+          "rel": 0.0
+        },
+        "arc_gap_mm": {
+          "abs": 1e-06,
+          "reason": "**恰为零，这是本案例最要紧的一个数**：位姿把线圈举偏1.5 mm，而送带账一点问题都没有。报一个非零的弧长差就是把账算到了无辜的一方。实测1.6e-08，abs 1e-6是其六十倍余量",
+          "rel": 0.0
+        },
+        "incidence_rad": {
+          "abs": 1e-05,
+          "reason": "自由段仍沿落位点切向，举偏不改变方向，故入射角仍为零。实测2.6e-06——它吃的是帧插值那一路，不是举偏本身",
+          "rel": 0.0
+        },
+        "magnitude_mm": {
+          "abs": 1e-07,
+          "reason": "沿法向挪``δ_n``，残差模长恰为``δ_n``；512站点/匝实测5.2e-10，abs 1e-7是其两百倍余量",
+          "rel": 0.0
+        },
+        "pose_only_offset_mm": {
+          "abs": 1e-07,
+          "reason": "入带点到曲线本身的距离。``δ_n = 1.5``远小于曲率半径70.4 mm（余量47倍），所以最近点仍是原来那一点，**不会跳到别的圈上**",
+          "rel": 0.0
+        },
+        "transverse_mm": {
+          "abs": 1e-07,
+          "reason": "**全部落在横向**——与上一条oracle形成对照的那一半。实测5.2e-10",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "arc_per_turn_mm": 376.99111843077515,
+        "curvature_per_mm": 0.016666666666666666,
+        "incidence_rad": 0.0,
+        "required_feed_rate_mm_s": 24.0,
+        "torsion_per_mm": 0.0,
+        "triad_spin_rad_s": 0.0
+      },
+      "id": "oracle:laydown/plane_circle_degenerate",
+      "inputs": {
+        "feed_rate_mm_s": 24.0,
+        "kind": "plane_circle_closed_loop",
+        "pitch_mm_per_rad": 0.0,
+        "radius_mm": 60.0,
+        "spin_rad_s": 0.4,
+        "topology": "closed"
+      },
+      "tolerances": {
+        "arc_per_turn_mm": {
+          "abs": 0.0,
+          "reason": "``2πR``。它同时是闭合拓扑下弧长坐标回绕的模",
+          "rel": 1e-15
+        },
+        "curvature_per_mm": {
+          "abs": 0.0,
+          "reason": "``κ = 1/R``，闭式",
+          "rel": 1e-15
+        },
+        "incidence_rad": {
+          "abs": 1e-05,
+          "reason": "``u = Rω``让材料前进恰好抵消转动 ⟹ 世界系三标架恒定 ⟹ 入射角**恒为零**。实测最大2.4e-07 rad",
+          "rel": 0.0
+        },
+        "required_feed_rate_mm_s": {
+          "abs": 1e-05,
+          "reason": "``Rω``。**这一档任何实现都该算对**；实测偏差1.8e-08 mm/s，abs 1e-5留三个数量级余量",
+          "rel": 0.0
+        },
+        "torsion_per_mm": {
+          "abs": 1e-15,
+          "reason": "平面曲线挠率**恒为零**。引擎侧的可判形式是带宽方向恒为``(0, 0, 1)``——它不绕切向转",
+          "rel": 0.0
+        },
+        "triad_spin_rad_s": {
+          "abs": 1e-15,
+          "reason": "``u/R − ω = 0``。**这一档与螺旋线档的分水岭**：那边这个数是0.4，入射角随之变；这边是0，入射角不变",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
