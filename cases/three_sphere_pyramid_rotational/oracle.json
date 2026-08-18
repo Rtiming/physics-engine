@@ -1,0 +1,150 @@
+{
+  "arrays": {},
+  "case_id": "case/three_sphere_pyramid_rotational",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/three_sphere_pyramid_rotational",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/three_sphere_pyramid_rotational/generate_oracle.py",
+    "sha256": "a7f5c8f7c8eb0340e9c95872793c33a18f3f8d9b7c4f35a2c951e875945fbb21"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "8d0eda6f44575db78fa48f7a962f14dbf7d85e6436574d34cb16fdcadd505d51",
+  "oracles": [
+    {
+      "expected": {
+        "critical_friction": 0.2679491924311228,
+        "sphere_sphere_is_the_binding_contact": true
+      },
+      "id": "oracle:pyramid_rot/critical_friction",
+      "inputs": {
+        "gravity_mm_s2": 9810.0,
+        "kind": "three_sphere_pyramid_rotational_critical_friction",
+        "mass_kg": 1.5,
+        "radius_mm": 10.0,
+        "stiffness_n_per_mm": 2000000.0
+      },
+      "tolerances": {
+        "critical_friction": {
+          "abs": 0.0,
+          "reason": "``μc = 2−√3``由`Q(√3)`精确算术解出（本脚本`exact_solution`，9方程/8未知、精确秩8）。罚柔度让实测``|f|/F``带``O(1/k)``偏差——穿透改变接触几何本身。``k = 2e6``档实测1.766e-07，取5e-7约2.8倍余量。**这个容差是模型的柔度，不是实现的余量**，收敛阶那条门专门验这一点",
+          "rel": 5e-07
+        },
+        "sphere_sphere_is_the_binding_contact": {
+          "abs": 0.0,
+          "reason": "**零容差**：卡住的是球-球接触（需求``2−√3``）而不是地面（需求``(2−√3)/3``，宽松3倍）。research/15第3.2节末点明：将来若给两处配不同的``μ``，``μc``这一个数就不够用了——所以哪一处卡住必须是被断言的，不是被默认的",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "ground_normal_n": 22.072499999999998,
+        "ground_tangential_n": 1.971436183311986,
+        "sphere_contact_force_n": 7.3575,
+        "sphere_tangential_n": 1.971436183311986
+      },
+      "id": "oracle:pyramid_rot/force_decomposition",
+      "inputs": {
+        "gravity_mm_s2": 9810.0,
+        "kind": "pyramid_rotational_static_decomposition",
+        "mass_kg": 1.5,
+        "radius_mm": 10.0,
+        "stiffness_n_per_mm": 2000000.0
+      },
+      "tolerances": {
+        "ground_normal_n": {
+          "abs": 0.0,
+          "reason": "``N = 3W/2``。**两个模型完全相同**（竖直平衡不经过接触角），所以它是一条**回归判据**而不是新能力：转动进来不许改总承载。实测偏差7e-11量级，远严于本容差；容差仍取统一值，理由是判据表的可读性优先于逐条压紧",
+          "rel": 5e-07
+        },
+        "ground_tangential_n": {
+          "abs": 0.0,
+          "reason": "``|T| = (1 − √3/2)·W``。无摩擦变体给``W/(2√3)``，两者比``1.392305``——**0063第二节那个1.4倍就落在这一格上**",
+          "rel": 5e-07
+        },
+        "sphere_contact_force_n": {
+          "abs": 0.0,
+          "reason": "``F = W/2``（精确有理数）。**它与无摩擦变体的``W/√3``不同**——加力矩平衡改的是力怎么分。``O(1/k)``柔度偏差同上",
+          "rel": 5e-07
+        },
+        "sphere_tangential_n": {
+          "abs": 0.0,
+          "reason": "``f = (1 − √3/2)·W``。**这一项在无摩擦变体里恒为零**，它就是转动自由度带进来的那个量",
+          "rel": 5e-07
+        }
+      }
+    },
+    {
+      "expected": {
+        "top_sphere_moment_residual_n_mm": 0.0
+      },
+      "id": "oracle:pyramid_rot/top_sphere_moment_is_redundant",
+      "inputs": {
+        "kind": "pyramid_rotational_redundant_equation",
+        "stiffness_n_per_mm": 2000000.0
+      },
+      "tolerances": {
+        "top_sphere_moment_residual_n_mm": {
+          "abs": 0.0,
+          "reason": "**逐位零容差。** research/15第3.2节写着第9条方程冗余：构型镜像对称、顶球在对称面上，故它的``ΣM``自动满足。本案例把顶球自旋钉住（否则'整体滚动'是Hessian的精确零模、牛顿走不动），于是那条方程变成一个**约束反力矩**；它必须**恰为0.0**，否则钉住这一步就改了问题。**这是把research/15的一句论断变成可判的门**",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "deviation_ratio_high": 12.0,
+        "deviation_ratio_low": 8.0,
+        "deviations_shrink": true
+      },
+      "id": "oracle:pyramid_rot/compliance_is_first_order",
+      "inputs": {
+        "gravity_mm_s2": 9810.0,
+        "kind": "penalty_compliance_convergence_order",
+        "mass_kg": 1.5,
+        "radius_mm": 10.0,
+        "stiffnesses_n_per_mm": [
+          20000.0,
+          200000.0,
+          2000000.0
+        ]
+      },
+      "tolerances": {
+        "deviation_ratio_high": {
+          "abs": 0.0,
+          "reason": "同上，区间上端",
+          "rel": 0.0
+        },
+        "deviation_ratio_low": {
+          "abs": 0.0,
+          "reason": "区间端点是**声明的判据**不是测出来的数：刚度每涨10倍偏差应降约10倍。实测9.998与10.017，区间取[8,12]。**不写死为10**——一阶是渐近性质，写死会让正确实现在别的构型上红",
+          "rel": 0.0
+        },
+        "deviations_shrink": {
+          "abs": 0.0,
+          "reason": "**前置断言**：偏差必须逐档单调减小。不减小时比值区间那条门是在拿噪声算阶",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "critical_friction_ratio": 1.3923048454132643
+      },
+      "id": "oracle:pyramid_rot/rotation_free_variant_differs",
+      "inputs": {
+        "kind": "pyramid_rotational_versus_frictionless_variant"
+      },
+      "tolerances": {
+        "critical_friction_ratio": {
+          "abs": 0.0,
+          "reason": "``(2−√3)/(1/(3√3)) = 1.392305``。**两个数都是闭式**，所以这条门判的是两支闭式之比，不含任何实测——它是0063第二节'转动缺席时系统性偏约四成'那句话的算术形式。容差1e-12只留给double的表示误差",
+          "rel": 1e-12
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
