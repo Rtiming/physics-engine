@@ -55,7 +55,7 @@
 |---|---|
 | `errors.py` | `ContactError`。谁也不依赖，故不产生环 |
 | `layout.py` | 槽宽/每对槽数/regime取值/法向来源类型＋声明与锚点布局 |
-| `penalty.py` | 罚法向四族：半空间、球-球、有限长圆柱侧面、法兰内环面 |
+| `penalty.py` | 罚法向五族：半空间、球-球、有限长圆柱侧面、法兰内环面、扫掠槽壁 |
 | `friction.py` | 库仑return-map（**圆与椭圆两条并列**，决策0068）与粘着弹簧 |
 | `damping.py` | 恢复系数↔阻尼比换算与线性法向dashpot |
 | `stepper.py` | 准静态步进器：单槽位与多槽位 |
@@ -101,8 +101,10 @@ from physics_engine.contact.layout import (
 from physics_engine.contact.penalty import (
     PenaltyAnnulusLimit,
     PenaltyCylinderContact,
+    PenaltyGrooveSweep,
     PenaltyNormalContact,
     PenaltySphereContact,
+    groove_sweep_walls,
 )
 from physics_engine.contact.stepper import (
     ContactPoint,
@@ -136,6 +138,7 @@ __all__ = [
     "NormalSource",
     "PenaltyAnnulusLimit",
     "PenaltyCylinderContact",
+    "PenaltyGrooveSweep",
     "PenaltyNormalContact",
     "PenaltySphereContact",
     "TangentialStickSpring",
@@ -145,6 +148,7 @@ __all__ = [
     "build_contact_layout",
     "coulomb_return_map",
     "damping_ratio_from_restitution",
+    "groove_sweep_walls",
     "linear_dashpot_parameters",
     "restitution_from_damping_ratio",
     "yield_excess_n",
