@@ -223,12 +223,17 @@
         {
           "id": "S3.7",
           "label": "转动自由度参与接触（力矩平衡、翻倒、无滑滚动）",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": true,
-          "evidence": [],
+          "evidence": [
+            "case:three_sphere_pyramid_rotational",
+            "test:tests/cases/test_three_sphere_pyramid_rotational.py::test_the_critical_friction_is_two_minus_root_three",
+            "test:tests/cases/test_three_sphere_pyramid_rotational.py::test_the_top_sphere_moment_is_exactly_redundant",
+            "test:tests/test_rotation.py::test_pinning_the_rotation_reproduces_the_rotation_free_solve_bit_for_bit"
+          ],
           "shared_gap": "接触",
-          "why": "0051裁定这是`max_points > 1`的真前置，不是网格窄相。落进漏斗的东西会翻会滚。",
-          "missing": "接触体今天是质点+半径。对金字塔底球球心取矩得M_y=−(√3/6)·W·r≠0——即那个构型对**可转动的**刚体球根本不是平衡态。"
+          "why": "**三件事里做了第一件（力矩平衡）。** 0079落地准静态路径上的转动自由度：SO(3)指数映射的局部图（三个无约束参数θ，`solve_equilibrium`一个字未改），接触力对质心取矩。金字塔含ΣM=0的全粘着支实测μc=2−√3（偏差1.766e-07，金标由仓内Q(√3)精确有理算术重算、与research/15第三节逐位相同），四个力分量逐档对上，罚柔度一阶收敛9.998/10.017。顶球自旋是规范固定：不钉时\"整座金字塔沿地面整体侧滚\"是零模（条件数7.86e17），而钉住处的约束反力矩逐位为0.0，证明它不改问题。转动全钉住时与不带转动块的系统逐位相同（判float.hex()），并配了必红用例。斜面另给约束反力矩W·R·sinα，五个角度相对偏差≤7.9e-11。",
+          "missing": "**label里的另外两件都没做，而且它们都不在准静态路径上。** （一）**翻倒**与**无滑滚动**要时间积分——那是0063第五节第3步（路径B，`rigidbody`的四元数接接触），本步是路径A（准静态、指数映射局部图），0074第四节裁明两者是同一个群的两种参数化、各解各的题；惯量张量在`geometry`里已有，但**没有任何东西把它接到转动块上**。（二）**滑移没有与转动块联动**：本步是纯粘着支，`contact.friction.coulomb_return_map`与`contact/stepper.py`的锚点更新仍只认节点位置，因此C档第7条的\"两侧判据\"也仍缺（见C7的missing与0079第六节）。（三）没有任何案例把三个转动分量同时放开：三维一般转动只有单元门（走到|θ|=2.69与φ=π分支），没有案例门。"
         },
         {
           "id": "S3.8",
@@ -612,10 +617,12 @@
       "exercises_physics": true,
       "evidence": [
         "case:three_sphere_pyramid",
-        "test:tests/cases/test_three_sphere_pyramid.py::test_the_static_decomposition_matches_the_closed_form"
+        "test:tests/cases/test_three_sphere_pyramid.py::test_the_static_decomposition_matches_the_closed_form",
+        "case:three_sphere_pyramid_rotational",
+        "test:tests/cases/test_three_sphere_pyramid_rotational.py::test_the_critical_friction_is_two_minus_root_three"
       ],
-      "why": "定性判据（只改μ、一边撑住一边塌）零容差复现，静力分解F=W/√3、N=3W/2、T=W/(2√3)。",
-      "missing": "Chrono原版**所有接触都有摩擦**；本仓案例仍是球-球无摩擦的静定变体，闭式μc=1/(3√3)只属于该变体。research/15已独立重推含力矩平衡的全粘着支并得到μc=2−√3，但该数学尚未由转动接触自由度与案例兑现；因此仍按partial，不进位。"
+      "why": "定性判据（只改μ、一边撑住一边塌）零容差复现，静力分解F=W/√3、N=3W/2、T=W/(2√3)。 2026-08-18（0079）：含力矩平衡那一支的μc=2−√3已由转动接触自由度与`three_sphere_pyramid_rotational`兑现，金标为仓内Q(√3)精确有理算术，实测偏差1.766e-07。",
+      "missing": "**只差\"两侧判据\"这半句，不再差数学。** 0079已把原missing里\"该数学尚未由转动接触自由度与案例兑现\"兑现（μc=2−√3实测在册）。仍缺的是Chrono形制的\"同一模型只改μ、一边撑住一边塌\"：撑住那一边等价于max(|f|/F) ≤ μ，是一条可直接算的不等式；**塌那一边要真的让锚点滑起来**，而滑移改的是历史、历史住在锚点槽里、锚点槽的更新今天只认节点位置。触发条件：`advance_contact_quasistatic`接上转动块（0079第六节，本波因与轨A2同点冲突风险未做）。因此C7仍为partial，不进位。"
     },
     {
       "index": 8,
