@@ -111,7 +111,7 @@ from __future__ import annotations
 import math
 from bisect import bisect_right
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from physics_engine.motion import PauseInterval
 
@@ -129,7 +129,23 @@ class TransportError(ValueError):
     """线速度与输运的一切失败关闭。"""
 
 
+#: 这两个校验器在`accept full`的批级档里被调**4450万次**
+#: （`_require_finite` 3288万、`_require_positive` 1159万，master 192核安静机
+#: 2026-08-18实测，见decisions/0083）。它们各自的第一行是两次`isinstance`，
+#: 于是`isinstance`成了全档第三大自时间（1.38亿次）。
+#:
+#: 下面那条`value.__class__ is float`是**纯派发上的快路，不是省掉校验**：
+#: 走上它的前提是类型已经确定是`float`（不是`bool`、不是`int`、不是`float`子类），
+#: 而对一个`float`来说``float(value) is value``——**返回值逐位相同**。
+#: 其余一切类型（含`float`子类）原样落到下面的慢路，一个分支都没删。
+#: 逐字节对拍见`tools/parity_transport_samples.py`。
+
+
 def _require_positive(value: float, name: str) -> float:
+    if value.__class__ is float:
+        if value > 0.0 and math.isfinite(value):
+            return value
+        raise TransportError(f"{name} must be positive and finite: {value!r}")
     if not (isinstance(value, (int, float)) and not isinstance(value, bool)):
         raise TransportError(f"{name} must be a real number: {value!r}")
     if not (value > 0.0 and math.isfinite(value)):
@@ -138,6 +154,10 @@ def _require_positive(value: float, name: str) -> float:
 
 
 def _require_finite(value: float, name: str) -> float:
+    if value.__class__ is float:
+        if math.isfinite(value):
+            return value
+        raise TransportError(f"{name} must be finite: {value!r}")
     if not (isinstance(value, (int, float)) and not isinstance(value, bool)):
         raise TransportError(f"{name} must be a real number: {value!r}")
     if not math.isfinite(value):
@@ -963,11 +983,23 @@ class SpanTransportLoop:
                 f"第{self.step_index}步：材料长度推到{length!r} —— "
                 "跨段里的材料被抽空了，步长太大或收线端速度不是这条链路能跟上的"
             )
+        #: **直接构造而不是`dataclasses.replace`**——两者语义逐字相同
+        #: （本类全部字段都是`init=True`、没有`InitVar`，`replace`做的就是
+        #: 把未覆盖的字段读出来再调一次`__init__`），但`replace`每次都要
+        #: 重新遍历一遍`__dataclass_fields__`并建一个kwargs字典。
+        #: `accept full`批级档里这条路走了610万次，`replace`因此成为全档
+        #: **自时间第一名**（10.31秒/205秒，master实测，见decisions/0083）。
+        #:
+        #: **`__post_init__`照常跑，一条校验都没有被跳过**——这里省掉的只是
+        #: 标准库的字段自省，不是本类的失败关闭。
         return (
-            replace(
-                self,
+            SpanTransportLoop(
+                span=self.span,
+                reel=self.reel,
+                dt_s=self.dt_s,
                 material_length_mm=length,
                 angular_velocity_rad_s=omega,
+                forbid_slack=self.forbid_slack,
                 step_index=self.step_index + 1,
             ),
             sample,
