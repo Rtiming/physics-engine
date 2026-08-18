@@ -1,0 +1,30 @@
+# 查看器档的依赖清单——**只装进tools/view/.venv，永不进主环境**。
+#
+# 与validation/requirements-peer.txt同一条纪律（决策0025第一节第3条）：
+# 版本钉死（==）。理由在这里比在那里更硬——rerun的日志形制（`.rrd`）
+# **随版本演进**，CLI自己带一条`rerun rrd migrate`就是承认这件事。
+# 一份用0.34.1写出来的.rrd要在另一台机器上打得开，那台机器得知道用哪一版。
+#
+# 许可证：MIT OR Apache-2.0（实测`importlib.metadata`的License-Expression字段），
+# 与本仓的MIT相容。但相容不等于可复制——本仓对rerun**只调用、不移植**。
+
+rerun-sdk==0.34.1   # MIT OR Apache-2.0；wheel实测133.6 MB（cp310-abi3-macosx_11_0_arm64）
+
+# ---------------------------------------------------------------- 传递闭包 ---
+#
+# 下面这七行**不是约束，是2026-08-18在本机实测到的事实**，写在这里备查。
+# 刻意**不钉死**它们，理由是一条工程判断而不是偷懒：
+# rerun-sdk自己的元数据已经给了传递依赖的范围，本仓再钉一层，
+# 只会在别的平台/别的Python小版本上制造解不开的冲突——
+# 而本仓拿不到那些平台的实测，**钉一个没验过的数比不钉更坏**。
+#
+#   rerun-sdk==0.34.1       MIT OR Apache-2.0
+#   pyarrow==25.0.1         Apache-2.0
+#   numpy==2.5.2            BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0
+#   pillow==12.3.0          MIT-CMU
+#   attrs==26.1.0           MIT
+#   psutil==7.2.2           BSD-3-Clause
+#   typing_extensions==4.16.0  PSF-2.0
+#
+# 装完的venv实测**521 MB**。这个数正是三条硬边界存在的理由——
+# 它绝不能出现在`pyproject.toml`里的任何一个位置。
