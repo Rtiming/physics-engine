@@ -45,6 +45,7 @@
 | [`peer_fcl_distance`](peer_fcl_distance/case.md) | 同行库对拍：球/胶囊解析距离对python-fcl 0.7.0.11（版本钉死，漂了就红），3类形状对×3构型带×300组=2700组；**判据正本是`criteria.json`不是本页**。抓到FCL两处大错（`enable_signed_distance`最坏相对误差45.6%、胶囊-胶囊接触深度最大偏2.11mm且**FCL自相矛盾**），本仓的数与Fraction精确值逐位相同 | A | local_batch | `criteria.json` | `tests/cases/test_peer_fcl_distance.py` |
 | [`capstan_tension_ratio`](capstan_tension_ratio/case.md) | **第一条多槽位同时滑移**：带材绕真机导轮（R=50mm、半宽8.5mm，现场实测尺寸）90°，8个接触同时走`advance_contacts_quasistatic`。两条**恒等式**（全滑移下`\|T\|/(μN)`实测**2.22e-16**落在锥面上；法向力＝两侧张力的法向合量，用**实际段方向**不用名义`sin(Δφ/2)`）＋两条**收敛结果**（逐节点比对精确离散式`(1+μtan(Δφ/2))/(1−μtan(Δφ/2))`，载荷步一阶收敛实测比2.10/2.06）。**不判端到端比**——两端是半节点，实测随载荷步非单调。永久`hypothesis_only` | B | local_batch | 4条 | `tests/cases/test_capstan_tension_ratio.py` |
 
+| [`rolling_ball_incline`](rolling_ball_incline/case.md) | **本仓第一条让转动自由度参与动态接触的案例**（plans/16的M2＋M3）。两支各判一次：`mu=0.30 > mu_c=0.104` 时无滑滚，`a` 对 `(5/7)g sin(theta)` 偏 **+1.1e-04**；`mu=0.05 < mu_c` 时滑着滚，`a` 对 `g(sin-mu cos)` 偏 **+1.3e-05**、`alpha` 对 `5 mu g cos/(2R)` 偏 **-8.4e-05**。**要害是第三个量**：`a/(alpha R)` 滚动支 **1.0004**、滑动支 **2.512**（闭式 `k(tan/mu - 1)`）——**这个比值就是「滑了」的可观测定义**：一个「永远按滚动公式算」的实现会让两支都等于1，而第四条门专门关那扇门。三条系数（5/7、2/7、7/2）在 `Fraction` 上精确算、零容差。**`k_t` 取50是被实测逼出来的**：`k_t>=5e3` 时进颤振区、`sliding` 恒为真、判据失去分辨力；`k_t=50` 时 `k_t*|v_t|=0.959 N` 恰是闭式所需摩擦 0.9585 N（第三条独立对拍）。**收敛阶未做**、**不覆盖滚动阻力**——两条写在案例页第四节 | A | interactive | 3条 | `tests/cases/test_rolling_ball_incline.py` |
 | [`winding_line_endtoend`](winding_line_endtoend/case.md) | **第一条把四件事装在一条链路上跑的**：放线端张力（力边界条件）＋导向轮罚接触与多槽位库仑摩擦＋收线端位移控制＋排线横动把带材边缘顶上法兰内环面。四条闭式：放线端轴力＝外载（rel 1e-9）；落位点/放线端＝`exp(μθ)`（480步实测1.604693，偏差1.695e-3）；半间隙6.5mm阈值两侧**零容差**；蹭边力＝`T·δ/L`（两档实测差0.11%）。**混合控制照真机来**——力在放线端、位移在收线端；装反了张力会沿走向递减。**跑出了`PenaltyAnnulusLimit`一个真bug**（法兰朝向从限位符号推出来，横动过原点即失效）。**不让主分母动**：场景⑥四位仍partial | C | local_batch | 4条 | `tests/cases/test_winding_line_endtoend.py` |
 
 | [`roller_skew_lateral_drift`](roller_skew_lateral_drift/case.md) | **导轮轴偏斜引起的稳态横漂，而且它不需要材料输运**——Shelton正规入轮条件`y'(L)=θ_r`本身就是输运的结果，写成边界条件后稳态是静力边值问题。引擎DER弯曲＋轴向张力对闭式`y_ss = θ_r·L·f(KL)`，`f(u)=(sinh u−u cosh u)/(u(1−cosh u))`，**二阶收敛**（实测比3.739/3.861/3.928）。与WDS `research/04`引的**五个独立数字**逐条对拍。**反直觉结论：张力越大横漂越大**（`f`单调增，10→40N给+11.3%），闭式与引擎各判一次。振幅二次律两档一致（9.97e-3/9.93e-3 per mm²），1mm处+0.9%由张力自升解释、验算对上。**装配公差直接输出**：半间隙6.5mm下，跨长100/200/300/500mm的临界偏斜为5.381°/2.489°/1.546°/**0.852°** | B | local_batch | 4条 | `tests/cases/test_roller_skew_lateral_drift.py` |
@@ -67,7 +68,7 @@
 ## 一之二、每个案例穿过引擎的哪几层（决策0048第三节通则）
 
 **"验公式"与"验引擎"是两类，混在一个计数里计数就不再有意义。**
-本节是那条通则的执行面：**38个案例**按**穿过引擎哪几层**分类，**不按案例数报成绩**。
+本节是那条通则的执行面：**39个案例**按**穿过引擎哪几层**分类，**不按案例数报成绩**。
 
 > **2026-08-18点清**：这个数一度停在33，而目录里当时已经是35——波次三收口时登记的那句"计数由收口时一次点清"**没有被执行**，于是它安静地过期了两波。本次机械对账：目录36个、本表覆盖36个、各行相加36。**这类数字不该靠人记得回来改**——`tools/check_case_pages.py`今天校验的是"案例目录必须出现在本页"，管不到本表的分类与求和；补一道门让它们对不上就红，登记在plans/07。
 >
@@ -88,6 +89,7 @@
 | `energies`协议层（梯度与Hessian，不求解） | 1 | `axial_stretch_hessian` |
 | **闭式计算器（不碰引擎的任何一层）** | **5** | `scalar_diffraction_airy`、`fts_instrument_line_shape`、`two_beam_interference`、`mutual_inductance_coaxial`、`norris_thin_strip` |
 | 几何查询／资产治理／模型生成（基座，不碰物理求解） | 6 | `segment_distance`、`rotated_aabb`、`broadphase_superset`、`mesh_asset_integrity`、`generator_determinism`、`peer_fcl_distance` |
+| **`rigidbody`→`contact_dynamics`→积分（转动进动态接触，不碰`energies`／`solve`）** | **1** | **`rolling_ball_incline`（第一条让转动自由度参与动态接触的）**——状态是刚体13维（质心位置/速度＋体系角速度＋四元数），力与力矩由`contact_dynamics`装配后交给`integrate_free_flight`的两个回调。**这一行是新开的**：本仓此前没有任何案例落在「接触产出几何量 → 力矩装配 → 积分器回调」这条链上 |
 | **`transport`自带的输运推进（不碰`state`／`energies`／`solve`）** | **1** | **`free_span_tension_step`（第一条张力由速度差生成的；状态是"材料长度＋放线盘转速"两个标量，不进`State`——**这一行是新开的**，本仓此前没有任何案例落在它上面）** |
 | **`motion`→`laydown`的纯运动学（不碰`state`／`energies`／`solve`）** | **1** | **`helix_laydown_closure`（第一条把位姿时间线与送带账放在一起判的）**——它**不是**力学案例：`laydown`只回答"这一瞬落位点在槽的哪里、槽标架朝哪、要放多快"，一个自由度都不解。**这一行是波次二收口时补的**：轨道C把它写进了上面的案例索引表却漏了本表，而**两张表漏一张，分类计数就与目录数对不上**（实测31对32） |
 | **`transport`＋`drives`的闭环装配（不碰`state`／`energies`／`solve`）** | **1** | **`closed_loop_tension_step`（第一条把控制器接到对象上的）**——状态是"材料长度＋放线盘转速＋离合器扭矩＋控制器积分"四个标量，仍不进`State`。**它与上一行的`free_span_tension_step`是同一条链路的两半**：那里证明扰动是真的，这里回答压不压得住（答案：在真机那一档上**压不住，而且更坏**）。**这一行是新开的**，本仓此前没有任何案例落在"两个模块的装配层"上 |
