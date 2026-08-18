@@ -57,42 +57,54 @@ echo "[master] 打包 $SHORT（$(wc -c < "$STAGE/pe.bundle") 字节）"
 rtime-sync push "$STAGE/pe.bundle" "$HOST:/tmp/pe-accept-$SHORT.bundle" >/dev/null
 echo "[master] 已送达 $HOST"
 
-# 远端脚本：解包 → 备venv → 在srun分配里跑accept → 打印回执路径
-# shellcheck disable=SC2087
-rtime-ssh "$HOST" bash -s <<REMOTE
+# 远端脚本**生成成一个真正的文件再送过去执行**，不用嵌套heredoc。
+#
+# 第三次实跑撞的就是这件事：`bash -s <<REMOTE` 里那条带续行反斜杠的 `srun` 命令
+# 被两层转义拆坏，远端把 `accept.py` 当成了一个命令（`command not found`）。
+# **嵌套转义是一类不会报错、只会算错的东西**——它和本仓反复记的"静默出错"同族。
+# 生成文件的写法里，远端脚本是**逐字**送过去的，没有第二层展开。
+cat > "$STAGE/remote.sh" <<REMOTE_HEADER
 set -euo pipefail
-DIR="\$HOME/$REMOTE_DIR/$SHORT"
-rm -rf "\$DIR"
-mkdir -p "\$(dirname "\$DIR")"
-git clone -q /tmp/pe-accept-$SHORT.bundle "\$DIR"
-rm -f /tmp/pe-accept-$SHORT.bundle
-cd "\$DIR"
-# 克隆出来是分离头指针，SHA与本仓相同；核一遍，不相同就停。
-GOT="\$(git rev-parse HEAD)"
-if [ "\$GOT" != "$HEAD_SHA" ]; then
-    echo "远端HEAD \$GOT 与本仓 $HEAD_SHA 不同 —— 回执就对不回一个commit了" >&2
+SHORT="$SHORT"
+HEAD_SHA="$HEAD_SHA"
+REMOTE_DIR="$REMOTE_DIR"
+PROFILE="$PROFILE"
+PARTITION="$PARTITION"
+CORES="$CORES"
+REMOTE_HEADER
+cat >> "$STAGE/remote.sh" <<'REMOTE_BODY'
+DIR="$HOME/$REMOTE_DIR/$SHORT"
+rm -rf "$DIR"
+mkdir -p "$(dirname "$DIR")"
+git clone -q "/tmp/pe-accept-$SHORT.bundle" "$DIR"
+rm -f "/tmp/pe-accept-$SHORT.bundle"
+cd "$DIR"
+
+# 克隆出来是分离头指针，SHA应与本仓相同；不同就停——否则回执对不回一个commit。
+GOT="$(git rev-parse HEAD)"
+if [ "$GOT" != "$HEAD_SHA" ]; then
+    echo "远端HEAD $GOT 与本仓 $HEAD_SHA 不同 —— 回执就对不回一个commit了" >&2
     exit 3
 fi
 
-VENV="\$HOME/$REMOTE_DIR/.venv"
-if [ ! -x "\$VENV/bin/python" ]; then
+VENV="$HOME/$REMOTE_DIR/.venv"
+if [ ! -x "$VENV/bin/python" ]; then
     echo "[master] 建venv（一次性）"
-    python3 -m venv "\$VENV"
-    "\$VENV/bin/python" -m pip install -q --upgrade pip
+    python3 -m venv "$VENV"
+    "$VENV/bin/python" -m pip install -q --upgrade pip
 fi
-# 依赖只装本仓声明的dev档；**版本按pyproject的约束**，不用系统那份7.4.4。
-"\$VENV/bin/python" -m pip install -q 'pytest>=8' 'ruff>=0.15,<1' 'numpy>=1.24'
+# 依赖只装本仓声明的dev档，版本按pyproject的约束——不用系统那份pytest 7.4.4。
+"$VENV/bin/python" -m pip install -q 'pytest>=8' 'ruff>=0.15,<1' 'numpy>=1.24'
 
-# `accept.py`把解释器写死成`.venv/bin/python`（第54行起那张命令表）。
-# 所以检出目录里必须有那条路径——**做软链指向共享venv，不在每个检出里重装一遍**。
-# 这与本机的形制一致（本机的`.venv`也在仓根），于是`accept.py`一个字都不用改。
-ln -sfn "\$VENV" "\$DIR/.venv"
-# 让引擎自己能被import：本仓是src布局且零运行时依赖，`PYTHONPATH`足够，
-# 不需要editable安装（那会把远端venv绑到某一个检出目录上，而检出是一次一个）。
-export PYTHONPATH="\$DIR/src"
+# `accept.py`把解释器写死成`.venv/bin/python`（它第54行起那张命令表）。
+# 所以检出目录里必须有那条路径——软链指向共享venv，不在每个检出里重装一遍。
+ln -sfn "$VENV" "$DIR/.venv"
+export PYTHONPATH="$DIR/src"
 
 echo "[master] 分区=$PARTITION 核数=$CORES 起跑 accept.py $PROFILE"
-srun -p "$PARTITION" -c "$CORES" --time=01:00:00 \\
-     "\$VENV/bin/python" tools/accept.py "$PROFILE" 2>&1 | tail -40
-echo "[master] 回执：\$DIR/work/acceptance/$PROFILE-latest.json"
-REMOTE
+srun -p "$PARTITION" -c "$CORES" --time=01:00:00 "$VENV/bin/python" tools/accept.py "$PROFILE" 2>&1 | tail -45
+echo "[master] 回执：$DIR/work/acceptance/$PROFILE-latest.json"
+REMOTE_BODY
+
+rtime-sync push "$STAGE/remote.sh" "$HOST:/tmp/pe-remote-$SHORT.sh" >/dev/null
+rtime-ssh "$HOST" "bash /tmp/pe-remote-$SHORT.sh; rm -f /tmp/pe-remote-$SHORT.sh"
