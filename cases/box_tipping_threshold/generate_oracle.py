@@ -175,6 +175,10 @@ def main() -> int:
                 #: 横坡两侧单点法向力的相对差上界。**逐位在这里是假的**：
                 #: 四个点按声明次序累加，`±y`两项不精确相消，实测4e-14。
                 "cross_slope_asymmetry_bound": 1.0e-11,
+                #: 平衡态合力矩的上界（判的是`≈0`，所以是bound不是expected）。
+                #: 实测1.02e-12 N·mm，取1e-8约一万倍余量——**它挡的是一项真的
+                #: 净力矩，不是舍入**，所以不许按"反正很小"随手放宽。
+                "residual_torque_bound_nmm": 1.0e-8,
             },
             "expected": {
                 "loaded_support_count": 4,
@@ -187,6 +191,10 @@ def main() -> int:
                 ),
                 "creep_speed_mm_per_s": creep,
                 "uphill_support_saturates": saturates,
+                #: 法向力对质心的力矩：`τ_n = −(Σ x_i F_i)·ŷ = −h·W·sinθ·ŷ`。
+                #: **球那一档它是结构性的零，这一档它是倾覆力矩本身**——
+                #: 同一个字段两档语义不同，所以两档各配一条判据。
+                "normal_torque_cross_slope_nmm": -HALF_H_MM * WEIGHT_N * math.sin(theta_s),
             },
             "tolerances": {
                 "loaded_support_count": {
@@ -223,6 +231,11 @@ def main() -> int:
                     "abs": 0.0,
                     "rel": 5.0e-3,
                     "reason": "速度型摩擦的稳态蠕滑闭式**含饱和分支**。实测+2.05e-3；**朴素闭式`W sinθ/(4k_t)`会差10.5%，是本容差的21倍**——所以这条容差同时在判『哪几个点饱和』，不是在判一个速度",
+                },
+                "normal_torque_cross_slope_nmm": {
+                    "abs": 0.0,
+                    "rel": 1.0e-4,
+                    "reason": "它与压心那一条是同一条恒等式的两种写法（`τ_n = −x_N·N`），所以共用同一档紧容差1e-4。**分开写两条的理由是它们坏起来不一样**：压心那条从逐点力现场加权，这一条读的是`SupportSetResponse`里**装配好的**那个力矩——一个只把总力矩算错（比如切向力也混进了法向那一半）的实现在压心上绿、在这一条上红",
                 },
                 "uphill_support_saturates": {
                     "abs": 0.0,

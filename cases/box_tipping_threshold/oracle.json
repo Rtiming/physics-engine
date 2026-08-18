@@ -7,10 +7,10 @@
     "algorithm_id": "algorithm:oracle/box_tipping_threshold",
     "algorithm_version": "1.0.0",
     "path_relative": "cases/box_tipping_threshold/generate_oracle.py",
-    "sha256": "5e6cd1fc1a4812b310388d0b56f4fd23b4f98f281d632b93e5ca1eca3f30af2b"
+    "sha256": "8bc2309844f153bb2d8fdcc203968930defe46b606db3bcb6a3c9732ab230c1b"
   },
   "load_tier": "local_batch",
-  "manifest_self_sha256": "b09ee490217ef87813a0dd51ed5000e36e7290c662bd31785bb8e87561dcccee",
+  "manifest_self_sha256": "81d6db65ab1c4949a75ba5719e2f0fb7f2d2a34d25263122e93f52b40594c944",
   "oracles": [
     {
       "expected": {
@@ -18,6 +18,7 @@
         "loaded_support_count": 4,
         "normal_force_downhill_n": 0.19911024777449227,
         "normal_force_uphill_n": 0.031349367473251746,
+        "normal_torque_cross_slope_nmm": -1.6776088030124052,
         "pressure_centre_offset_mm": 3.6397023426620234,
         "pressure_centre_over_halfwidth": 0.7279404685324047,
         "settled_tilt_rad": 0.00033552176689770016,
@@ -41,6 +42,7 @@
         "normal_stiffness_n_per_mm": 50.0,
         "out_of_plane_bound_rad_per_s": 1e-10,
         "penetration_bound_mm": 0.05,
+        "residual_torque_bound_nmm": 1e-08,
         "steps": 3000,
         "tangential_stiffness": 0.03,
         "tilt_swing_bound_rad": 1e-06
@@ -65,6 +67,11 @@
           "abs": 0.0,
           "reason": "闭式是**刚体**的载荷分配，而罚接触的平衡带`O(1/k)`柔度修正，且上坡侧摩擦已饱和（见清单同条`uphill_support_saturates`），切向力分配因此不是闭式假设的均分。实测−2.52e-3，取4e-3约1.6倍余量。**这一条比压心那一条松一个数量级，正是本案例要展示的事**：单点力带模型自带偏差，而它们的一阶矩不带",
           "rel": 0.004
+        },
+        "normal_torque_cross_slope_nmm": {
+          "abs": 0.0,
+          "reason": "它与压心那一条是同一条恒等式的两种写法（`τ_n = −x_N·N`），所以共用同一档紧容差1e-4。**分开写两条的理由是它们坏起来不一样**：压心那条从逐点力现场加权，这一条读的是`SupportSetResponse`里**装配好的**那个力矩——一个只把总力矩算错（比如切向力也混进了法向那一半）的实现在压心上绿、在这一条上红",
+          "rel": 0.0001
         },
         "pressure_centre_offset_mm": {
           "abs": 0.0,

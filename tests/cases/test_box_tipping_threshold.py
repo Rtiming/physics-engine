@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import math
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,7 @@ from physics_engine.contact_dynamics import (
 )
 from physics_engine.oracles import load_manifest
 from physics_engine.rigidbody import (
+    QUATERNION_NORM_STEP_ABS_TOL,
     RK4_BODY,
     RigidBodyError,
     RigidBodyInertia,
@@ -315,6 +317,29 @@ def test_the_pose_drift_stays_inside_its_declared_bound(stable_run) -> None:
     entry.check("creep_speed_mm_per_s", speed)
 
 
+def test_the_assembled_normal_torque_is_the_overturning_couple(stable_run) -> None:
+    """**装配好的那个法向力矩本身被判一条**，不只是逐点力。
+
+    球那一档`normal_torque_body_nmm`是**结构性的零**（杆臂沿`n̂`、法向力也沿`n̂`）；
+    支承点这一档它是**倾覆力矩本身**`τ_n = −(Σ x_i F_i)·ŷ = −h·W·sinθ·ŷ`。
+    同一个字段两档语义不同，所以两档各配一条判据——这是本仓
+    "一个结构性的零如果不被判，实现里多出一项来也没人知道"的对偶：
+    **一个非零如果不被判，实现里少一项来也没人知道。**
+
+    另判合力矩在平衡态`≈ 0`：那是"它确实处在平衡上"这句话的定量形式，
+    没有它，上面那个力矩可以对而体正在被一个没人看的净力矩推着。
+    """
+
+    entry, inputs = stable_run["entry"], stable_run["inputs"]
+    response = stable_run["response"]
+    entry.check("normal_torque_cross_slope_nmm", response.normal_torque_body_nmm[1])
+    bound = float(inputs["residual_torque_bound_nmm"])
+    for axis, value in enumerate(response.torque_body_nmm):
+        assert abs(value) <= bound, (
+            f"平衡态合力矩第{axis}个分量是{value!r}——有净力矩在推它"
+        )
+
+
 def test_which_supports_saturate_is_judged_not_assumed(stable_run) -> None:
     """**哪几个点饱和是判据本身**，不是背景设定。
 
@@ -456,9 +481,7 @@ def test_the_topple_never_leans_on_the_integrator_blowing_up(topple_run) -> None
     没有它，"没发散"在一个永远不会抛的实现上也是绿的。
     """
 
-    entry, inputs = topple_run["entry"], topple_run["inputs"]
-    from physics_engine.rigidbody import QUATERNION_NORM_STEP_ABS_TOL
-
+    inputs = topple_run["inputs"]
     for diagnostics in topple_run["diagnostics"]:
         assert diagnostics.renormalisations == diagnostics.steps
         assert diagnostics.max_norm_deviation < 0.1 * QUATERNION_NORM_STEP_ABS_TOL, (
@@ -596,8 +619,6 @@ def test_the_exact_tangent_threshold_is_a_rational_number(bracket) -> None:
     """
 
     inputs = bracket["inputs"]
-    from fractions import Fraction
-
     numerator = int(inputs["exact_tangent_threshold_numerator"])
     denominator = int(inputs["exact_tangent_threshold_denominator"])
     half_w, _, half_h = (float(v) for v in inputs["half_extents_mm"])
@@ -688,6 +709,110 @@ def test_the_one_slot_memo_changes_nothing(oracles) -> None:
     assert [v.hex() for v in torque(state.vector, 0.0)] == [
         v.hex() for v in direct.torque_body_nmm
     ]
+
+
+def _flat_probe(
+    oracles, *, penetration_mm, normal_velocity_mm_per_s, damping, sideways=0.0
+):
+    """水平面上的单次求值——**倾角取零、姿态取单位四元数**，于是杆臂逐位等于
+    体系点、间隙逐位等于`centre_z + p_z`。两条边界判据要的正是这种可控到位的算例。"""
+
+    inputs = oracles["oracle:box_tipping/stable_side"].inputs
+    half_h = float(inputs["half_extents_mm"][2])
+    points = box_corner_points_mm(tuple(inputs["half_extents_mm"]))[:4]
+    state = make_state(
+        position_mm=(0.0, 0.0, half_h - penetration_mm),
+        velocity_mm_per_s=(sideways, 0.0, normal_velocity_mm_per_s),
+    )
+    return points, support_points_plane_contact(
+        state.vector,
+        support_points_body_mm=points,
+        plane_point_mm=(0.0, 0.0, 0.0),
+        plane_normal=(0.0, 0.0, 1.0),
+        normal_stiffness_n_per_mm=float(inputs["normal_stiffness_n_per_mm"]),
+        tangential_stiffness_n_per_mm=float(inputs["tangential_stiffness"]),
+        friction_coefficient=float(inputs["friction_coefficient"]),
+        normal_damping_n_s_per_mm=damping,
+    )
+
+
+def test_a_support_point_exactly_on_the_plane_is_not_loaded(oracles) -> None:
+    """**间隙恰为零的那个点不承载**——`gap < 0`，不是`<= 0`。
+
+    零间隙的接触力本来就是零（`−k·0`），所以"算不算承载"影响不到任何一个力；
+    影响的是`in_contact`与`contact_count`，**而本页最响亮的那条判据读的正是它们**
+    （承载点下标集合）。把边界判成承载，翻倒过程里"上坡边什么时候抬起来"
+    就会整整差一帧，而力那一侧一个字节都不变——**没有这条门就没人会发现。**
+
+    口径与`contact/penalty.py`同源：本仓只许有一个"接触与否"的定义。
+    """
+
+    points, response = _flat_probe(
+        oracles, penetration_mm=0.0, normal_velocity_mm_per_s=0.0, damping=0.0
+    )
+    assert len(response.points) == len(points)
+    for index, point in enumerate(response.points):
+        assert point.gap_mm.hex() == 0.0.hex(), f"第{index}点的间隙不是逐位的零"
+        assert point.in_contact is False, "间隙为零被判成了承载"
+        assert [v.hex() for v in point.force_world_n] == [0.0.hex()] * 3
+    assert response.contact_count == 0
+    assert [v.hex() for v in response.torque_body_nmm] == [0.0.hex()] * 3
+
+    #: 同一个边界再问一次，这次带切向速度：**不承载的点报的滑移速率必须是零**。
+    #: 力那一侧对`gap >= 0`与`gap > 0`两种写法**恰好逐位相同**
+    #: （`−k·0 = −0.0`，而`−0.0 + 0.0 = +0.0`），所以力挡不住这个改法——
+    #: 挡得住的只有这个诊断量。注错表M3那一行记的就是这件事。
+    _, moving = _flat_probe(
+        oracles, penetration_mm=0.0, normal_velocity_mm_per_s=0.0,
+        damping=0.0, sideways=3.0,
+    )
+    for index, point in enumerate(moving.points):
+        assert point.slip_speed_mm_per_s.hex() == 0.0.hex(), (
+            f"第{index}点没接触却报了滑移速率{point.slip_speed_mm_per_s!r}"
+        )
+        assert point.sliding is False
+
+
+def test_the_damper_pushes_on_compression_and_never_pulls_on_separation(oracles) -> None:
+    """**法向阻尼是单向的**：压缩时加力、分离时一个字节都不加。
+
+    两侧各判一次，因为只判一侧的话两种错都溜得过去：
+
+    * 只判"分离时不加力"——一个把阻尼整个删掉的实现照样绿；
+    * 只判"压缩时加力"——一个在分离时把体**吸住**的实现照样绿，
+      而那正是罚接触最经典的那个错（弹簧-阻尼器在分离段变成拉力）。
+
+    分离那一侧判的是**逐位等于纯弹簧力**，不是"差不多"。
+    """
+
+    inputs = oracles["oracle:box_tipping/stable_side"].inputs
+    damping = float(inputs["normal_damping"])
+    stiffness = float(inputs["normal_stiffness_n_per_mm"])
+    speed = 7.0
+
+    _, spring_only = _flat_probe(
+        oracles, penetration_mm=0.01, normal_velocity_mm_per_s=speed, damping=0.0
+    )
+    _, separating = _flat_probe(
+        oracles, penetration_mm=0.01, normal_velocity_mm_per_s=speed, damping=damping
+    )
+    assert [v.hex() for v in separating.force_world_n] == [
+        v.hex() for v in spring_only.force_world_n
+    ], "分离时阻尼还在加力——体被吸住了"
+
+    _, compressing = _flat_probe(
+        oracles, penetration_mm=0.01, normal_velocity_mm_per_s=-speed, damping=damping
+    )
+    _, compressing_spring = _flat_probe(
+        oracles, penetration_mm=0.01, normal_velocity_mm_per_s=-speed, damping=0.0
+    )
+    added = compressing.force_world_n[2] - compressing_spring.force_world_n[2]
+    assert added == pytest.approx(4.0 * damping * speed, rel=1e-12), (
+        "压缩时阻尼没有按`c·|v_n|`逐点加上去"
+    )
+    assert compressing_spring.force_world_n[2] == pytest.approx(
+        4.0 * stiffness * 0.01, rel=1e-12
+    )
 
 
 def test_the_planar_setup_keeps_the_out_of_plane_state_bitwise_zero(oracles) -> None:
