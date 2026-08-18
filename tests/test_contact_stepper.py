@@ -565,3 +565,97 @@ def test_a_slot_past_the_vector_end_fails_closed():
     )
     with pytest.raises(ContactError, match="越过了状态向量末尾"):
         advance_contact_quasistatic(**call)
+
+
+# ------------------------------------------------- 报错文本逐字（不是子串）
+#: **2026-08-18补的门,理由是它挡的那件事已经发生过一次。**
+#: 对抗审核实测:轨S重构`_check_end`时给`int`那一支的报错加了`{where}: `前缀、
+#: 多点那一支还把"的节点"改成"node"并加了粗——**而本文件与
+#: `test_contact_multi_stepper.py`里所有相关用例都是
+#: `pytest.raises(ContactError, match="落在节点块之外")`,子串匹配对措辞漂移完全不可见**,
+#: 于是那次改动一路绿到收口,还被写进0080的"24条确定性报错文本diff为空"里。
+#:
+#: 下面两条常量**逐字取自基线树`d082b65`**(用`git archive`还原后实跑取回),
+#: 判的是**相等**不是`in`。
+LEGACY_SINGLE_OUT_OF_BLOCK = (
+    "node 7 落在节点块之外（节点块只有3个自由度）"
+    "——**再往后是锚点槽，写进去就是改别人的历史**"
+)
+LEGACY_MULTI_OUT_OF_BLOCK = (
+    "contacts[0]的节点99落在节点块之外（节点块只有3个自由度）——再往后是锚点槽"
+)
+
+
+def _minimal_stepper_pieces():
+    from physics_engine.contact import build_contact_layout
+    from physics_engine.contact.layout import ContactDeclaration
+    from physics_engine.energies import EnergyContext, EnergyRegistry, UniformGravity
+
+    layout = build_contact_layout(
+        layout_id="layout/text",
+        node_count=1,
+        declarations=(ContactDeclaration(pair_id="contact/text", max_points=1),),
+    )
+    registry = EnergyRegistry(terms=(UniformGravity(),))
+    context = EnergyContext(
+        context_id="context/text", node_masses_kg=(1.0,), gravity_mm_s2=(0.0, 0.0, 0.0)
+    )
+    vector = tuple(0.0 for _ in range(layout.layout.dof_count))
+    return layout, registry, context, vector
+
+
+def test_the_single_point_out_of_block_text_is_byte_for_byte_the_legacy_one():
+    """单槽位那条报错文本必须与基线**逐字相等**。"""
+
+    layout, registry, context, vector = _minimal_stepper_pieces()
+    with pytest.raises(ContactError) as caught:
+        advance_contact_quasistatic(
+            registry_without_stick=registry,
+            context=context,
+            contact_layout=layout,
+            slot=layout.slots[0],
+            vector=vector,
+            node=7,
+            normal=(0.0, 0.0, 1.0),
+            normal_force_of=lambda state: 1.0,
+            tangential_stiffness_n_per_mm=1.0,
+            friction_coefficient=0.3,
+            fixed_indices=frozenset(),
+        )
+    assert str(caught.value) == LEGACY_SINGLE_OUT_OF_BLOCK, (
+        "报错文本漂了 —— 既有调用方能观测到的字节变了。"
+        "子串匹配看不见这件事，所以这条门判的是相等"
+    )
+
+
+def test_the_multi_point_out_of_block_text_is_byte_for_byte_the_legacy_one():
+    """多槽位那条报错文本必须与基线**逐字相等**——它与单槽位那条**措辞本来就不同**。
+
+    两条不同这件事本身要被判:重构把它们统一成一种,而"统一"改掉了既有字节。
+    """
+
+    from physics_engine.contact.stepper import ContactPoint, advance_contacts_quasistatic
+
+    layout, registry, context, vector = _minimal_stepper_pieces()
+    with pytest.raises(ContactError) as caught:
+        advance_contacts_quasistatic(
+            registry_without_stick=registry,
+            context=context,
+            contact_layout=layout,
+            contacts=(
+                ContactPoint(
+                    slot=layout.slots[0],
+                    node=99,
+                    normal=(0.0, 0.0, 1.0),
+                    normal_force_of=lambda state: 1.0,
+                    tangential_stiffness_n_per_mm=1.0,
+                    friction_coefficient=0.3,
+                ),
+            ),
+            vector=vector,
+            fixed_indices=frozenset(),
+        )
+    assert str(caught.value) == LEGACY_MULTI_OUT_OF_BLOCK
+    assert LEGACY_MULTI_OUT_OF_BLOCK != LEGACY_SINGLE_OUT_OF_BLOCK, (
+        "两条本来措辞不同 —— 若它们相等，上面两条门就退化成同一条"
+    )

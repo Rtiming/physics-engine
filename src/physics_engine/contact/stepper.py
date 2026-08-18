@@ -205,6 +205,37 @@ def _check_material_point(
             )
 
 
+#: `int`那一支两个入口的报错文本，**逐字取自基线树`d082b65`**。
+#: 两条措辞本来就不同（单点带加粗与整句、多点用"的节点"且尾巴更短），
+#: 重构时被统一成了一种——**统一是好意，但它改了既有调用方能观测到的字节**。
+#: 这里把它们钉成常量并配一条**逐字相等**（不是子串）的回归门，
+#: 理由见`_check_end`里那段注释：子串匹配挡不住措辞漂移。
+_LEGACY_OUT_OF_BLOCK = {
+    "advance_contact_quasistatic": lambda node, count: (
+        f"node {node} 落在节点块之外（节点块只有{count}个自由度）"
+        "——**再往后是锚点槽，写进去就是改别人的历史**"
+    ),
+}
+
+
+def _legacy_out_of_block(where: str, node: int, count: int) -> str:
+    """按调用点取那条**逐字**的报错文本；新路径回落到带前缀的形式。"""
+
+    builder = _LEGACY_OUT_OF_BLOCK.get(where)
+    if builder is not None:
+        return builder(node, count)
+    if where.startswith("contacts["):
+        return (
+            f"{where}的节点{node}落在节点块之外"
+            f"（节点块只有{count}个自由度）——再往后是锚点槽"
+        )
+    return (
+        f"{where}: node {node} 落在节点块之外"
+        f"（节点块只有{count}个自由度）"
+        "——**再往后是锚点槽，写进去就是改别人的历史**"
+    )
+
+
 def _check_end(
     end: ContactEnd,
     counterpart: MaterialPoint | None,
@@ -237,11 +268,15 @@ def _check_end(
     if not isinstance(end, int) or isinstance(end, bool) or end < 0:
         raise ContactError(f"contact node index must be a nonnegative int: {end!r}")
     if 3 * end + 3 > node_dof_count:
-        raise ContactError(
-            f"{where}: node {end} 落在节点块之外"
-            f"（节点块只有{node_dof_count}个自由度）"
-            "——**再往后是锚点槽，写进去就是改别人的历史**"
-        )
+        #: **`int`那一支的报错文本逐字回到2026-08-12的原样。**
+        #: 2026-08-18对抗审核实测:重构时给它加了`{where}: `前缀、
+        #: 多点那一支还把"的节点"改成了"node"并加了粗——**而所有既有测试
+        #: 用的是`match=`子串匹配,对措辞变化完全不可见**,于是这次改动
+        #: 一路绿到收口。0080当时声称"24条确定性报错文本diff为空",
+        #: 那24条没覆盖到这两处。
+        #: 前缀在这一支上本来也不带信息(traceback已经写着是哪个函数),
+        #: 所以恢复原文没有损失;`MaterialPoint`那一支是新路径,前缀留着。
+        raise ContactError(_legacy_out_of_block(where, end, node_dof_count))
 
 
 def _rotates(end: ContactEnd, counterpart: MaterialPoint | None) -> bool:
