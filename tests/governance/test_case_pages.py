@@ -266,3 +266,80 @@ def test_fields_out_of_order_are_red(tmp_path):
         "## 二、参考解出处\n\n教科书闭式。\n\n## 一、物理/几何设定\n\n半径 1.0 mm。\n",
     )
     assert any("先后顺序" in problem for problem in _problems(_case(tmp_path, page)))
+
+
+# ------------------------------------------------------- 分层表与目录必须对得上
+#: 这四条守`layer_table_problems`。**它是补出来的门，不是原生的**——
+#: 本仓两次让这张表安静地过期（波次二实测31对32、波次三登记"收口时点清"而没人执行，
+#: 到波次四时表头33、覆盖35、目录36）。**登记不等于会被做，除非有门看着。**
+_LAYER_SECTION = """## 一之二、每个案例穿过引擎的哪几层
+
+本节是那条通则的执行面：**2个案例**按**穿过引擎哪几层**分类。
+
+| 穿过的层 | 条数 | 案例 |
+|---|---|---|
+| 整条路 | **1** | `alpha` |
+| 只走积分器 | 1 | `beta` |
+
+**怎么读这张表**：略。
+"""
+
+
+def _directories(tmp_path, *names):
+    made = []
+    for name in names:
+        directory = tmp_path / name
+        directory.mkdir()
+        made.append(directory)
+    return made
+
+
+def test_the_layer_table_agrees_with_the_directories(tmp_path):
+    """基线：自称条数、各行相加、覆盖三条都对时不报问题。"""
+
+    directories = _directories(tmp_path, "alpha", "beta")
+    assert checker.layer_table_problems(_LAYER_SECTION, directories) == []
+
+
+def test_a_stale_declared_count_is_red(tmp_path):
+    """必红①：表头自称的数过期——**这正是2026-08-18实测到的那一个**。"""
+
+    directories = _directories(tmp_path, "alpha", "beta")
+    stale = _LAYER_SECTION.replace("**2个案例**", "**33个案例**")
+    problems = checker.layer_table_problems(stale, directories)
+    assert any("自称33" in problem for problem in problems), problems
+
+
+def test_a_row_sum_that_misses_a_case_is_red(tmp_path):
+    """必红②：各行相加对不上目录数——一行漏了或一行数错了。"""
+
+    directories = _directories(tmp_path, "alpha", "beta")
+    broken = _LAYER_SECTION.replace("| 只走积分器 | 1 | `beta` |\n", "")
+    problems = checker.layer_table_problems(broken, directories)
+    assert any("相加" in problem for problem in problems), problems
+
+
+def test_a_case_missing_from_the_layer_table_is_red(tmp_path):
+    """必红③：新案例进了索引表却没进分层表。
+
+    **注意它与②的分辨力不同**：这里求和仍然对得上（把新案例塞进某一行的计数里
+    却忘了写名字），只有覆盖那一条会响。
+    """
+
+    directories = _directories(tmp_path, "alpha", "beta", "gamma")
+    covered = _LAYER_SECTION.replace("**2个案例**", "**3个案例**").replace(
+        "| 整条路 | **1** | `alpha` |", "| 整条路 | **2** | `alpha` |"
+    )
+    problems = checker.layer_table_problems(covered, directories)
+    assert any("没有给这些案例分层" in problem for problem in problems), problems
+    assert not any("相加" in problem for problem in problems), (
+        "求和那条不该响——否则这条用例没有分辨力，它验的是②不是③"
+    )
+
+
+def test_a_missing_layer_table_is_red(tmp_path):
+    """必红④：整节被删掉时失败关闭，不许"找不到就算过"。"""
+
+    directories = _directories(tmp_path, "alpha")
+    problems = checker.layer_table_problems("# 索引\n没有分层表\n", directories)
+    assert any("找不到分层表" in problem for problem in problems), problems

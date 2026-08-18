@@ -64,11 +64,13 @@
 ## 一之二、每个案例穿过引擎的哪几层（决策0048第三节通则）
 
 **"验公式"与"验引擎"是两类，混在一个计数里计数就不再有意义。**
-本节是那条通则的执行面：33个案例按**穿过引擎哪几层**分类，**不按案例数报成绩**。
+本节是那条通则的执行面：**36个案例**按**穿过引擎哪几层**分类，**不按案例数报成绩**。
+
+> **2026-08-18点清**：这个数一度停在33，而目录里当时已经是35——波次三收口时登记的那句"计数由收口时一次点清"**没有被执行**，于是它安静地过期了两波。本次机械对账：目录36个、本表覆盖36个、各行相加36。**这类数字不该靠人记得回来改**——`tools/check_case_pages.py`今天校验的是"案例目录必须出现在本页"，管不到本表的分类与求和；补一道门让它们对不上就红，登记在plans/07。
 
 | 穿过的层 | 条数 | 案例 |
 |---|---|---|
-| **`state`→`energies`→`solve`（整条路）** | **9** | `cantilever_self_weight`、`large_deflection_cantilever`、`euler_buckling`、**`incline_slide_threshold`（第一条带接触的）**、**`friction_hysteresis_loop`（第一条改写历史的）**、**`three_sphere_pyramid`（第一条多体接触的）**、**`capstan_tension_ratio`（第一条多槽位同时滑移的）**、**`winding_line_endtoend`（第一条把张力、接触、摩擦、蹭边装在一条链路上的）**、**`roller_skew_lateral_drift`（第一条弯曲＋张力的梁-弦边值问题）** |
+| **`state`→`energies`→`solve`（整条路）** | **10** | `cantilever_self_weight`、`large_deflection_cantilever`、`euler_buckling`、**`incline_slide_threshold`（第一条带接触的）**、**`friction_hysteresis_loop`（第一条改写历史的）**、**`three_sphere_pyramid`（第一条多体接触的）**、**`capstan_tension_ratio`（第一条多槽位同时滑移的）**、**`winding_line_endtoend`（第一条把张力、接触、摩擦、蹭边装在一条链路上的）**、**`roller_skew_lateral_drift`（第一条弯曲＋张力的梁-弦边值问题）**、**`groove_sweep_wall`（第一条沿真实中心线的扫掠槽壁；深度自由那一组真走`solve_equilibrium`）** |
 | **`state`→`sections`→`section_beam`→`energies`→`solve`** | **1** | **`kirchhoff_section_vertex_springback`（第一条WDS运动学全局截面站点与收敛后历史提交）** |
 | **`state`→`rod`→`energies`→`solve`＋外层重输运** | **1** | **`anisotropic_rod_twist`（第一条有材料帧的整杆：双轴弯曲＋扭转，且`solve_equilibrium`之上还有一层retransport循环——**它是唯一一条求解入口被包了一层的**）** |
 | **`state`→`sections`→局部平衡** | **1** | **`rectangular_section_springback`（第一条截面非线性与逐点材料历史）** |

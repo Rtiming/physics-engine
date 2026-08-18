@@ -261,6 +261,80 @@ def check_case(case_dir: Path, indexed: set[str]) -> list[str]:
     return problems
 
 
+#: 分层表的表头。**认标题不认位置**——把它当成结构位置，与`indexed_case_names`
+#: 只认第一格是同一条通则（plans/09教训二）。
+LAYER_TABLE_HEADING = "## 一之二"
+
+
+def layer_table_problems(index_text: str, directories: list[Path]) -> list[str]:
+    """索引页第一节之二那张**分层表**必须与案例目录对得上，三条都判。
+
+    ## 为什么补这道门
+
+    本仓已经栽过两次同一个形态，**两次都是"数字自己过期"而没有任何门会响**：
+
+    * 波次二实测分类计数31、目录32（0064第7.4节登记，两张表漏一张）；
+    * 波次三收口时登记了一句"**计数由收口时一次点清**"，
+      而它**没有被执行**——到2026-08-18波次四收口时，表头还写着33、
+      表里覆盖35条、目录已经36条。**登记不等于会被做，除非有门看着。**
+
+    今天既有的那条只校验"案例目录必须出现在本页"（`check_case`里那条），
+    **它管不到分层表**：一个案例可以在上面的索引表里登记得好好的，
+    而分层表既没有它、求和也不对——那正是刚刚发生过的事。
+
+    ## 三条判据
+
+    1. 表头自称的条数 == 案例目录数；
+    2. 各行"条数"列相加 == 案例目录数；
+    3. 每个案例目录都在表里被提到（这一条允许出现在任何单元格里——
+       分层表的语义就是"这条案例落在哪一行"，名字必然写在描述格中）。
+    """
+
+    names = {directory.name for directory in directories}
+    if LAYER_TABLE_HEADING not in index_text:
+        return [f"cases/README.md: 找不到分层表小节`{LAYER_TABLE_HEADING}`"]
+    section = index_text.split(LAYER_TABLE_HEADING, 1)[1]
+    #: 表止于紧随其后的那段解读文字；取到下一个二级标题为止已足够宽。
+    section = section.split("\n## ", 1)[0]
+
+    problems: list[str] = []
+    declared = re.search(r"\*\*(\d+)个案例\*\*|：(\d+)个案例", section)
+    if declared is None:
+        problems.append("cases/README.md分层表没有自称条数——那个数就是过期的入口")
+    else:
+        stated = int(declared.group(1) or declared.group(2))
+        if stated != len(names):
+            problems.append(
+                f"cases/README.md分层表自称{stated}个案例，实际目录{len(names)}个"
+            )
+
+    total = 0
+    for line in section.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|") or is_separator_row(stripped):
+            continue
+        cells = table_cells(stripped)
+        if len(cells) < 2:
+            continue
+        match = re.fullmatch(r"\*{0,2}(\d+)\*{0,2}", cells[1])
+        if match:
+            total += int(match.group(1))
+    if total != len(names):
+        problems.append(
+            f"cases/README.md分层表各行相加{total}，实际目录{len(names)}个"
+            "——一行漏了或一行数错了，两者都会让这张表安静地失去意义"
+        )
+
+    mentioned = set(re.findall(r"[A-Za-z0-9_]+", section))
+    missing = sorted(names - mentioned)
+    if missing:
+        problems.append(
+            f"cases/README.md分层表没有给这些案例分层：{missing}"
+            "——新案例进了索引表却没进分层表，是本仓已发生过两次的形态"
+        )
+    return problems
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     cases_root = Path(arguments[0]) if arguments else ROOT / "cases"
@@ -279,6 +353,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     problems: list[str] = []
+    problems.extend(layer_table_problems(index.read_text(encoding="utf-8"), directories))
     for case_dir in directories:
         problems.extend(check_case(case_dir, indexed))
     for problem in problems:
