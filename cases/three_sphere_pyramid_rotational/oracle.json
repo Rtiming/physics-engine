@@ -5,12 +5,12 @@
   "facet_version": "0.1",
   "generator": {
     "algorithm_id": "algorithm:oracle/three_sphere_pyramid_rotational",
-    "algorithm_version": "1.0.0",
+    "algorithm_version": "1.1.0",
     "path_relative": "cases/three_sphere_pyramid_rotational/generate_oracle.py",
-    "sha256": "a7f5c8f7c8eb0340e9c95872793c33a18f3f8d9b7c4f35a2c951e875945fbb21"
+    "sha256": "871e4f3fe69ef40cabcf640265c73cb514692f769d03c7fa1a85e63e6074cfac"
   },
   "load_tier": "interactive",
-  "manifest_self_sha256": "8d0eda6f44575db78fa48f7a962f14dbf7d85e6436574d34cb16fdcadd505d51",
+  "manifest_self_sha256": "bf4d1dfeb45698ea612d0fc3dcd80ac92947999413e1afd38d6c40d84f1774ec",
   "oracles": [
     {
       "expected": {
@@ -126,6 +126,162 @@
           "abs": 0.0,
           "reason": "**前置断言**：偏差必须逐档单调减小。不减小时比值区间那条门是在拿噪声算阶",
           "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "collapse_base_gap_grows_strictly": true,
+        "collapse_every_step_converges": true,
+        "collapse_ground_regime": 1.0,
+        "collapse_ground_slip_increment_mm": 0.0,
+        "collapse_slip_does_not_decay": true,
+        "collapse_slip_per_contact_mm": 2.49968091655993e-07,
+        "collapse_sphere_regime": 2.0,
+        "collapse_top_descends_strictly": true,
+        "hold_demand_ratio": 0.2679491924311228,
+        "hold_is_a_fixed_point": true,
+        "hold_regime": 1.0,
+        "hold_slip_increment_mm": 0.0
+      },
+      "id": "oracle:pyramid_rot/two_sided_hold_and_collapse",
+      "inputs": {
+        "collapse_friction": 0.2,
+        "collapse_steps": 60,
+        "gravity_mm_s2": 9810.0,
+        "hold_friction": 0.3,
+        "hold_steps": 25,
+        "kind": "three_sphere_pyramid_rotational_two_sided",
+        "mass_kg": 1.5,
+        "radius_mm": 10.0,
+        "stiffness_n_per_mm": 2000000.0
+      },
+      "tolerances": {
+        "collapse_base_gap_grows_strictly": {
+          "abs": 0.0,
+          "reason": "**两底球逐步严格分开**（不是“平均趋势”，是逐步比较）。这是“塌”的方向判据：滑移必须朝金字塔散架那一侧走，**朝反方向单调也满足“锚点动了”**——那正是把符号取反的实现会给出的样子（见`_assemble_stick`那段符号注释）",
+          "rel": 0.0
+        },
+        "collapse_every_step_converges": {
+          "abs": 0.0,
+          "reason": "**必红专防：不许拿“求解器不收敛”冒充“塌了”。**两者是两回事——塌是“静解不存在”这条物理，不收敛是数值。本判据要求塌那一边的**每一步**都干净收敛，于是“塌”这个结论只能来自滑移与位形，不能来自异常。近阈值确有一条不收敛带（见case.md第四节第7条），本组的``μ``刻意远离它",
+          "rel": 0.0
+        },
+        "collapse_ground_regime": {
+          "abs": 0.0,
+          "reason": "地面两槽全程`REGIME_STICK`：地面的需求是``(2−√3)/3``，宽松3倍，``μ = 0.20``按不动它。**“塌”不是“到处都在滑”**，分不清这两件事的实现要红",
+          "rel": 0.0
+        },
+        "collapse_ground_slip_increment_mm": {
+          "abs": 0.0,
+          "reason": "逐位零（`float.hex()`）。与上一条配对：判别与滑距**都**要对，因为它们由两段不同的代码写出来",
+          "rel": 0.0
+        },
+        "collapse_slip_does_not_decay": {
+          "abs": 0.0,
+          "reason": "**这一条才是“塌”与“松一下就稳住”的分界**：末步滑距不小于首步。``μ < μc``时静解**不存在**，所以每一步滑掉同样多、累计滑移线性发散；一个“滑一下就收敛”的实现在这里必红。实测60步内比值1.0000028（增，不减）",
+          "rel": 0.0
+        },
+        "collapse_slip_per_contact_mm": {
+          "abs": 0.0,
+          "reason": "闭式``(μc − μ)·F/k_t``，``F = W/2``。**把定性的“塌”变成一个有闭式的速率**——它在``μ → μc⁻``线性趋零，于是两侧判据不是一刀切的开关，而是一条连续的、可对拍的曲线。容差由`rate_tolerance`推出",
+          "rel": 1.97168783648703e-06
+        },
+        "collapse_sphere_regime": {
+          "abs": 0.0,
+          "reason": "球-球两槽全程`REGIME_SLIP`——**卡住的是球-球**，与`sphere_sphere_is_the_binding_contact`同一条物理，但这一次是从**滑移**那一侧独立判出来的",
+          "rel": 0.0
+        },
+        "collapse_top_descends_strictly": {
+          "abs": 0.0,
+          "reason": "顶球逐步严格下降。与上一条一起把“塌”钉成两个独立方向上的单调，而不是一个可以靠噪声凑出来的标量",
+          "rel": 0.0
+        },
+        "hold_demand_ratio": {
+          "abs": 0.0,
+          "reason": "撑住那一边等价于``max(|f|/N) ≤ μ``，而这个上确界就是``μc``。**判它而不只判“没滑”**：没滑可能是因为力算错了，而需求比对上``2−√3``说明力是对的、锥也是对的",
+          "rel": 5e-07
+        },
+        "hold_is_a_fixed_point": {
+          "abs": 0.0,
+          "reason": "整条状态向量**逐位不变**（25步全判`float.hex()`）。只判滑距为零不够：滑距为零而位形在漂，说明有别的东西在写状态——**撑住的含义是这一步什么都没发生**，那是可以逐位判的",
+          "rel": 0.0
+        },
+        "hold_regime": {
+          "abs": 0.0,
+          "reason": "四个槽全是`REGIME_STICK`。**它与滑距为零不是同一条**：一个把regime写死成STICK的实现照样滑，一个忘了写regime的实现照样不滑",
+          "rel": 0.0
+        },
+        "hold_slip_increment_mm": {
+          "abs": 0.0,
+          "reason": "**逐位零**（判`float.hex()`必须是``0x0.0p+0``）。``μ > μc``时试探力落在锥内，return-map返回的锚点修正是**构造性的零矢量**，不是一个很小的数——给它任何非零容差都等于允许一次不该发生的耗散",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "critical_friction": 0.2679491924311228,
+        "onset_matches_stick_demand": true
+      },
+      "id": "oracle:pyramid_rot/slip_onset_threshold",
+      "inputs": {
+        "bracket_high": 0.35,
+        "bracket_low": 0.2,
+        "bracket_width": 1e-12,
+        "gravity_mm_s2": 9810.0,
+        "kind": "three_sphere_pyramid_rotational_slip_onset",
+        "mass_kg": 1.5,
+        "radius_mm": 10.0,
+        "stiffness_n_per_mm": 2000000.0
+      },
+      "tolerances": {
+        "critical_friction": {
+          "abs": 0.0,
+          "reason": "**这一条是从另一条路走到同一个数**：不解全粘着解、不读任何力，只对``μ``二分“走一步之后锚点动没动”。锚点是历史，动没动是一个布尔量，所以这条判据不含任何容差——容差只在最后与``2−√3``对拍时出现。实测阈值0.26794923975367058，相对偏差1.766e-07，与全粘着解那条**同一个数**（0079第5.1节）",
+          "rel": 5e-07
+        },
+        "onset_matches_stick_demand": {
+          "abs": 0.0,
+          "reason": "二分出来的阈值必须与全粘着解的需求比``max(|f|/N)``落在同一个夹取区间内（实测差1.33e-13 ≤ 半宽5e-13）。**没有这一条，两条路各自对上``2−√3``也可能是巧合**——5e-7的容差留得下一个1e-7量级的共同偏差",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "slip_per_contact_mm_at_mu_0p10": 6.17843091655993e-07,
+        "slip_per_contact_mm_at_mu_0p20": 2.49968091655993e-07,
+        "slip_per_contact_mm_at_mu_0p26": 2.9243091655992992e-08
+      },
+      "id": "oracle:pyramid_rot/collapse_rate_law",
+      "inputs": {
+        "frictions": [
+          0.26,
+          0.2,
+          0.1
+        ],
+        "gravity_mm_s2": 9810.0,
+        "kind": "three_sphere_pyramid_rotational_collapse_rate",
+        "mass_kg": 1.5,
+        "radius_mm": 10.0,
+        "stiffness_n_per_mm": 2000000.0
+      },
+      "tolerances": {
+        "slip_per_contact_mm_at_mu_0p10": {
+          "abs": 0.0,
+          "reason": "``μ = 0.1``：闭式``(μc − μ)·F/k_t``，容差由`rate_tolerance`推出（``5e-7·μc/(μc−μ)``）。实测偏差5.98e-6/7.24e-7/3.09e-7（三档），余量2.8/2.7/2.6倍。**三档一起才有内容**：单档对上只说明那一个数凑巧，三档沿``μc − μ``线性对上说明速率律本身是对的",
+          "rel": 7.977090825876126e-07
+        },
+        "slip_per_contact_mm_at_mu_0p20": {
+          "abs": 0.0,
+          "reason": "``μ = 0.2``：闭式``(μc − μ)·F/k_t``，容差由`rate_tolerance`推出（``5e-7·μc/(μc−μ)``）。实测偏差5.98e-6/7.24e-7/3.09e-7（三档），余量2.8/2.7/2.6倍。**三档一起才有内容**：单档对上只说明那一个数凑巧，三档沿``μc − μ``线性对上说明速率律本身是对的",
+          "rel": 1.97168783648703e-06
+        },
+        "slip_per_contact_mm_at_mu_0p26": {
+          "abs": 0.0,
+          "reason": "``μ = 0.26``：闭式``(μc − μ)·F/k_t``，容差由`rate_tolerance`推出（``5e-7·μc/(μc−μ)``）。实测偏差5.98e-6/7.24e-7/3.09e-7（三档），余量2.8/2.7/2.6倍。**三档一起才有内容**：单档对上只说明那一个数凑巧，三档沿``μc − μ``线性对上说明速率律本身是对的",
+          "rel": 1.6853862499418436e-05
         }
       }
     },
