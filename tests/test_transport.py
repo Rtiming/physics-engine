@@ -824,3 +824,76 @@ def test_the_span_stiffness_follows_the_disturbed_path_not_the_nominal_span():
     assert pushed / plain == pytest.approx(
         1.0 + excess / SPAN.geometric_length_mm, rel=1.0e-15
     )
+
+
+# ── 快路的前置条件（注错第二轮N1/N2/N5抓到的三个洞，decisions/0083第四节） ──
+
+
+@pytest.mark.parametrize(
+    ("bad", "message"),
+    [
+        (True, "must be a real number"),
+        (False, "must be a real number"),
+        ("20.0", "must be a real number"),
+        (None, "must be a real number"),
+        (float("nan"), "takeup_speed_mm_s must be finite"),
+        (float("inf"), "takeup_speed_mm_s must be finite"),
+        (float("-inf"), "takeup_speed_mm_s must be finite"),
+    ],
+)
+def test_the_step_rejects_a_takeup_speed_that_is_not_a_finite_float(bad, message):
+    """必红：`_require_finite`的类型门与有限性门，各自都要有东西钉着。
+
+    **这条是`_require_finite`加快路之后补的**（decisions/0083第四节）。
+    快路的前提是"类型已经确定是`float`"，而在补这条门之前，
+    把类型门整个放开（``if True:``）或把有限性判去掉，**全套门一条都不红**——
+    注错第二轮N1、N2实测各自119条全过。
+
+    `bool`要单独列：``isinstance(True, int)``为真，**一个只判"是不是数"的
+    实现会把`True`当成1.0放行**，而那正是本仓在别处反复钉的那类错。
+    """
+
+    loop = SpanTransportLoop.at_steady_state(
+        span=SPAN,
+        reel=REEL,
+        dt_s=1.0e-4,
+        brake_torque_nmm=1200.0,
+        line_speed_mm_s=LINE_SPEED,
+        forbid_slack=True,
+    )
+    #: **判到消息**，不只判"炸了"：`NaN`一路流下去也会在
+    #: "材料长度推到nan"那条护栏上炸，于是一个把有限性判去掉的实现
+    #: 在只判`TransportError`的门下照样绿（注错第二轮N2实测135条全过）。
+    #: 判据要钉的是**哪一道关挡住了它**。
+    with pytest.raises(TransportError, match=message):
+        loop.step(brake_torque_nmm=1200.0, takeup_speed_mm_s=bad)
+
+
+def test_slack_tolerance_survives_the_step_and_is_not_re_decided_each_frame():
+    """必红：`forbid_slack`必须**被带过步**，不能在推进时被重新拍一遍。
+
+    上面那条`test_the_loop_tolerates_slack_when_it_was_told_to`只走一步，
+    判的是**步首**样点——于是一个在推进时把``forbid_slack``写死成`True`的实现
+    在它下面是绿的（注错第二轮N5实测119条全过）。
+    松弛是**跨步持续**的状态，所以门也必须跨步。
+    """
+
+    loop = SpanTransportLoop(
+        span=SPAN,
+        reel=REEL,
+        dt_s=1.0e-3,
+        material_length_mm=SPAN.geometric_length_mm * 1.0001,
+        angular_velocity_rad_s=LINE_SPEED / REEL.radius_mm,
+        forbid_slack=False,
+    )
+    tensions = []
+    for _ in range(5):
+        #: 收线端停住（``takeup = 0``）⟹ 材料只进不出、松弛只会更深。
+        #: 取``2·LINE_SPEED``反而会把材料抽回绷紧，第3步就退出松弛（实测张力2.13 N）。
+        loop, sample = loop.step(brake_torque_nmm=1.0, takeup_speed_mm_s=0.0)
+        tensions.append(sample.tension_n)
+    assert loop.forbid_slack is False, "推进把这条声明弄丢了"
+    assert tensions == [0.0] * 5, f"松弛期张力不是零：{tensions!r}"
+    #: 步长与声明也必须原样带过去——它们不是"每步重新决定"的东西。
+    assert loop.dt_s == 1.0e-3
+    assert loop.step_index == 5

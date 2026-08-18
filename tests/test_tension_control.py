@@ -36,7 +36,7 @@ from physics_engine.tension_control import (
     closed_loop_characteristic_polynomial,
     integral_gain_stability_limit,
 )
-from physics_engine.transport import FreeSpan, PayoutReel
+from physics_engine.transport import FreeSpan, PayoutReel, TransportError
 
 #: 与`cases/closed_loop_tension_step`同一组**假设输入**。
 SPAN = FreeSpan(span_id="span/free", geometric_length_mm=300.0, axial_stiffness_n=60000.0)
@@ -507,3 +507,66 @@ def test_the_integral_limit_scales_with_the_open_loop_damping():
         proportional=0.0, derivative=1.0e-5,
     )
     assert with_derivative > base
+
+
+# ── 快路的前置条件（注错第二轮N8/N9抓到的两个洞，decisions/0083第四节） ──
+
+
+@pytest.mark.parametrize(
+    ("bad", "message"),
+    [
+        (True, "must be a real number"),
+        (False, "must be a real number"),
+        ("20.0", "must be a real number"),
+        (None, "must be a real number"),
+        (float("nan"), "takeup_speed_mm_s must be finite"),
+        (float("inf"), "takeup_speed_mm_s must be finite"),
+        (float("-inf"), "takeup_speed_mm_s must be finite"),
+    ],
+)
+def test_the_closed_loop_step_rejects_a_takeup_speed_that_is_not_a_finite_float(
+    bad, message
+):
+    """必红：`_require_finite`的类型门与有限性门各自要有东西钉着。
+
+    与`tests/test_transport.py`那条同源、同一轮注错补出来的：
+    把类型门整个放开（``if True:``）之后**全套门一条都不红**
+    （注错第二轮N9实测119条全过）。`bool`要单独列，
+    因为``isinstance(True, int)``为真。
+    """
+
+    #: **判到消息**，理由与`tests/test_transport.py`那条同源：
+    #: `NaN`不判在这里也会在下游某条护栏上炸，只判异常类型抓不住。
+    loop = _loop()
+    with pytest.raises((TensionControlError, TransportError), match=message):
+        loop.step(takeup_speed_mm_s=bad)
+
+
+def test_the_delay_line_state_really_advances_from_step_to_step():
+    """必红：时延线必须**被推进**，不能每步都从同一份初始缓冲重新出发。
+
+    上面那条`test_the_actuation_delay_line_is_wired_through_the_loop`判了两件事：
+    前``k``拍必须是初值、加时延必须让峰值变大。**两件都不足以抓住"时延线接上了
+    但状态从不前进"**——那样每拍都从同一份初始缓冲读，前``k``拍照样是初值，
+    而且执行器卡死在初值上峰值反而更大。注错第二轮N8实测119条全过。
+
+    本条判的是**第``k+1``拍必须不再是初值**：环形缓冲走完深度之后，
+    第一条真命令必须出来。
+    """
+
+    decimation = 5
+    control_period = decimation * PLANT_DT_S
+    line = _delay_line(3 * control_period, control_period)
+    assert line.steps == 3
+
+    loop = _loop(control_decimation=decimation, delay_line=line)
+    _, samples = loop.run(400, takeup_speed_mm_s=LINE_SPEED_MM_S + 2.0)
+    ticks = [sample for sample in samples if sample.control_tick]
+    initial = BRAKE_TORQUE_NMM / CLUTCH.torque_per_ampere_nmm
+    assert len(ticks) > 4, "步数不够，判不到缓冲走完之后那一拍"
+    assert all(sample.current_a == initial for sample in ticks[:3])
+    later = [sample.current_a for sample in ticks[3:]]
+    assert any(value != initial for value in later), (
+        f"缓冲深度3走完之后命令仍然恒等于初值{initial!r} —— "
+        "时延线接上了，但它的状态从来没有被推进过"
+    )
