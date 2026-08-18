@@ -49,6 +49,43 @@ research/17第一节实测到同行分两派：
 理由与`rotation.py`那条"θ=0时耦合项恰为0"同源：
 **一个结构性的零如果不被判，实现里多出一项来也没人知道。**
 
+## 多接触点对同一平面：**翻倒要的是"底面"，而底面是一组物质点**
+
+球对平面只有一个接触点，于是`r × F_n ≡ 0`、法向力**永远不产生力矩**——
+一个球不会翻倒，它只会滚。**翻倒要的是第二个接触点**：底面两侧的法向力不等，
+合力作用线离开质心投影，那个不平衡才是倾覆力矩。
+
+所以本模块的第二档是`support_points_plane_contact`：**一组由调用方声明的
+体系支承点**对同一个静止平面。形制逐条照抄球那一档——
+
+| 口径 | 球那一档 | 支承点这一档 |
+|---|---|---|
+| 杆臂 | `r = −R·n̂`，**几何半径不折算** | `r_i = R(q)·p_i`，**体系声明值不折算** |
+| 间隙 | `(c − p)·n̂ − R` | `(c + r_i − p)·n̂` |
+| 摩擦 | 速度型库仑，饱和在`μ|F_n|` | **逐点**同一条，各点各自饱和 |
+| 力矩 | `τ = r × F`，只装一次 | `τ = Σ r_i × F_i`，仍只装一次 |
+
+**"不折算"在这一档更要紧**：支承点是**物质点**（决策0080第二节的同一句话——
+锚点记的是物质点，不是空间点），它随姿态刚性地转，穿透只进`gap_i`。
+若杆臂改用"接触点被压到平面上"的那个投影点，杆臂就会随载荷变，
+而`v_c = v_cm + ω × r_i`里凭空多出一个与穿透同阶的伪滑移——
+与球那一档要挡的是**同一个**错。
+
+**法向力矩在这一档不是零，而那正是判据要读的量**：
+`normal_torque_body_nmm`在球上是结构性的零、在支承点组上是**倾覆/复位力矩本身**。
+同一个字段两档语义不同，因此两档各配一条判据（球判它逐位为零，
+支承点组判它在阈值两侧**变号**）。
+
+## 底面形状怎么声明：**由调用方给一组点，本模块不猜**
+
+plans/16的M4写着"底面形状怎么声明未裁"。**本模块的裁法是最小的那一种**：
+调用方交一组体系点，本模块只对这组点求值。`box_corner_points_mm`是**一个**
+便利构造器（长方体八角），不是唯一形制。
+
+**因此明确不覆盖**（GAP，登记在决策0082第五节）：
+支承多边形的凸性与冗余不被校验（给三个共线点也照算）；
+不从网格自动导出接触足印；圆底/线接触要的是分布压力而不是有限个点，本档给不出。
+
 ## 本模块**不做**什么
 
 * **不做滚动阻力。** research/17第三节逐家核过：Bullet、Chrono、MuJoCo、
@@ -71,6 +108,7 @@ from dataclasses import dataclass
 from physics_engine.rigidbody import (
     RIGID_BODY_LAYOUT,
     cross,
+    rotate_body_to_world,
     rotate_world_to_body,
 )
 
@@ -326,9 +364,304 @@ def sphere_plane_callbacks(
     return force, torque
 
 
+
+
+# ---------------------------------------------------------------------------
+# 多支承点对同一平面——翻倒那一档（决策0082）
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SupportPointContact:
+    """一个支承点这一步的全部产物。**逐点都要能单独判。**
+
+    翻倒的可观测量正是"**哪几个点还在承载**"——把它们合并成一个总力就再也看不见了。
+    球那一档只有一个点，所以`ContactResponse`是扁的；这一档必须逐点带回来。
+    """
+
+    #: 体系声明的支承点，**原样带回**。调用方按序号对上自己的声明，
+    #: 而不是靠"我记得第三个是右前角"——那正是`_slice_of`要挡的同一族错。
+    point_body_mm: Vector3
+    #: 杆臂：质心 → 该支承点，**世界系**，`r_i = R(q)·p_i`。**不折算穿透**。
+    lever_world_mm: Vector3
+    #: 该点到平面的有符号距离。`< 0`才承载。
+    gap_mm: float
+    #: 该点的世界系接触力（法向＋切向）。不承载时**逐位**是零向量。
+    force_world_n: Vector3
+    #: 该点的相对滑移速率（mm/s）。
+    slip_speed_mm_per_s: float
+    #: 该点的切向力是否已经饱和在摩擦锥上。
+    sliding: bool
+
+    @property
+    def in_contact(self) -> bool:
+        """`gap_mm < 0`。**写成属性而不是让调用方自己比**：
+        "接触与否"在本仓已经有一个口径（`contact/penalty.py`的`gap < 0`），
+        不许在判据里长出第二个（比如某处写成`<= 0`，恰好在阈值上分道扬镳）。"""
+
+        return self.gap_mm < 0.0
+
+
+@dataclass(frozen=True)
+class SupportSetResponse:
+    """一组支承点对同一平面的合成产物。
+
+    `points`的**次序与调用方声明的次序逐一对应**，这是形制的一部分：
+    判据要读"第几个点还在承载"，次序换了判据就换了意思。
+    """
+
+    #: 逐点产物，次序同声明。
+    points: tuple[SupportPointContact, ...]
+    #: 世界系合力（所有承载点的法向＋切向之和）。
+    force_world_n: Vector3
+    #: **体系**合力矩`τ = Σ r_i × F_i`，可直接交给`rigidbody`的回调。
+    torque_body_nmm: Vector3
+    #: 只由法向力产生的那一半体系力矩。**这一档它不是零**——
+    #: 它就是倾覆/复位力矩本身，翻倒判据读的正是它的**符号**。
+    normal_torque_body_nmm: Vector3
+
+    @property
+    def contact_count(self) -> int:
+        """还在承载的点数。翻倒的第一可观测量：4 → 2 → 换一组点。"""
+
+        return sum(1 for point in self.points if point.in_contact)
+
+
+def box_corner_points_mm(half_extents_mm: Vector3) -> tuple[Vector3, ...]:
+    """长方体八个角点的体系坐标。**次序是形制的一部分，写在这里一次。**
+
+    次序：`z`最慢、`x`最快，各轴从负到正。于是
+
+    * **索引0—3是底面**（`z = −c`），索引4—7是顶面；
+    * 同一面内索引0/1是`y = −b`那一边、2/3是`y = +b`那一边。
+
+    判据会写"底面那四个点全部离地"，而"底面是哪四个"必须是**被声明的**、
+    不是被数出来的——`rigidbody._slice_of`那条"偏移量由布局算、调用方永不手写"
+    在这里是同一条纪律。
+
+    这个构造器是**一个**便利形制，不是唯一形制：`support_points_plane_contact`
+    收的是任意一组体系点，长方体只是本仓第一个有底面的靶子。
+    """
+
+    half = _require_vec3(half_extents_mm, "half_extents_mm")
+    if any(extent <= 0.0 for extent in half):
+        raise ContactDynamicsError(f"half_extents_mm必须全为正：{half_extents_mm!r}")
+    return tuple(
+        (sx * half[0], sy * half[1], sz * half[2])
+        for sz in (-1.0, 1.0)
+        for sy in (-1.0, 1.0)
+        for sx in (-1.0, 1.0)
+    )
+
+
+def support_points_plane_contact(
+    vector: tuple[float, ...],
+    *,
+    support_points_body_mm: tuple[Vector3, ...],
+    plane_point_mm: Vector3,
+    plane_normal: Vector3,
+    normal_stiffness_n_per_mm: float,
+    tangential_stiffness_n_per_mm: float,
+    friction_coefficient: float,
+    normal_damping_n_s_per_mm: float = 0.0,
+) -> SupportSetResponse:
+    """一组体系支承点对一个静止平面的接触响应。**力矩仍然只装一次。**
+
+    ``vector``是`rigidbody.RIGID_BODY_LAYOUT`的13维状态向量。
+    每个点各自算间隙、法向罚力、速度型库仑切向力；**杆臂是`r_i = R(q)·p_i`，
+    不折算穿透**——理由与球那一档的"取几何半径`R`不取`R − δ`"是同一条，
+    见模块docstring。
+
+    ## 为什么支承点在**体**系声明
+
+    支承点是**物质点**（决策0080第二节）。在体系声明意味着它随姿态刚性地转，
+    而这正是翻倒要的：翻过去之后贴地的是**另外几个**物质点，
+    若支承点在世界系声明，它们就会在体转过去之后留在原地——那不是一个刚体。
+
+    ## 空支承集**失败关闭**
+
+    一组零个点不是"没有接触"，是**没有声明底面**。前者应该由`gap >= 0`表达、
+    后者是调用方漏了参数；把两者合并成"返回零力"会让一个配置错误安静地
+    变成一次自由落体。
+    """
+
+    points_in = tuple(support_points_body_mm)
+    if not points_in:
+        raise ContactDynamicsError(
+            "support_points_body_mm是空的——空支承集不是『没有接触』，是没有声明底面"
+        )
+    if normal_stiffness_n_per_mm <= 0.0:
+        raise ContactDynamicsError("normal_stiffness_n_per_mm必须为正")
+    if tangential_stiffness_n_per_mm < 0.0:
+        raise ContactDynamicsError("tangential_stiffness_n_per_mm不能为负")
+    if friction_coefficient < 0.0:
+        raise ContactDynamicsError("friction_coefficient不能为负")
+    if normal_damping_n_s_per_mm < 0.0:
+        raise ContactDynamicsError("normal_damping_n_s_per_mm不能为负")
+    if len(vector) != RIGID_BODY_LAYOUT.dof_count:
+        raise ContactDynamicsError(
+            f"状态向量长度{len(vector)}不是刚体布局的{RIGID_BODY_LAYOUT.dof_count}"
+        )
+
+    normal = _unit(_require_vec3(plane_normal, "plane_normal"), "plane_normal")
+    plane = _require_vec3(plane_point_mm, "plane_point_mm")
+    body_points = tuple(
+        _require_vec3(point, f"support_points_body_mm[{index}]")
+        for index, point in enumerate(points_in)
+    )
+
+    centre = (vector[0], vector[1], vector[2])
+    velocity = (vector[3], vector[4], vector[5])
+    omega_body = (vector[6], vector[7], vector[8])
+    attitude = (vector[9], vector[10], vector[11], vector[12])
+    #: 体→世界直接走`rigidbody.rotate_body_to_world`（本模块不自己写第三份换算，
+    #: research/17第六节）。球那一档写成`rotate_world_to_body(共轭, ·)`，
+    #: 两条路**逐位等价**（`R(q*) = R(q)ᵀ`，求和次序也相同），
+    #: 这里取直接那一条只因为它少造一个四元数。
+    omega_world = rotate_body_to_world(attitude, omega_body)
+
+    zero: Vector3 = (0.0, 0.0, 0.0)
+    total_force = zero
+    total_torque_world = zero
+    normal_torque_world = zero
+    results: list[SupportPointContact] = []
+    for point in body_points:
+        lever = rotate_body_to_world(attitude, point)
+        gap = _dot(_sub(_add(centre, lever), plane), normal)
+        if gap >= 0.0:
+            results.append(
+                SupportPointContact(
+                    point_body_mm=point,
+                    lever_world_mm=lever,
+                    gap_mm=gap,
+                    force_world_n=zero,
+                    slip_speed_mm_per_s=0.0,
+                    sliding=False,
+                )
+            )
+            continue
+
+        contact_velocity = _add(velocity, cross(omega_world, lever))
+        normal_speed = _dot(contact_velocity, normal)
+        tangential_velocity = _sub(contact_velocity, _scale(normal, normal_speed))
+        slip_speed = _norm(tangential_velocity)
+
+        normal_magnitude = -normal_stiffness_n_per_mm * gap
+        if normal_damping_n_s_per_mm > 0.0 and normal_speed < 0.0:
+            normal_magnitude += -normal_damping_n_s_per_mm * normal_speed
+        if normal_magnitude < 0.0:
+            normal_magnitude = 0.0
+        normal_force = _scale(normal, normal_magnitude)
+
+        cone = friction_coefficient * normal_magnitude
+        sliding = False
+        if slip_speed == 0.0 or cone == 0.0:
+            tangential_force: Vector3 = zero
+        else:
+            wanted = tangential_stiffness_n_per_mm * slip_speed
+            magnitude = wanted
+            if wanted >= cone:
+                magnitude = cone
+                sliding = True
+            direction = _scale(tangential_velocity, 1.0 / slip_speed)
+            tangential_force = _scale(direction, -magnitude)
+
+        force = _add(normal_force, tangential_force)
+        total_force = _add(total_force, force)
+        #: **力矩在这里装，且只在这里装一次**——与球那一档同一句话。
+        total_torque_world = _add(total_torque_world, cross(lever, force))
+        normal_torque_world = _add(normal_torque_world, cross(lever, normal_force))
+        results.append(
+            SupportPointContact(
+                point_body_mm=point,
+                lever_world_mm=lever,
+                gap_mm=gap,
+                force_world_n=force,
+                slip_speed_mm_per_s=slip_speed,
+                sliding=sliding,
+            )
+        )
+
+    return SupportSetResponse(
+        points=tuple(results),
+        force_world_n=total_force,
+        torque_body_nmm=rotate_world_to_body(attitude, total_torque_world),
+        normal_torque_body_nmm=rotate_world_to_body(attitude, normal_torque_world),
+    )
+
+
+def support_points_plane_callbacks(
+    *,
+    support_points_body_mm: tuple[Vector3, ...],
+    plane_point_mm: Vector3,
+    plane_normal: Vector3,
+    normal_stiffness_n_per_mm: float,
+    tangential_stiffness_n_per_mm: float,
+    friction_coefficient: float,
+    gravity_world_n: Vector3 = (0.0, 0.0, 0.0),
+    normal_damping_n_s_per_mm: float = 0.0,
+) -> tuple[
+    Callable[[tuple[float, ...], float], Vector3],
+    Callable[[tuple[float, ...], float], Vector3],
+]:
+    """把上面那个响应包成`integrate_free_flight`要的两个回调。
+
+    **重力在这里加，不在接触函数里加**——与球那一档同一条理由：
+    摩擦锥`μ|F_n|`用的正是接触法向力，混进重力它就被污染了，且不报任何错。
+
+    ## 那个一格记忆：**它是精确的，不是近似的**
+
+    `_derivative_factory`每算一次导数会**先后**调用力回调与力矩回调，
+    参数是**同一个**状态元组对象。支承点这一档一次求值要过`N`个点，
+    照球那一档的写法就会把整组点算两遍。
+
+    这里的记忆键是``vector is 上一次的vector`` ——**对象同一性，不是数值相等**，
+    并且把那个对象的引用**留着**（所以`id`不会被回收后重用）。
+    于是：命中时返回的必然是同一次求值的产物，**逐位相同不是巧合而是同一个对象**；
+    不命中就老老实实重算。
+
+    **拆掉这个记忆，产物逐位不变**——这一条被
+    `test_the_one_slot_memo_changes_nothing`守着，因为"为了快改了数"
+    正是本仓性能条款第二句要挡的事。
+    """
+
+    cache: list[object] = [None, None, None]
+
+    def evaluate(vector: tuple[float, ...], t: float) -> SupportSetResponse:
+        if cache[0] is vector and cache[1] == t:
+            return cache[2]  # type: ignore[return-value]
+        response = support_points_plane_contact(
+            vector,
+            support_points_body_mm=support_points_body_mm,
+            plane_point_mm=plane_point_mm,
+            plane_normal=plane_normal,
+            normal_stiffness_n_per_mm=normal_stiffness_n_per_mm,
+            tangential_stiffness_n_per_mm=tangential_stiffness_n_per_mm,
+            friction_coefficient=friction_coefficient,
+            normal_damping_n_s_per_mm=normal_damping_n_s_per_mm,
+        )
+        cache[0] = vector
+        cache[1] = t
+        cache[2] = response
+        return response
+
+    def force(vector: tuple[float, ...], t: float) -> Vector3:
+        return _add(evaluate(vector, t).force_world_n, gravity_world_n)
+
+    def torque(vector: tuple[float, ...], t: float) -> Vector3:
+        return evaluate(vector, t).torque_body_nmm
+
+    return force, torque
+
+
 __all__ = [
     "ContactDynamicsError",
     "ContactResponse",
+    "SupportPointContact",
+    "SupportSetResponse",
+    "box_corner_points_mm",
     "sphere_plane_callbacks",
     "sphere_plane_contact",
+    "support_points_plane_callbacks",
+    "support_points_plane_contact",
 ]
