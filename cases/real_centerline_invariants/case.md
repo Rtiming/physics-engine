@@ -149,8 +149,8 @@
 清单身份：`case_id = case/real_centerline_invariants`，`load_tier = interactive`。
 
 **A档、interactive**（与`oracle.json`的`load_tier: "interactive"`逐字一致，无pytest marker）。
-实测耗时：`tests/cases/test_real_centerline_invariants.py` 仓内常驻**11条 0.08 s**；
-接上真语料（5份导出、426—984站、850—1966 mm）**13条 0.27 s**。
+实测耗时：`tests/cases/test_real_centerline_invariants.py` 仓内常驻**11条 0.04 s**；
+接上真语料（5份导出、426—984站、850—1966 mm）**13条 0.21 s**。
 最重的是两条收敛阶（各建4条中心线，最细一档321站），仍在毫秒量级——
 本页一个自由度都不解，全部是站点表上的差分。
 
