@@ -43,6 +43,7 @@
 from __future__ import annotations
 
 import math
+import statistics
 
 import pytest
 
@@ -50,6 +51,8 @@ from physics_engine.contact import (
     ContactError,
     PenaltyAnnulusLimit,
     PenaltyGrooveSweep,
+    PenaltyGrooveSweepLive,
+    groove_sweep_live_walls,
     groove_sweep_walls,
 )
 from physics_engine.energies import EnergyContext, EnergyRegistry
@@ -742,3 +745,1006 @@ def test_the_mutation_matrix_is_measured() -> None:
     """
 
     assert True
+
+
+# ================================================ 活站点档（决策0078） ===
+#
+# 下面这一整节判的是`PenaltyGrooveSweepLive`——它把上面那一族丢掉的``A·t``
+# 补了回来，**办法是改能量而不是改梯度**。三条判据的方向各不相同：
+#
+# 1. **退化逐位**：``κ_s = κ_n = τ = 0``时与`PenaltyGrooveSweep`**逐字节相同**，
+#    于是"直中心线＋``tanα = 0`` ⟹ 与`PenaltyAnnulusLimit`逐位相同"
+#    这条链条整条对活站点档照样成立；
+# 2. **梯度确实是能量的导数**：中心差分**二阶收敛，实测比恒为4.0000**。
+#    这与冻结帧那一族恰好相反（那里``U``是二次多项式、截断项恒为零、
+#    误差随``h``变小而变大）——**两族的FD判据形态不同，这本身就是分辨力**；
+# 3. **Hessian不精确的代价被量成数**：牛顿从二阶掉到**一阶**，
+#    收缩率随``τ``增大（0.00748 → 0.01938 → 0.04373）。
+
+
+#: 决策0075第四节4.2那一档的三个不变量（`v2-01-bracket`，plans/14第2.2节实测
+#: ``R = 145.6 mm``、``τ = 2.550 °/mm``）。**这三个数是从0075抄过来的**，
+#: 而0075是用"圆弧＋绕切向自转的帧"那条解析曲线独立算出来的——
+#: 本族用的是另一条曲线（Darboux恒定），两者在同一构型上给出**同一个**
+#: ``|A|/|∇g|``与力方向偏角，见`test_the_live_gradient_reproduces_the_0075_closed_form`。
+LIVE_CURVATURE_S = 0.006848347
+LIVE_CURVATURE_N = 0.000520940
+LIVE_TWIST = -0.044505896
+LIVE_ARC_LIMIT_MM = 20.0
+
+
+def _axis_frame():
+    """轴对齐的右手帧``s = n × t``。**手性在构造期被判**，所以不能随手写。"""
+
+    tangent = (0.0, 1.0, 0.0)
+    normal = (0.0, 0.0, 1.0)
+    return tangent, _cross(normal, tangent), normal
+
+
+def _live_wall(
+    side: float,
+    *,
+    curvature_s: float = LIVE_CURVATURE_S,
+    curvature_n: float = LIVE_CURVATURE_N,
+    twist: float = LIVE_TWIST,
+    slope: float = WALL_SLOPE,
+    arc_limit: float = LIVE_ARC_LIMIT_MM,
+    frame=None,
+    point=(0.0, 0.0, 0.0),
+):
+    tangent, width, normal = frame if frame is not None else _axis_frame()
+    return (
+        0,
+        point,
+        tangent,
+        width,
+        normal,
+        side,
+        HALF_WIDTH_MM,
+        slope,
+        EDGE_RADIUS_MM,
+        DEPTH_WINDOW_MM[0],
+        DEPTH_WINDOW_MM[1],
+        curvature_s,
+        curvature_n,
+        twist,
+        arc_limit,
+        STIFFNESS_N_PER_MM,
+    )
+
+
+def _live(side: float = 1.0, **kwargs) -> PenaltyGrooveSweepLive:
+    return PenaltyGrooveSweepLive(walls=(_live_wall(side, **kwargs),))
+
+
+def _frozen_twin(side: float = 1.0, *, slope: float = WALL_SLOPE) -> PenaltyGrooveSweep:
+    """同一构型上的冻结帧那一族。
+
+    **不能拿`_walls`来比**：那个helper用的是``s = (1, 0, 0)``，
+    而`_axis_frame`按``s = n × t``给出的是``(−1, 0, 0)``——
+    本族在构造期判手性，所以两边的``s``必须是同一个才谈得上"逐位相同"。
+    """
+
+    _, width, normal = _axis_frame()
+    return PenaltyGrooveSweep(
+        walls=(
+            (
+                0,
+                (0.0, 0.0, 0.0),
+                width,
+                normal,
+                side,
+                HALF_WIDTH_MM,
+                slope,
+                EDGE_RADIUS_MM,
+                DEPTH_WINDOW_MM[0],
+                DEPTH_WINDOW_MM[1],
+                STIFFNESS_N_PER_MM,
+            ),
+        )
+    )
+
+
+def _in_section(lateral_mm: float, depth_mm: float, frame=None, along_mm: float = 0.0):
+    """截面坐标``(u, v)``、沿槽偏移``a``那一点。
+
+    ``along_mm``默认为零**不是省事**：0075那一族的判据全部落在站点截面上，
+    而"截面上"恰好是活站点档与冻结帧档**必然**给同一个数的地方
+    （``a* = 0``）。注错验证实测：只在截面上取点时，
+    把退化分支整个停掉**四档逐位门一条都不红**——见
+    `test_the_straight_branch_is_taken_and_not_merely_equivalent`。
+    """
+
+    tangent, width, normal = frame if frame is not None else _axis_frame()
+    return tuple(
+        along_mm * tangent[axis] + lateral_mm * width[axis] + depth_mm * normal[axis]
+        for axis in range(3)
+    )
+
+
+# ------------------------------------ 判据一：退化到冻结帧，**逐字节** ---
+
+
+@pytest.mark.parametrize(
+    ("lateral_mm", "depth_mm", "slope", "expect_active"),
+    (
+        #: 0075判据一那个构型（``tanα = 0``、``u = 2.05``、``v = 0.9``），活动。
+        (2.05, 0.9, 0.0, True),
+        #: 锥面且活动——**这一档是承重的**：只判``tanα = 0``那一档时，
+        #: 活站点档可以把整个锥面分支写错而退化门照样绿。
+        (2.30, 0.8, WALL_SLOPE, True),
+        #: 不活动：两族都给0，判的是"活动条件也一样"。
+        (2.05, 0.9, WALL_SLOPE, False),
+        #: 槽底以下（``v < 0``）且活动——0075第五节那道空门的同形防线。
+        (2.30, -0.5, WALL_SLOPE, True),
+    ),
+)
+def test_the_live_family_degenerates_bit_for_bit_to_the_frozen_one(
+    lateral_mm: float, depth_mm: float, slope: float, expect_active: bool
+) -> None:
+    """``κ_s = κ_n = τ = 0``（**恰好为零**）时两族**逐字节相同**。
+
+    判`float.hex()`不判`==`：`==`会把差一个ulp的两条实现判成一样，
+    而这条门守的恰恰是"活站点档在退化档上一个字节都没多算"。
+
+    **它守的不只是数值，是一条链条**：0075那条
+    "直中心线＋``tanα = 0`` ⟹ 与`PenaltyAnnulusLimit`逐位相同"
+    因此对活站点档**整条**照样成立，不必再判一遍环带。
+
+    机理：帧不转时``u = (x − p − a·t)·s``里的``a``项恒为零（``t ⟂ s``是代数事实），
+    于是"重定位"这件事本身没有内容。`_station`因此**不解**最近点，
+    直接走与`PenaltyGrooveSweep._frame`同一串运算——括号位置一并照抄。
+    """
+
+    tangent, width, normal = _axis_frame()
+    point = _in_section(lateral_mm, depth_mm)
+    state = _state(point)
+    live = PenaltyGrooveSweepLive(
+        walls=(
+            _live_wall(1.0, curvature_s=0.0, curvature_n=0.0, twist=0.0, slope=slope),
+        )
+    )
+    frozen = _frozen_twin(slope=slope)
+    assert width is not None and normal is not None and tangent is not None
+    assert (live.wall_clearance_mm(state)[0] < 0.0) is expect_active
+    assert live.wall_clearance_mm(state)[0].hex() == frozen.wall_clearance_mm(state)[0].hex()
+    assert live.wall_depth_mm(state)[0].hex() == frozen.wall_depth_mm(state)[0].hex()
+    assert live.energy(state, CONTEXT).hex() == frozen.energy(state, CONTEXT).hex()
+    assert [value.hex() for value in live.gradient(state, CONTEXT)] == [
+        value.hex() for value in frozen.gradient(state, CONTEXT)
+    ]
+    assert [[value.hex() for value in row] for row in live.hessian(state, CONTEXT)] == [
+        [value.hex() for value in row] for row in frozen.hessian(state, CONTEXT)
+    ]
+    #: 退化档下``a*``恒为``0.0``——**判它是为了证明上面那一串不是碰巧相等**：
+    #: 若`_station`真去解了最近点，``a*``会是一个``O(ε)``的非零数。
+    assert live.wall_arc_offset_mm(state)[0] == 0.0
+
+
+def test_the_live_family_stops_matching_the_frozen_one_once_the_frame_twists() -> None:
+    """反向门：``τ ≠ 0``时两族**必须不同**。
+
+    没有这一条，上一条测的可能是"活站点档根本没实现"——
+    一个直接转调`PenaltyGrooveSweep`的空壳会让退化门全绿。
+    """
+
+    point = _in_section(2.3, 0.8)
+    state = _state(point)
+    live = _live(1.0)
+    frozen = _frozen_twin()
+    assert live.energy(state, CONTEXT) == pytest.approx(
+        frozen.energy(state, CONTEXT), rel=1.0e-12
+    )
+    #: **能量几乎相同而梯度不同**——这正是0075第四节那句话的形态：
+    #: 丢掉的那一项沿**切向**，它不改变间隙本身，只改变力的方向。
+    live_gradient = live.gradient(state, CONTEXT)
+    frozen_gradient = frozen.gradient(state, CONTEXT)
+    difference = math.sqrt(
+        sum((a - b) ** 2 for a, b in zip(live_gradient, frozen_gradient, strict=True))
+    )
+    assert difference > 1.0
+    assert live.wall_force_tilt_deg(state)[0] > 3.0
+
+
+def test_the_straight_branch_is_taken_and_not_merely_equivalent() -> None:
+    """退化档**确实走了不解最近点那条路**——补一道注错实测出来的空门。
+
+    2026-08-18注错实测：把`_station`的退化判据放宽成``abs(...) < 1e-9``、
+    或者干脆停掉它（一律解最近点），**四档逐位退化门一条都不红**。
+    病根不是判据写松了，是**那四档的求值点全都落在站点截面里**（沿``t``偏移为零），
+    而截面上解不解最近点都给``a* = 0``、于是逐位相同。
+
+    > **门全绿不是因为它挡得住，是因为那条分支从没被区分开过。**
+    > 与0075第五节那道``max(v, 0)``空门是同一个形态。
+
+    这一条把点**挪到截面之外**：沿``t``走5 mm。此时
+    * 走退化分支 ⟹ ``a*``**恒等于**`0.0`（帧不转，``u``与``v``与``a``无关，
+      "重定位"这件事本身没有内容）；
+    * 解最近点 ⟹ ``a*``≈5，**当场看得出来**。
+
+    而``g``两条路仍然相同（那正是退化分支成立的理由），所以**只判`g`是判不出来的**——
+    要判的是``a*``。
+    """
+
+    state = _state(_in_section(2.3, 0.8, along_mm=5.0))
+    live = PenaltyGrooveSweepLive(
+        walls=(_live_wall(1.0, curvature_s=0.0, curvature_n=0.0, twist=0.0),)
+    )
+    #: **零容差**：走了退化分支它就是这个字面值，走另一条路它是5。
+    assert live.wall_arc_offset_mm(state)[0] == 0.0
+    #: 而间隙仍与冻结帧逐位相同——这一条证明上面那个`0.0`不是"算错了"。
+    frozen = _frozen_twin()
+    assert live.wall_clearance_mm(state)[0].hex() == frozen.wall_clearance_mm(state)[0].hex()
+    assert [value.hex() for value in live.gradient(state, CONTEXT)] == [
+        value.hex() for value in frozen.gradient(state, CONTEXT)
+    ]
+
+
+def test_the_straight_branch_judges_exactly_zero_not_merely_small() -> None:
+    """``STRAIGHT_DARBOUX``判的是**恰好为零**，不是"小"——第二道空门。
+
+    2026-08-18注错实测：把退化判据放宽成``abs(...) < 1e-9``，
+    连上一条门都不红——因为上一条给的``τ``**恰好是**`0.0`，
+    而`0.0`同时满足两种判据。**放宽只在"小但不为零"的输入上才看得出来。**
+
+    ``τ = 0``是调用方的一条**声明**（这一段不扭），而"很小"是一个**量**。
+    两者不是一件事：一条``τ = 1e-12``的中心线仍然是弯的、仍然要解最近点，
+    只是解出来的修正很小。**替它判成零，等于替它把声明改了。**
+    """
+
+    tiny = 1.0e-12
+    state = _state(_in_section(2.3, 0.8, along_mm=5.0))
+    live = _live(1.0, curvature_s=0.0, curvature_n=0.0, twist=tiny, arc_limit=20.0)
+    #: 走的是解最近点那条路 ⟹ ``a*``≈5，**不是**退化分支的那个字面`0.0`。
+    assert abs(live.wall_arc_offset_mm(state)[0] - 5.0) < 0.5
+    #: 而``τ``确实小到修正可以忽略——**这一条证明红的是"判据放宽了"
+    #: 而不是"这个构型本来就该走另一条路"**。
+    assert live.wall_force_tilt_deg(state)[0] < 1.0e-9
+
+
+def test_the_closed_form_holds_on_the_other_side_too() -> None:
+    """``σ = −1``那一侧的``A``也判一次——补一道注错实测出来的空门。
+
+    2026-08-24注错实测：把``A = τ(tanα·u + σ·v)/D``里的``σ``删掉，
+    **一条门都不红**。病根是残差那几条判据**全都只判``σ = +1``那一侧**，
+    而``σ = +1``时``σ·v = v``——删掉它一个字节都不差。
+
+    ``σ = −1``那一侧的闭式（同一组不变量、把``u``取到负边）：
+    ``A`` 里``tanα·u``与``σ·v``**符号相反地**组合，于是两侧的``A``**不是**互为相反数
+    ——这正是"删掉``σ``看不出来"能藏身的地方。
+    """
+
+    _, width, normal = _axis_frame()
+    #: ``−s``那一侧要顶上，``u``得取到负边。
+    point = _in_section(-2.3, 0.8)
+    state = _state(point)
+    live = _live(-1.0)
+    assert live.wall_clearance_mm(state)[0] < 0.0
+
+    gap = live.wall_clearance_mm(state)[0]
+    gradient = live.gradient(state, CONTEXT)
+    direction = tuple(value / (STIFFNESS_N_PER_MM * gap) for value in gradient)
+    frozen = tuple(WALL_SLOPE * normal[axis] + width[axis] for axis in range(3))
+    residual = tuple(direction[axis] - frozen[axis] for axis in range(3))
+    measured = math.sqrt(_dot(residual, residual))
+
+    #: 手推：``u = −2.3``、``v = 0.8``、``σ = −1``，
+    #: ``A = τ·(tanα·u + σ·v)/(1 − u·κ_s − v·κ_n)``。
+    jacobian = 1.0 - (-2.3) * LIVE_CURVATURE_S - 0.8 * LIVE_CURVATURE_N
+    expected = abs(
+        LIVE_TWIST * (WALL_SLOPE * (-2.3) + (-1.0) * 0.8) / jacobian
+    )
+    assert measured == pytest.approx(expected, rel=1.0e-9)
+    #: **两侧的``A``不是互为相反数**——判它是为了钉住上面那个式子里``σ``的位置。
+    other = _live(1.0)
+    other_state = _state(_in_section(2.3, 0.8))
+    other_gap = other.wall_clearance_mm(other_state)[0]
+    other_direction = tuple(
+        value / (STIFFNESS_N_PER_MM * other_gap)
+        for value in other.gradient(other_state, CONTEXT)
+    )
+    other_frozen = tuple(WALL_SLOPE * normal[axis] - width[axis] for axis in range(3))
+    other_residual = tuple(other_direction[axis] - other_frozen[axis] for axis in range(3))
+    other_measured = math.sqrt(_dot(other_residual, other_residual))
+    assert abs(measured - other_measured) > 0.01 * other_measured
+
+
+def test_the_model_curve_is_arc_length_parametrised_away_from_the_station() -> None:
+    """在``a* ≈ 5 mm``处再判一次梯度对能量——补一道注错实测出来的空门。
+
+    2026-08-18注错实测：把`_model`的``C(a)``里那一项``(a − sin θa/θ)(ê·t)·ê``
+    整个删掉，**一条门都不红**。病根不是判据松，是**所有的求值点都在``a* ≈ 0``附近**
+    ——而那一项是``a``的**三阶**小量（``a − sin(θa)/θ = θ²a³/6 + …``），
+    在``|a| < 0.1``上比机器精度还小。
+
+    删掉它，模型曲线就**不再以弧长为参数**（``|dC/da| ≠ 1``），
+    于是最近点条件、``D``、以及整条梯度全部错位。
+    这一条把节点沿``t``挪出去5 mm，让``a*``落在真正用得上那一项的量级上。
+    """
+
+    #: ``u``取到3.0而不是2.3：帧沿5 mm转过约12.7°，截面坐标跟着转，
+    #: ``u = 2.3``那一档在``a* ≈ 5``处**已经脱开了**（实测``g = +0.247``）。
+    #: **这一条本身就是"帧真的在转"的读数。**
+    point = _in_section(3.0, 0.8, along_mm=5.0)
+    live = _live(1.0, arc_limit=20.0)
+    state = _state(point)
+    #: 前置两条：``a*``确实走出去了，且壁**确实还活动**——
+    #: 不活动时能量恒为0、FD全零，比值会当场除零而不是判出问题。
+    assert abs(live.wall_arc_offset_mm(state)[0] - 5.0) < 0.5
+    assert live.wall_clearance_mm(state)[0] < 0.0
+    assert live.energy(state, CONTEXT) > 1.0
+    analytic = live.gradient(state, CONTEXT)
+
+    def difference(step: float):
+        out = []
+        for axis in range(3):
+            ahead = tuple(point[i] + (step if i == axis else 0.0) for i in range(3))
+            behind = tuple(point[i] - (step if i == axis else 0.0) for i in range(3))
+            out.append(
+                (
+                    live.energy(_state(ahead), CONTEXT)
+                    - live.energy(_state(behind), CONTEXT)
+                )
+                / (2.0 * step)
+            )
+        return tuple(out)
+
+    errors = []
+    for step in (0.1, 0.05, 0.025, 0.0125):
+        measured = difference(step)
+        errors.append(max(abs(a - b) for a, b in zip(measured, analytic, strict=True)))
+    ratios = [errors[index] / errors[index + 1] for index in range(len(errors) - 1)]
+    assert all(3.9 < ratio < 4.1 for ratio in ratios), ratios
+    assert errors[-1] < 1.0e-3
+
+
+# --------------------------- 判据二：梯度确实是所实现能量的导数（二阶） ---
+
+
+def test_the_live_gradient_is_the_derivative_of_the_live_energy() -> None:
+    """**中心差分二阶收敛，实测比4.0000** —— 本族存在的技术前提。
+
+    直接把``A·t``加进`gradient()`而不动`energy()`会让这条门**当场红，而且红得对**：
+    那时梯度不是任何势的导数，线搜索与收敛判据全部失去依据。
+    本族之所以改的是能量，理由就在这一条门上。
+
+    **与冻结帧那一族恰好相反**：那里``U``是``x``的二次多项式、
+    中心差分的截断项**恒为零**、误差随``h``变小而**变大**
+    （`test_finite_differences_are_roundoff_not_truncation`）。
+    这里``g``经``a*(x)``真非线性地依赖``x``，于是截断项回来了、
+    比值落在4.0上——**两族的FD形态不同，这本身就是一条分辨力**。
+    """
+
+    point = _in_section(2.3, 0.8)
+    live = _live(1.0)
+    analytic = live.gradient(_state(point), CONTEXT)
+
+    def difference(step: float):
+        out = []
+        for axis in range(3):
+            ahead = tuple(point[i] + (step if i == axis else 0.0) for i in range(3))
+            behind = tuple(point[i] - (step if i == axis else 0.0) for i in range(3))
+            out.append(
+                (
+                    live.energy(_state(ahead), CONTEXT)
+                    - live.energy(_state(behind), CONTEXT)
+                )
+                / (2.0 * step)
+            )
+        return tuple(out)
+
+    errors = []
+    for step in (0.1, 0.05, 0.025, 0.0125):
+        measured = difference(step)
+        errors.append(max(abs(a - b) for a, b in zip(measured, analytic, strict=True)))
+    ratios = [errors[index] / errors[index + 1] for index in range(len(errors) - 1)]
+    assert all(3.9 < ratio < 4.1 for ratio in ratios), ratios
+    #: 先断"误差确实在下降到一个小数"，否则上面那条比值可以由三个大数凑出来。
+    assert errors[-1] < 3.0e-4
+
+
+def test_the_live_gradient_reproduces_the_0075_closed_form() -> None:
+    """活梯度与冻结梯度之差，**就是0075第四节那个``A·t``**——两条独立的腿。
+
+    0075用的是"圆弧 + 绕切向按``τ·a``自转的帧"那条解析曲线，
+    本族用的是Darboux矢量恒定的局部模型。**两条曲线不是同一条**，
+    但在同一组``(κ_s, κ_n, τ, u, v, tanα)``上它们给出**同一个**残差——
+    因为``∇g``那一式只依赖不变量，不依赖曲线的其余部分（隐函数定理）。
+
+    实测：丢失**5.3707 %**、力方向偏**3.0743°**，与0075第四节4.2那张表
+    逐位对上（该表用的是``a = 37 mm``处的实际帧相位``D = 0.9838``）。
+    """
+
+    _, width, normal = _axis_frame()
+    point = _in_section(2.3, 0.8)
+    state = _state(point)
+    live = _live(1.0)
+
+    gap = live.wall_clearance_mm(state)[0]
+    gradient = live.gradient(state, CONTEXT)
+    direction = tuple(value / (STIFFNESS_N_PER_MM * gap) for value in gradient)
+    frozen = tuple(WALL_SLOPE * normal[axis] - width[axis] for axis in range(3))
+    frozen_norm = math.sqrt(_dot(frozen, frozen))
+    residual = tuple(direction[axis] - frozen[axis] for axis in range(3))
+    coefficient = math.sqrt(_dot(residual, residual))
+
+    assert coefficient / frozen_norm == pytest.approx(0.0537072, rel=2.0e-5)
+    assert live.wall_force_tilt_deg(state)[0] == pytest.approx(3.07425, rel=2.0e-5)
+    #: 丢掉的那一项**沿切向**——这一条判的是方向不是大小。
+    tangent = _axis_frame()[0]
+    along = _dot(residual, tangent)
+    assert abs(abs(along) - coefficient) < 1.0e-12 * coefficient
+
+
+def test_the_live_residual_vanishes_exactly_when_the_frame_does_not_twist() -> None:
+    """``τ = 0``且``κ ≠ 0``时残差**恰好为零**——反向门，判的是"它就是``τ``那一项"。
+
+    没有这一条，上一条测的可能只是"有个不为零的数"。
+    **曲率仍然不为零**是刻意的：曲线还是弯的、最近点条件还是要解，
+    只有帧的自转没了。残差恰好归零证明它由``τ``**独家**贡献。
+    """
+
+    point = _in_section(2.3, 0.8)
+    state = _state(point)
+    live = _live(1.0, twist=0.0)
+    assert live.wall_force_tilt_deg(state)[0] == 0.0
+    #: 站点截面上``a* = 0``，于是活梯度与冻结梯度**逐位相同**。
+    assert live.wall_arc_offset_mm(state)[0] == pytest.approx(0.0, abs=1.0e-15)
+    frozen = _frozen_twin()
+    assert [value.hex() for value in live.gradient(state, CONTEXT)] == [
+        value.hex() for value in frozen.gradient(state, CONTEXT)
+    ]
+
+
+# ------------------------- 判据三：Hessian不精确的代价，量成一个数 ---
+
+
+def _newton_history(twist_deg_per_mm: float, curvature_radius_mm: float):
+    """一个节点、一面活壁、一根各向同性锚弹簧。返回每一步的``|x − x*|``。
+
+    **梯度是精确的，所以不动点与用哪个切线无关**——变的只有逼近的**速率**。
+    锚弹簧是为了让``k(∇g⊗∇g)``那个秩一矩阵加上它之后非奇异；
+    它不改变本条判据要量的东西（切线里缺的那一块仍然只缺在接触项上）。
+    """
+
+    tangent, width, normal = _axis_frame()
+    live = _live(
+        1.0,
+        curvature_s=1.0 / curvature_radius_mm,
+        curvature_n=LIVE_CURVATURE_N,
+        twist=math.radians(twist_deg_per_mm),
+        arc_limit=40.0,
+    )
+    anchor = _in_section(2.6, 0.8)
+    anchor_stiffness = 2.0e2
+
+    def gradient(position):
+        values = list(live.gradient(_state(position), CONTEXT))
+        for axis in range(3):
+            values[axis] += anchor_stiffness * (position[axis] - anchor[axis])
+        return values
+
+    def solve3(matrix, rhs):
+        rows = [list(matrix[index]) + [-rhs[index]] for index in range(3)]
+        for column in range(3):
+            pivot = max(range(column, 3), key=lambda row: abs(rows[row][column]))
+            rows[column], rows[pivot] = rows[pivot], rows[column]
+            for row in range(3):
+                if row != column:
+                    factor = rows[row][column] / rows[column][column]
+                    for cell in range(column, 4):
+                        rows[row][cell] -= factor * rows[column][cell]
+        return [rows[index][3] / rows[index][index] for index in range(3)]
+
+    position = list(_in_section(2.9, 0.8))
+    trail = []
+    for _ in range(30):
+        values = gradient(position)
+        trail.append(list(position))
+        if math.sqrt(sum(value * value for value in values)) < 1.0e-9:
+            break
+        tangent_matrix = [list(row) for row in live.hessian(_state(position), CONTEXT)]
+        for axis in range(3):
+            tangent_matrix[axis][axis] += anchor_stiffness
+        step = solve3(tangent_matrix, values)
+        for axis in range(3):
+            position[axis] += step[axis]
+    root = position
+    errors = [
+        math.sqrt(sum((point[axis] - root[axis]) ** 2 for axis in range(3)))
+        for point in trail
+    ]
+    assert tangent is not None and width is not None and normal is not None
+    return errors
+
+
+@pytest.mark.parametrize(
+    ("twist_deg_per_mm", "radius_mm", "expected_rate", "expected_iterations"),
+    (
+        #: plans/14第2.2节九档几何里最松、中位、最扭的三档。
+        (0.454, 75.6, 0.00748, 6),
+        (2.550, 75.2, 0.02008, 7),
+        (6.648, 72.8, 0.04565, 9),
+    ),
+)
+def test_the_inexact_hessian_costs_exactly_one_order_of_convergence(
+    twist_deg_per_mm: float,
+    radius_mm: float,
+    expected_rate: float,
+    expected_iterations: int,
+) -> None:
+    """牛顿从**二阶掉到一阶**，收缩率随``τ``增大——**代价是一个数不是一句话**。
+
+    Gauss-Newton切线缺的是``k·g·∇²g``。活动时``g < 0``，那是一块**负定**贡献，
+    于是本项的切线**偏刚**：步子偏短、单调、不发散，只是不再二次收敛。
+
+    实测（到``‖∇U‖ < 1e-9``）：
+
+    | 几何 | ``τ`` °/mm | 迭代 | 精确切线 | 线性收缩率（中位） | 阶 |
+    |---|---:|---:|---:|---:|---:|
+    | `clean_a` | 0.454 | 6 | 4 | 0.00748 | 0.975—1.000 |
+    | `v2-01-bracket`（中位） | 2.550 | 7 | 5 | 0.02008 | 0.982—0.989 |
+    | `v1-coil-1`（最扭） | 6.648 | 9 | 5 | 0.04565 | 0.984—0.993 |
+
+    **"精确切线"那一列是数值Jacobian（中心差分差精确梯度）不是解析``∇²g``**，
+    故读作"大约要几次"；**本条只判Gauss-Newton那一列**。
+
+    **收缩率大致随``τ``线性**（0.0075 / 0.020 / 0.046 对 0.454 / 2.550 / 6.648），
+    这与缺的那一块正比于``τ``的推导一致。代价换算成人话是
+    **多两到四次牛顿**，而换回来的是接触力方向不再偏0.56°—8.11°。
+    """
+
+    errors = _newton_history(twist_deg_per_mm, radius_mm)
+    assert len(errors) == expected_iterations
+
+    #: 逐步比值应当落在一个**常数**上（线性收敛的招牌），而不是逐步平方（二阶）。
+    #: 末点**就是**根，它的误差恰好是`0.0`——把它算进比值会得到一个假的`0.0`。
+    rates = [
+        errors[index + 1] / errors[index]
+        for index in range(1, len(errors) - 1)
+        if errors[index] > 1.0e-12 and errors[index + 1] > 0.0
+    ]
+    assert len(rates) >= 3, errors
+    #: 取**中位数**而不是末项：末几步的误差已经落到`1e-11`量级，
+    #: 比值开始被舍入抬着走（实测末项比中位数高10%—15%）。
+    #: **判中位数并同时判整段落在一个窄带里**，比判某一项更难蒙混过去。
+    assert statistics.median(rates) == pytest.approx(expected_rate, rel=0.2)
+    assert min(rates) > 0.5 * expected_rate
+    assert max(rates) < 1.6 * expected_rate
+    #: **阶恰好是1**：二阶时相邻两个比值会差一个平方，这里它们互相之间只差几个百分点。
+    orders = [
+        math.log(errors[index + 1] / errors[index])
+        / math.log(errors[index] / errors[index - 1])
+        for index in range(2, len(errors) - 1)
+        if errors[index + 1] > 1.0e-12 and 0.0 < errors[index] < errors[index - 1]
+    ]
+    assert orders, errors
+    assert all(0.93 < order < 1.07 for order in orders), orders
+
+
+# --------------------------------------- 走出这一段：失败关闭，不跳段 ---
+
+
+def test_walking_out_of_the_declared_arc_window_fails_closed() -> None:
+    """``|a*|``超出弧长窗**当场抛**——0075登记的触发条件就是"跨过一整个采样步"。
+
+    跨过去之后这条壁携带的``(κ_s, κ_n, τ)``是**上一段**的指纹
+    （0075第四节第3条实测：``κ_s``过一个站点当场变号）。
+    **这时给出一个数比抛出来更坏**，因为那个数看不出是错的。
+    """
+
+    tangent = _axis_frame()[0]
+    far = tuple(
+        _in_section(2.3, 0.8)[axis] + 5.0 * tangent[axis] for axis in range(3)
+    )
+    narrow = _live(1.0, arc_limit=1.0)
+    with pytest.raises(ContactError, match="走出了声明的弧长窗"):
+        narrow.energy(_state(far), CONTEXT)
+    with pytest.raises(ContactError, match="走出了声明的弧长窗"):
+        narrow.gradient(_state(far), CONTEXT)
+    #: **同一个点、同一条壁，窗放宽就算得出来**——证明红的是窗不是别的东西。
+    wide = _live(1.0, arc_limit=20.0)
+    assert abs(wide.wall_arc_offset_mm(_state(far))[0]) > 1.0
+    #: 诊断面在抛之前就该给出读数：窗宽的那条能读到``a*``，
+    #: 调用方据此决定要不要重建（`groove_sweep_live_walls`再调一次）。
+    assert wide.wall_arc_offset_mm(_state(far))[0] == pytest.approx(5.0, rel=0.2)
+
+
+def test_the_nearest_point_condition_fails_closed_inside_the_curvature_centre() -> None:
+    """``D ≤ 0``当场抛——**这不是数值失效是几何失效**。
+
+    ``D = 1 − u·κ_s − v·κ_n``是最近点条件的Jacobian。它归零意味着节点落到了
+    局部曲率中心上：那里"最近站点"不再唯一，再往下算出来的"最近点"是一个**最远点**。
+    """
+
+    #: 曲率半径2 mm、横向偏移3 mm ⟹ ``D = 1 − 3/2 < 0``。
+    live = _live(1.0, curvature_s=0.5, curvature_n=0.0, twist=0.0, arc_limit=50.0)
+    with pytest.raises(ContactError, match="最近点条件退化"):
+        live.wall_clearance_mm(_state(_in_section(3.0, 0.0)))
+
+
+# ------------------------------------------- 装配面与融合路径 ---
+
+
+def test_the_live_fused_path_matches_the_separate_one_byte_for_byte() -> None:
+    """`quantities`与分别调`energy`/`gradient`/`hessian`**逐字节相同**（spec/12第3.1节）。
+
+    本族的融合路径比冻结帧那一族更容易出错：它每条壁要解一次标量牛顿，
+    **两条路径各解一次就可能落在不同的``a*``上**（末步容差之内的两个不同的数）。
+    实际不会，因为解是确定性的、起点也一样——**但那正是要判的东西**。
+    """
+
+    state = _state(_in_section(2.3, 0.8))
+    live = PenaltyGrooveSweepLive(walls=(_live_wall(1.0), _live_wall(-1.0)))
+    energy, gradient, hessian = live.quantities(
+        state, CONTEXT, need_gradient=True, need_hessian=True
+    )
+    assert energy.hex() == live.energy(state, CONTEXT).hex()
+    assert [value.hex() for value in gradient] == [
+        value.hex() for value in live.gradient(state, CONTEXT)
+    ]
+    assert [[value.hex() for value in row] for row in hessian] == [
+        [value.hex() for value in row] for row in live.hessian(state, CONTEXT)
+    ]
+    #: ``need_gradient=False``那条分支也走一遍——0075第五节把它登记成
+    #: "只有一条绿用例走过，没有注错"，本族至少让它被执行。
+    lean_energy, lean_gradient, lean_hessian = live.quantities(
+        state, CONTEXT, need_gradient=False, need_hessian=False
+    )
+    assert lean_energy.hex() == energy.hex()
+    assert lean_gradient is None and lean_hessian is None
+
+
+def test_the_live_family_registers_as_a_potential_and_assembles() -> None:
+    """它进`EnergyRegistry`并与别的项一起装配——**内核只吃数字**那条形制的执行面。"""
+
+    live = PenaltyGrooveSweepLive(walls=(_live_wall(1.0), _live_wall(-1.0)))
+    registry = EnergyRegistry(terms=(live,))
+    state = _state(_in_section(2.3, 0.8))
+    assert live.kind == "potential"
+    assert live.node_index_bound() == 1
+    total, gradient, hessian = registry.total(
+        state, CONTEXT, need_gradient=True, need_hessian=True
+    )
+    assert total.hex() == live.energy(state, CONTEXT).hex()
+    assert gradient is not None and [value.hex() for value in gradient] == [
+        value.hex() for value in live.gradient(state, CONTEXT)
+    ]
+    assert hessian is not None
+    #: 两面壁都活动不了同一个构型，但**装配路径本身**要被走过：
+    #: ``+s``那面顶上、``−s``那面没有，梯度必须只有一面壁的贡献。
+    assert live.wall_clearance_mm(state)[0] < 0.0 < live.wall_clearance_mm(state)[1]
+
+
+def test_the_live_hessian_is_the_rank_one_outer_product_of_the_live_gradient() -> None:
+    """``H = k·(∇g ⊗ ∇g)``——**秩一，且用的是活梯度而不是冻结梯度**。
+
+    判它是为了挡住一种很自然的写法：Hessian照抄冻结帧那一族
+    （用``tanα·n − σ·s``做外积）。那样能量、梯度、Hessian就**三者不自洽**，
+    而秩一这条性质本身照样成立——**所以只判秩一是判不出来的**。
+    """
+
+    state = _state(_in_section(2.3, 0.8))
+    live = _live(1.0)
+    gap = live.wall_clearance_mm(state)[0]
+    gradient = live.gradient(state, CONTEXT)
+    direction = tuple(value / (STIFFNESS_N_PER_MM * gap) for value in gradient)
+    hessian = live.hessian(state, CONTEXT)
+    for row in range(3):
+        for column in range(3):
+            assert hessian[row][column] == pytest.approx(
+                STIFFNESS_N_PER_MM * direction[row] * direction[column], rel=1.0e-12
+            )
+    #: 秩一：任何与``∇g``正交的方向上二次型为零。
+    perpendicular = _cross(direction, (0.3, 0.5, 0.81))
+    quadratic = sum(
+        perpendicular[row] * hessian[row][column] * perpendicular[column]
+        for row in range(3)
+        for column in range(3)
+    )
+    assert abs(quadratic) < 1.0e-9 * STIFFNESS_N_PER_MM
+    #: **反向**：用冻结梯度做外积会给出一个不同的矩阵——证明上面判得出差别。
+    _, width, normal = _axis_frame()
+    frozen = tuple(WALL_SLOPE * normal[axis] - width[axis] for axis in range(3))
+    #: **判整个矩阵而不是某一格**：丢掉的那一项沿``t = (0, 1, 0)``，
+    #: 于是``[0][0]``这一格**恰好一点没变**——只判它等于没判。
+    drift = max(
+        abs(hessian[row][column] - STIFFNESS_N_PER_MM * frozen[row] * frozen[column])
+        for row in range(3)
+        for column in range(3)
+    )
+    assert drift > 1.0e2
+
+
+# --------------------------------------------------- 装配期：builder ---
+
+
+def _twisting_centerline(step_mm: float = 2.0, count: int = 21) -> GrooveCenterline:
+    """`_gold_curve`/`_gold_frame`那条解析曲线采成站点表。
+
+    **金标与被测物互不引用**：曲线由本文件上面那两个函数给（圆弧＋绕切向自转的帧），
+    不变量由`_gold_invariants`用中心差分独立量出来，而被测的是
+    `groove_sweep_live_walls`从**站点表**里差分出来的那三个数。
+    """
+
+    return GrooveCenterline(
+        centerline_id="groove/twisting_arc",
+        stations=tuple(
+            GrooveStation(
+                arc_length_mm=index * step_mm,
+                position_mm=_gold_curve(index * step_mm),
+                tangent=_gold_frame(index * step_mm)[0],
+                width_direction=_gold_frame(index * step_mm)[1],
+                surface_normal=_gold_frame(index * step_mm)[2],
+            )
+            for index in range(count)
+        ),
+        semantics=CenterlineSemantics(
+            position_interpolation="hermite_tangent",
+            frame_interpolation="reorthonormalised_linear",
+            topology="open",
+            out_of_range="clamp_to_end",
+            nearest_refinement_iterations=8,
+        ),
+        length_unit="mm",
+    )
+
+
+def test_the_live_builder_recovers_the_invariants_of_the_analytic_curve() -> None:
+    """装配期差分出来的``(κ_s, κ_n, τ)``对得上解析曲线的实测不变量。
+
+    **这是本族与中心线之间唯一的接口**，也是唯一一处"读进来的数对不对"能被判的地方。
+    ``τ``干净，``κ_s``带段内插值那一档偏差——**两条各按各的容差判**，
+    混成一条会把"``κ_s``不干净"这件事掩盖掉（决策0075第四节第3条实测）。
+    """
+
+    centerline = _twisting_centerline()
+    arc = 9.0
+    position = tuple(
+        _gold_curve(arc)[axis]
+        + 2.3 * _gold_frame(arc)[1][axis]
+        + 0.8 * _gold_frame(arc)[2][axis]
+        for axis in range(3)
+    )
+    item = groove_sweep_live_walls(
+        centerline,
+        ((0, position),),
+        half_width_mm=HALF_WIDTH_MM,
+        wall_slope=WALL_SLOPE,
+        edge_radius_mm=EDGE_RADIUS_MM,
+        depth_window_mm=DEPTH_WINDOW_MM,
+        stiffness_n_mm=STIFFNESS_N_PER_MM,
+        frame_probe_mm=1.0,
+        name="groove_sweep_live",
+    )
+    assert len(item.walls) == 2
+    #: 两面壁**共用同一个站点与同一组不变量**——分开定位会让"槽宽"失去意义。
+    assert item.walls[0][1:5] == item.walls[1][1:5]
+    assert item.walls[0][11:15] == item.walls[1][11:15]
+    assert [wall[5] for wall in item.walls] == [1.0, -1.0]
+
+    station_arc = centerline.nearest_arc_length_mm(position)[0]
+    truth_s, truth_n, truth_twist = _gold_invariants(station_arc)
+    curvature_s, curvature_n, twist = item.walls[0][11:14]
+    #: ``τ``是干净的那一个（0075第四节第3条：段内差分给机器精度）。
+    assert twist == pytest.approx(truth_twist, rel=2.0e-3)
+    #: 曲率带段内那一档偏差——**容差写得比``τ``松是有理由的，不是凑的**。
+    assert curvature_s == pytest.approx(truth_s, rel=5.0e-2)
+    assert abs(curvature_n - truth_n) < 5.0e-4
+    #: 弧长窗是"到本段两端的距离"里小的那一个，**必须是正的**。
+    assert 0.0 < item.walls[0][14] <= 2.0
+
+
+def test_the_live_builder_refuses_a_probe_it_cannot_use() -> None:
+    """``frame_probe_mm``没有默认值，非正当场拒——探针宽度是采样步的函数。"""
+
+    centerline = _twisting_centerline()
+    with pytest.raises(ContactError, match="frame_probe_mm"):
+        groove_sweep_live_walls(
+            centerline,
+            ((0, _gold_curve(9.0)),),
+            half_width_mm=HALF_WIDTH_MM,
+            wall_slope=WALL_SLOPE,
+            edge_radius_mm=EDGE_RADIUS_MM,
+            depth_window_mm=DEPTH_WINDOW_MM,
+            stiffness_n_mm=STIFFNESS_N_PER_MM,
+            frame_probe_mm=0.0,
+        )
+
+
+def test_the_probe_never_crosses_a_station() -> None:
+    """探针**夹在段内**——跨站点差分不是"精度差一点"，是符号错。
+
+    判法：给一个比整段还宽的探针，取出的不变量**必须与窄探针一致**
+    （夹段生效），而不是变成另一个数（夹段失效、差分跨了站点）。
+    决策0075第四节第3条实测：跨一个站点时``κ_s``从`−1.402e-4`跳到`+1.402e-4`。
+    """
+
+    centerline = _twisting_centerline()
+    position = tuple(
+        _gold_curve(9.0)[axis] + 2.3 * _gold_frame(9.0)[1][axis] for axis in range(3)
+    )
+    common = {
+        "half_width_mm": HALF_WIDTH_MM,
+        "wall_slope": WALL_SLOPE,
+        "edge_radius_mm": EDGE_RADIUS_MM,
+        "depth_window_mm": DEPTH_WINDOW_MM,
+        "stiffness_n_mm": STIFFNESS_N_PER_MM,
+    }
+    narrow = groove_sweep_live_walls(
+        centerline, ((0, position),), frame_probe_mm=0.5, **common
+    )
+    wide = groove_sweep_live_walls(
+        centerline, ((0, position),), frame_probe_mm=50.0, **common
+    )
+    #: 段是2 mm，探针要50 mm——夹段之后两者拿到的是**同一段**，
+    #: 于是三个不变量在段内插值的精度内一致。
+    for index in (11, 12, 13):
+        assert narrow.walls[0][index] == pytest.approx(
+            wide.walls[0][index], rel=5.0e-2, abs=1.0e-6
+        )
+    #: 而`segment_bounds_mm`确实把探针夹住了——弧长窗不超过一整段。
+    assert wide.walls[0][14] <= 2.0
+
+
+# ------------------------------------------------- 活站点档的必红矩阵 ---
+
+
+def test_the_live_family_refuses_an_empty_declaration() -> None:
+    with pytest.raises(ContactError, match="at least one wall"):
+        PenaltyGrooveSweepLive()
+
+
+def test_the_live_family_refuses_a_wall_with_the_wrong_arity() -> None:
+    """16格少一格当场拒——**位置元组少一格不会自己报错**，只会整体错位一位。"""
+
+    wall = list(_live_wall(1.0))
+    with pytest.raises(ContactError, match="16 fields"):
+        PenaltyGrooveSweepLive(walls=(tuple(wall[:-1]),))
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (
+        (0, -1, "nonnegative int"),
+        (0, True, "nonnegative int"),
+        (1, (0.0, 0.0, float("nan")), "finite 3-vector"),
+        (2, (0.0, 0.0), "finite 3-vector"),
+        (2, (0.0, 2.0, 0.0), "unit vector"),
+        (3, (0.0, float("inf"), 0.0), "finite 3-vector"),
+        (4, (0.0, 0.0, 0.5), "unit vector"),
+        (5, 0.0, "exactly"),
+        (5, 2.0, "exactly"),
+        (6, 0.0, "half width must be positive"),
+        (7, -0.1, "slope"),
+        (7, float("nan"), "slope"),
+        (8, -1.0, "edge radius"),
+        (9, float("inf"), "depth window lower bound"),
+        (10, -2.0, "depth window must be non-empty"),
+        (11, float("nan"), "curvature_s"),
+        (12, float("inf"), "curvature_n"),
+        (13, float("nan"), "twist"),
+        (14, 0.0, "arc window"),
+        (14, -1.0, "arc window"),
+        (15, 0.0, "stiffness must be positive"),
+    ),
+)
+def test_every_live_constructor_branch_fails_closed(
+    field: int, value, message: str
+) -> None:
+    """构造期每一条分支各有一条红用例。**本族比冻结帧多五个字段，五个都判。**"""
+
+    wall = list(_live_wall(1.0))
+    wall[field] = value
+    with pytest.raises(ContactError, match=message):
+        PenaltyGrooveSweepLive(walls=(tuple(wall),))
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (
+        #: ``t``与``s``不正交——**冻结帧那一族根本没有这条判据**，因为``t``不进它。
+        (2, (0.0, 0.0, 1.0), "不正交"),
+        #: ``s``与``n``不正交。
+        (3, (0.0, 0.0, 1.0), "不正交"),
+    ),
+)
+def test_a_skewed_live_frame_fails_closed(field: int, value, message: str) -> None:
+    """三根轴两两正交各判一次——取错帧在数值上不报任何错。"""
+
+    wall = list(_live_wall(1.0))
+    wall[field] = value
+    with pytest.raises(ContactError, match=message):
+        PenaltyGrooveSweepLive(walls=(tuple(wall),))
+
+
+def test_a_left_handed_live_frame_fails_closed() -> None:
+    """``s = n × t``的**手性**也判——左手帧让``κ_s``与``τ``整体反号。
+
+    **这条判据冻结帧那一族没有，而本族必须有**：那里帧只用来投影，
+    镜像掉不改变``|u|``与``v``的大小；这里``τ``与``κ_s``是**带符号**地进梯度的，
+    符号错了力就往反方向偏，而三根轴仍然两两正交、仍然都是单位向量。
+    """
+
+    tangent, width, normal = _axis_frame()
+    wall = list(_live_wall(1.0))
+    wall[3] = tuple(-value for value in width)
+    with pytest.raises(ContactError, match="cross"):
+        PenaltyGrooveSweepLive(walls=(tuple(wall),))
+    assert tangent is not None and normal is not None
+
+
+def test_the_live_mutation_matrix_is_measured() -> None:
+    """**活站点档的注错验证登记表**（2026-08-18实测，逐条清`__pycache__`后重跑）。
+
+    全文在决策0078第七节。基线：本文件**87条** ＋
+    `tests/cases/test_real_centerline_invariants.py` **13条**
+    （11条常驻＋2条选择进入；跑注错时接上真语料），共**100条**。
+
+    ## 第一轮22条变异里**有6条一门不红**——这一节的价值全在那6条上
+
+    | 改坏什么 | 第一轮 | 补门后 |
+    |---|---|---|
+    | `_station`退化分支判据由`== 0.0`放宽成`abs(...) < 1e-9` | **0红** | 1红 |
+    | `_station`退化分支永假（一律解最近点） | **0红** | 1红 |
+    | `_station`丢掉``− coefficient * local_t``（退回冻结梯度） | 7红 | 9红 |
+    | `_station`删掉``/ jacobian``（丢掉``1/D``） | 3红 | 5红 |
+    | `_station`把``side * depth``的``side``删掉 | **0红** | 1红 |
+    | `_model`的Darboux把``− curvature_n``写成``+`` | 1红 | 2红 |
+    | `_model`的``C(a)``丢掉``(arc − swept) * along * axis`` | **0红** | 1红 |
+    | `_station`的牛顿把``residual / jacobian``写成``residual`` | **0红** | **仍0红，见下** |
+    | `_station`删掉``jacobian <= 0`` | 1红 | 1红 |
+    | `_station`删掉弧长窗 | 1红 | 1红 |
+    | `hessian_entries`改用冻结方向做外积 | 4红 | 4红 |
+    | 构造期不再判手性 | 1红 | 1红 |
+    | 构造期不再判``t ⟂ s`` / ``t ⟂ n`` | 1红 | 1红 |
+    | 构造期不再判16格 | 42红 | 46红 |
+    | builder的探针不夹段 | 1红 | 1红 |
+    | builder的``arc_limit``改成常数`1e9` | 2红 | 2红 |
+    | `laydown`的`central`换成均匀网格系数 | **0红** | 1红 |
+    | `laydown`把``κ_s``与``κ_n``对调 | 5红 | 6红 |
+    | `laydown`把``τ``整体反号 | 2红 | 3红 |
+    | `hard_way_edge_strain`把``w/2``写成``w`` | 3红 | 3红 |
+    | `arc_length_fraction_above`按站点数权 | **0红** | 1红 |
+    | `laydown`的`forward`除数偏一点 | 1红 | 1红 |
+
+    ## 那6道空门各是一个不同的形态
+
+    1. **退化分支两条**：四档逐位门的求值点**全落在站点截面里**，
+       而截面上解不解最近点都给``a* = 0``。补
+       `test_the_straight_branch_is_taken_and_not_merely_equivalent`
+       与`test_the_straight_branch_judges_exactly_zero_not_merely_small`；
+    2. **``σ``那条**：残差判据**只走了``σ = +1``一侧**，而那一侧``σ·v = v``。
+       补`test_the_closed_form_holds_on_the_other_side_too`。
+       **与0075第三节那条"``σ = −1``那一侧另有一条门"同源——同一个坑第二次**；
+    3. **``C(a)``那条**：所有求值点都在``a* ≈ 0``附近，而那一项是``a``的**三阶**小量。
+       补`test_the_model_curve_is_arc_length_parametrised_away_from_the_station`；
+    4. **`laydown`那两条**：仓内合成语料与GCW真语料**都是均匀采样**，
+       而均匀网格上两种写法恰好相同。补`test_a_nonuniform_sampling_is_weighted_by_arc`
+       ——**三点系数那一条补了一次还没堵上**（非均匀之后两种写法只差2.3倍绝对误差），
+       改判**收敛阶**才干净（`test_the_nonuniform_three_point_weights_stay_second_order`：
+       正确的恒4.00、错的一路往2掉）。
+
+    ## 剩下那一条不是空门，是一条**不改变答案**的变异
+
+    ``step = residual / jacobian`` → ``step = residual``：那是不动点迭代
+    ``a ← a + F(a)``，**不动点``F = 0``与除不除``D``无关**。
+    收敛到的``a*``一样、``g``一样、``∇g``一样，变的只有迭代次数。
+    **不为它补门**——要判它就得判迭代次数，那是把实现细节写成判据。
+
+    ## 一条判据自己写错了两次
+
+    本文件的`test_the_live_hessian_is_the_rank_one_outer_product...`第一版只判"秩一"，
+    而**用冻结梯度做外积照样是秩一**；补反向断言时又只判了``hessian[0][0]``，
+    而丢掉的那一项沿``t = (0, 1, 0)``、**那一格恰好一点没变**。
+    最后改成判整个矩阵的最大偏差。
+    **形态：一条判据看起来在判一件事，实际判的是另一件更弱的事。**
+
+    ## 没有被注错验过的，如实登记
+
+    * `_station`的"牛顿20步不收敛"**没有构造出用例**：``∂F/∂a = −D``在``D > 0``时
+      是良态的二次收敛，本轮**没能找到一个既过``D > 0``又不收敛的构型**；
+    * `groove_sweep_live_walls`里"探针塌成零宽"同样没有用例：触发它需要一个零长的段，
+      而`_require_stations`在中心线构造期就把那种表拒了——**两道门在这里是重叠的**；
+    * `quantities`的``need_gradient=False``分支只有一条绿用例走过，没有注错。
+    """
