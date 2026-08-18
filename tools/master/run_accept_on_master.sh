@@ -83,6 +83,14 @@ fi
 # 依赖只装本仓声明的dev档；**版本按pyproject的约束**，不用系统那份7.4.4。
 "\$VENV/bin/python" -m pip install -q 'pytest>=8' 'ruff>=0.15,<1' 'numpy>=1.24'
 
+# `accept.py`把解释器写死成`.venv/bin/python`（第54行起那张命令表）。
+# 所以检出目录里必须有那条路径——**做软链指向共享venv，不在每个检出里重装一遍**。
+# 这与本机的形制一致（本机的`.venv`也在仓根），于是`accept.py`一个字都不用改。
+ln -sfn "\$VENV" "\$DIR/.venv"
+# 让引擎自己能被import：本仓是src布局且零运行时依赖，`PYTHONPATH`足够，
+# 不需要editable安装（那会把远端venv绑到某一个检出目录上，而检出是一次一个）。
+export PYTHONPATH="\$DIR/src"
+
 echo "[master] 分区=$PARTITION 核数=$CORES 起跑 accept.py $PROFILE"
 srun -p "$PARTITION" -c "$CORES" --time=01:00:00 \\
      "\$VENV/bin/python" tools/accept.py "$PROFILE" 2>&1 | tail -40
