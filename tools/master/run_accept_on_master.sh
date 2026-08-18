@@ -15,11 +15,14 @@
 #
 # ## 三条形制上的选择，逐条写明为什么
 #
-# 1. **走`git archive HEAD`而不是rsync整棵树**。理由是`accept.py`有一条
-#    `repo_stable`轴：它比对运行前后的仓库指纹。rsync会把`.venv`/`work`/`dist`
-#    这些本地产物一起带过去（或者要维护一张排除表，而那张表会漂）；
-#    `git archive`交出的**恰好是被git跟踪的那些字节**，与`accept`要验的东西同一口径。
-#    代价是**未提交的改动不会被测到**——这正是想要的：发出去的回执必须能对回一个commit。
+# 1. **走`git bundle`而不是rsync整棵树，也不是`git archive`**。
+#    `accept.py`有一条`repo_stable`轴，它要问`git rev-parse HEAD`——
+#    **`git archive`交出的树没有`.git`，第一次实跑当场撞上`exit status 128`**。
+#    rsync整棵树又会把`.venv`/`work`/`dist`带过去（或要维护一张会漂的排除表）。
+#    `git bundle`两头都占：克隆出来的**HEAD SHA与本仓逐位相同**（实测`adf5a17`对`adf5a17`）、
+#    工作树干净、体积只有3.2MB（`.git`是24MB）。
+#    master上本来就有前人留下的`physics-engine-release-*.bundle`，**形制一致不是新发明**。
+#    代价仍是**未提交的改动不会被测到**——这正是想要的：发出去的回执必须能对回一个commit。
 # 2. **远端用独立venv不用系统python**。master的系统pytest是7.4.4，而本仓
 #    `pyproject.toml`要求`pytest>=8`、`ruff>=0.15,<1`。用系统的会静默跑在一个
 #    本仓从未声明支持的版本上。
@@ -48,10 +51,10 @@ SHORT="$(git rev-parse --short HEAD)"
 
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
-git archive --format=tar "$HEAD_SHA" > "$STAGE/tree.tar"
-echo "[master] 打包 $SHORT（$(wc -c < "$STAGE/tree.tar") 字节）"
+git bundle create "$STAGE/pe.bundle" HEAD 2>/dev/null
+echo "[master] 打包 $SHORT（$(wc -c < "$STAGE/pe.bundle") 字节）"
 
-rtime-sync push "$STAGE/tree.tar" "$HOST:/tmp/pe-accept-$SHORT.tar" >/dev/null
+rtime-sync push "$STAGE/pe.bundle" "$HOST:/tmp/pe-accept-$SHORT.bundle" >/dev/null
 echo "[master] 已送达 $HOST"
 
 # 远端脚本：解包 → 备venv → 在srun分配里跑accept → 打印回执路径
@@ -59,10 +62,17 @@ echo "[master] 已送达 $HOST"
 rtime-ssh "$HOST" bash -s <<REMOTE
 set -euo pipefail
 DIR="\$HOME/$REMOTE_DIR/$SHORT"
-rm -rf "\$DIR"; mkdir -p "\$DIR"
-tar -xf /tmp/pe-accept-$SHORT.tar -C "\$DIR"
-rm -f /tmp/pe-accept-$SHORT.tar
+rm -rf "\$DIR"
+mkdir -p "\$(dirname "\$DIR")"
+git clone -q /tmp/pe-accept-$SHORT.bundle "\$DIR"
+rm -f /tmp/pe-accept-$SHORT.bundle
 cd "\$DIR"
+# 克隆出来是分离头指针，SHA与本仓相同；核一遍，不相同就停。
+GOT="\$(git rev-parse HEAD)"
+if [ "\$GOT" != "$HEAD_SHA" ]; then
+    echo "远端HEAD \$GOT 与本仓 $HEAD_SHA 不同 —— 回执就对不回一个commit了" >&2
+    exit 3
+fi
 
 VENV="\$HOME/$REMOTE_DIR/.venv"
 if [ ! -x "\$VENV/bin/python" ]; then
