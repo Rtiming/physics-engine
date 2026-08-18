@@ -32,6 +32,10 @@ Drake issue #21868：只是构建`MultibodyPlant`就把vtk_internals、X11、Ope
 from __future__ import annotations
 
 import ast
+import json
+import os
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -68,11 +72,36 @@ def imported_roots(source: str) -> set[str]:
 
 
 def _python_files(root: Path) -> list[Path]:
-    return [
-        path
-        for path in sorted(root.rglob("*.py"))
-        if "__pycache__" not in path.parts and ".venv" not in path.parts
-    ]
+    """**只扫git跟踪的`.py`**，不扫整棵目录树。
+
+    第一版用`rglob`扫全仓，**在主仓当场就是红的**（2026-08-18对抗审核实测）：
+    本仓的多代理机制把worktree副本建在`.claude/worktrees/`下，
+    副本里那份`tools/view/replay.py`当然import rerun，于是门把**自己的产物**判成了违规。
+
+    这不是加个豁免就完的事——`rglob`扫到的东西里有多少不属于"本仓的源码"
+    （`.git`的钩子样例、别人的worktree、临时解包目录）本来就说不清。
+    **改成问git"哪些文件是这个仓的"**，判据于是落在一个结构位置上而不是一条路径黑名单上，
+    这正是plans/09教训二的通则。
+
+    `git ls-files`拿不到时（不是git仓、或git不在）**失败关闭**：
+    一道扫不到文件的门与没有门等价，而"0个文件"在本仓已经冒充过一次通过
+    （`rtime-project-check`那条，plans/09第六节第4条）。
+    """
+
+    completed = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "-z", "*.py"],
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise AssertionError(
+            "`git ls-files`拿不到跟踪文件清单，这道门无法确定它该扫什么 —— "
+            "失败关闭，不退回rglob（退回去就是把已经红过的那条路又走一遍）"
+        )
+    names = [name for name in completed.stdout.decode().split("\0") if name]
+    if not names:
+        raise AssertionError("git跟踪的`.py`文件为0个 —— 这不是通过，是空跑")
+    return [root / name for name in names]
 
 
 def offending_files(roots: frozenset[str], paths: list[Path]) -> list[str]:
@@ -255,3 +284,79 @@ def test_the_pyproject_criterion_stays_quiet_on_todays_pyproject():
         f"判据没解析出本仓已知的dev依赖，实际拿到：{sorted(declared)} —— "
         "**读到空集的判据永远绿**，那比没有判据更坏"
     )
+
+
+# ---------------------------------------------------------------- 动态import
+#: **静态判据有一个说得清的盲区**：它扫的是AST的`Import`/`ImportFrom`节点，
+#: 而`importlib.import_module("re" + "run")`、`__import__("rerun")`、
+#: `exec("import rerun")`在AST里都是`Call`，一个都不命中。
+#: 2026-08-18对抗审核实测四种写法全部能让上面四条判据保持绿。
+#:
+#: 补法不是把静态判据写得更花（那是追着绕过手法跑，永远慢一步），
+#: 而是**换一把量的是结果的尺子**：真的import一次内核，看`sys.modules`里有没有它。
+#: 静态那条管"源码长什么样"，这条管"最终发生了什么"——**后者绕不过去**。
+def modules_after_importing(package: str, path_entry: Path | None = None) -> frozenset[str]:
+    """在**干净子进程**里import`package`，返回事后`sys.modules`的顶层名字集合。
+
+    必须是子进程：本进程早就import过`physics_engine`，在这里查`sys.modules`
+    量到的是**测试自己的**依赖闭包，那正好是一条量错了对象的判据。
+    """
+
+    code = (
+        "import sys, json\n"
+        f"__import__({package!r})\n"
+        "print(json.dumps(sorted({name.split('.', 1)[0] for name in sys.modules})))"
+    )
+    environment = dict(os.environ)
+    if path_entry is not None:
+        existing = environment.get("PYTHONPATH", "")
+        environment["PYTHONPATH"] = (
+            f"{path_entry}{os.pathsep}{existing}" if existing else str(path_entry)
+        )
+    completed = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=environment,
+        cwd=ROOT,
+    )
+    if completed.returncode != 0:
+        raise AssertionError(f"子进程import`{package}`失败：{completed.stderr[-2000:]}")
+    return frozenset(json.loads(completed.stdout))
+
+
+def test_importing_the_kernel_never_pulls_the_viewer_dependency_at_runtime():
+    """**结果尺**：import完`physics_engine`，`sys.modules`里不许出现禁名。
+
+    这条挡的是静态判据挡不住的那一族（动态import），
+    而且它**顺带守住了将来任何形式的"绕过"**——不管源码写成什么样，
+    只要跑完内核之后rerun在`sys.modules`里，它就红。
+    """
+
+    loaded = modules_after_importing("physics_engine")
+    assert not (VIEW_DEPENDENCY_ROOTS & loaded), (
+        f"import physics_engine之后`sys.modules`里出现了{sorted(VIEW_DEPENDENCY_ROOTS & loaded)}"
+        " —— 内核在运行时拉进了查看器依赖"
+    )
+
+
+def test_the_runtime_criterion_catches_a_dynamic_import_the_ast_one_misses(tmp_path):
+    """必红：一个**只用动态import**的包，静态判据看不见、运行时判据必须看见。
+
+    用`xml.dom`当替身禁名（标准库、几乎没人会顺带import进来），
+    这样这条用例不依赖rerun装没装。
+    """
+
+    stub = tmp_path / "dynamic_stub"
+    stub.mkdir()
+    (stub / "__init__.py").write_text(
+        'import importlib\n_pulled = importlib.import_module("xml" + ".dom")\n',
+        encoding="utf-8",
+    )
+    source = (stub / "__init__.py").read_text(encoding="utf-8")
+
+    #: 静态判据对它**完全失明**——这一行就是那个盲区的证据，不是推测。
+    assert "xml" not in imported_roots(source)
+    #: 运行时判据抓得住。
+    assert "xml" in modules_after_importing("dynamic_stub", path_entry=tmp_path)

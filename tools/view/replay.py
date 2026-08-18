@@ -207,13 +207,28 @@ def load_trace(path: Path) -> dict[str, Any]:
     times = _require(timeline, "times", "`timeline`")
     if not isinstance(times, list) or not times:
         raise TraceError("`timeline.times`必须是非空列表 —— 空时间线画不出时间轴")
+    #: **时间轴必须严格递增。** 第一版漏了这一条，2026-08-18对抗审核实测：
+    #: 递减、重复、乱序三种时间轴**全部静默通过**，而其余12类畸形输入都正确抛了。
+    #: 它是这批漏洞里最坏的一个，理由写在本模块开头那句：
+    #: "半成品`.rrd`能打开，所以它比抛异常更坏"——
+    #: **一条时间被写反的轨迹画出来一切正常，只是每条曲线都错位了。**
+    #: `strict=False`：相邻差分的两个序列**必然**差1，写`strict=True`每次都抛。
+    for index, (earlier, later) in enumerate(zip(times, times[1:], strict=False)):
+        if not isinstance(earlier, (int, float)) or not isinstance(later, (int, float)):
+            raise TraceError(f"`timeline.times`第{index}项不是数：{earlier!r} / {later!r}")
+        if not later > earlier:
+            raise TraceError(
+                f"`timeline.times`在第{index}→{index + 1}处没有严格递增"
+                f"（{earlier!r} → {later!r}）—— 时间轴不单调时rerun照样画得出图，"
+                "而那张图上每条曲线都是错位的，没有任何地方会告诉你"
+            )
 
     sampling = _require(raw, "sampling", "轨迹根")
     _require(sampling, "stride", "`sampling`")
 
     frames = len(times)
     for block in raw.get("geometry", []):
-        _require(block, "entity_path", "`geometry`条目")
+        path_ = _require(block, "entity_path", "`geometry`条目")
         #: **必填、无默认**。理由见模块docstring第一节。
         if "synthetic" not in block:
             raise TraceError(
@@ -221,6 +236,16 @@ def load_trace(path: Path) -> dict[str, Any]:
                 "合成网格与真实资产在屏幕上一样可信，"
                 "这正是0017那条'AABB是编的'缺陷在查看器上的形态"
             )
+        #: **顶点在这里查完，不留到画的时候。** 第一版把这两条留在了`replay()`
+        #: 与`rr.log()`同一个循环里，于是"缺`vertex_positions`"与"顶点是NaN"
+        #: 两种都能通过预检（2026-08-18对抗审核实测）。
+        #: 落盘确实还是安全的（`rr.save()`在全部循环之后），但**它与本函数
+        #: docstring承诺的"先验完再画"那条次序不符**——承诺与实现不一致本身就是缺陷。
+        vertices = _require(block, "vertex_positions", f"几何`{path_}`")
+        if not isinstance(vertices, list) or not vertices:
+            raise TraceError(f"几何`{path_}`的`vertex_positions`必须是非空列表")
+        for index, vertex in enumerate(vertices):
+            _require_finite_vec3(vertex, f"几何`{path_}`第{index}个顶点")
     for block in raw.get("poses", []):
         path_ = _require(block, "entity_path", "`poses`条目")
         translations = _require_same_length(

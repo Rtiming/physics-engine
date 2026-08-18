@@ -70,7 +70,8 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
 ### 轨V｜`tools/view/`：轨迹、接触点与波形交给rerun（决策0076）
 
 - **0074第六节阶段五落地**（`tools/`内、wheel外、`src/`不import）：
-  `tools/view/`把一次运行交给rerun，产物`.rrd`**在另一台机器上打得开**。
+  `tools/view/`把一次运行交给rerun，产物是一份`.rrd`。
+  **跨机那一半没验**：0074第六节阶段五的判据原文是"一次run存成`.rrd`、在另一台机器上打得开"，而全部实测都在同一台macOS arm64上（`rerun rrd verify`／`rrd print` 读得回）。**判据的后半句被抄进了叙述，而它没跑过**——2026-08-18对抗审核抓到，已改回如实措辞并登记；
   **引擎源码零字节改动**——这条轨不吃源码余量；
 - **三条硬边界与`validation/`（0025）、`tools/model/`（0073）逐字同源**，
   新增一道门`tests/governance/test_view_tools_stay_out_of_the_kernel.py`守它。
