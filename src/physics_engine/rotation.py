@@ -597,6 +597,12 @@ class MaterialPointStickSpring:
 
     name: str = "material_stick"
     kind: ClassVar[Literal["potential"]] = POTENTIAL
+    #: **准静态专用，不许进动力学桥**（2026-08-18对抗审核补）。
+    #: 本模块反复强调"局部图是准静态路径上的东西"，但那句话此前只写在散文里——
+    #: `energies.acceleration_of`只在term**显式**声明`False`时才拒，没声明默认可用。
+    #: 今天没被触发是因为转动dof的下标在节点块之后、加速度会被悄悄清零，
+    #: **那是"碰巧没事"不是"失败关闭"**。与自己点名的先例`section_beam`看齐。
+    supports_dynamics: ClassVar[bool] = False
     springs: tuple[StickSpring, ...] = ()
 
     def __post_init__(self) -> None:
@@ -717,6 +723,12 @@ class RotationStickCoupling:
 
     name: str = "rotation_coupling"
     kind: ClassVar[Literal["potential"]] = POTENTIAL
+    #: **准静态专用，不许进动力学桥**（2026-08-18对抗审核补）。
+    #: 本模块反复强调"局部图是准静态路径上的东西"，但那句话此前只写在散文里——
+    #: `energies.acceleration_of`只在term**显式**声明`False`时才拒，没声明默认可用。
+    #: 今天没被触发是因为转动dof的下标在节点块之后、加速度会被悄悄清零，
+    #: **那是"碰巧没事"不是"失败关闭"**。与自己点名的先例`section_beam`看齐。
+    supports_dynamics: ClassVar[bool] = False
     springs: tuple[StickSpring, ...] = ()
 
     def __post_init__(self) -> None:
@@ -956,6 +968,12 @@ class AppliedMoment:
 
     name: str = "applied_moment"
     kind: ClassVar[Literal["potential"]] = POTENTIAL
+    #: **准静态专用，不许进动力学桥**（2026-08-18对抗审核补）。
+    #: 本模块反复强调"局部图是准静态路径上的东西"，但那句话此前只写在散文里——
+    #: `energies.acceleration_of`只在term**显式**声明`False`时才拒，没声明默认可用。
+    #: 今天没被触发是因为转动dof的下标在节点块之后、加速度会被悄悄清零，
+    #: **那是"碰巧没事"不是"失败关闭"**。与自己点名的先例`section_beam`看齐。
+    supports_dynamics: ClassVar[bool] = False
     #: (转动块首标量的绝对下标, (Mx, My, Mz) 单位N·mm)。同一个块不许出现两次——
     #: 两条同块力矩该由调用方自己合并，库不替它猜求和次序（浮点加法不结合）。
     moments: tuple[tuple[int, Vec3], ...] = ()

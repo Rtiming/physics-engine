@@ -722,3 +722,127 @@ def test_pinning_the_rotation_reproduces_the_rotation_free_solve_bit_for_bit() -
         "带耦合项时转动块梯度仍是零——这个项什么也没做，"
         "上面那几条逐位相同就成了空门"
     )
+
+
+def _plain_contact_problem(*, rotating: bool):
+    """同一个接触问题（重力＋罚法向），只在**开不开转动块**上不同。
+
+    **不带粘着弹簧是刻意的**：`MaterialPointStickSpring`的`MaterialPoint`
+    必须携带一个转动基址（`layout.rotation_base`在`rotating_bodies=()`时
+    **失败关闭**，实测抛`RotationError`）。也就是说"钉法B"**根本表达不了
+    带粘着弹簧的那个registry**——两种钉法不是同一个registry的两种写法。
+    这条本身值得记：它是2026-08-18对抗审核那条F4追出来的**更细的事实**。
+
+    所以这条门判的是能判的那一半，而且它足够硬：
+    **同一个接触问题，加一个被钉住的转动块，答案必须一个bit都不动。**
+    """
+
+    alpha = math.radians(25.0)
+    radius = 10.0
+    mass = 2.0
+    gravity = 9810.0
+    stiffness = 2.0e6
+    weight = mass * gravity / 1000.0
+    normal = (math.sin(alpha), 0.0, math.cos(alpha))
+    layout = build_rigid_body_layout(
+        layout_id="layout/plain",
+        node_count=1,
+        rotating_bodies=(0,) if rotating else (),
+    )
+    centre = tuple(
+        (radius - weight * math.cos(alpha) / stiffness) * value for value in normal
+    )
+    initial = layout.initial_vector(centre)
+    registry = EnergyRegistry(
+        terms=(
+            UniformGravity(),
+            PenaltyNormalContact(
+                planes=((0, (0.0, 0.0, 0.0), normal, stiffness, radius),)
+            ),
+        )
+    )
+    context = EnergyContext(
+        context_id="context/plain",
+        node_masses_kg=(mass,),
+        gravity_mm_s2=(0.0, 0.0, -gravity),
+    )
+    #: 钉住`x`与`y`只留`z`：没有粘着弹簧时切向不受任何能量项约束，
+    #: 求解器会当场抛`singular system`——**那正是它该抛的**（实测确认）。
+    fixed = frozenset({0, 1}) | (
+        layout.rotation_indices() if rotating else frozenset()
+    )
+    return layout, registry, context, initial, fixed
+
+
+def test_a_pinned_rotation_block_changes_nothing_in_a_real_solve() -> None:
+    """**钉住的转动块必须在一次真实求解上一个bit都不改变答案。**
+
+    2026-08-18对抗审核指出：既有那组"逐位退化"的门里，
+    "布局根本不开转动块"那一路**只比过`StateLayout.fingerprint()`**——
+    那是纯静态的打包契约，**没有任何一次`solve_equilibrium`走过它**。
+    本条补的就是那一次真实求解。
+    """
+
+    layout_a, registry_a, context_a, initial_a, fixed_a = _plain_contact_problem(
+        rotating=True
+    )
+    layout_b, registry_b, context_b, initial_b, fixed_b = _plain_contact_problem(
+        rotating=False
+    )
+    kwargs = {"residual_tol_n": 1.0e-8, "max_iterations": 60}
+    solved_a = solve_equilibrium(
+        registry_a, context_a, layout_a.layout, initial_a, fixed_indices=fixed_a, **kwargs
+    )
+    solved_b = solve_equilibrium(
+        registry_b, context_b, layout_b.layout, initial_b, fixed_indices=fixed_b, **kwargs
+    )
+
+    assert [value.hex() for value in solved_a.state.vector[:3]] == [
+        value.hex() for value in solved_b.state.vector[:3]
+    ], "加一个被钉住的转动块改变了节点块的答案 —— 它不该改变任何东西"
+    assert solved_a.iterations == solved_b.iterations
+    assert solved_a.backtracks == solved_b.backtracks
+    assert solved_a.residual_n.hex() == solved_b.residual_n.hex()
+
+
+def test_the_rotation_free_layout_cannot_carry_a_material_point() -> None:
+    """必红的另一面：`rotating_bodies=()`时取转动基址**必须失败关闭**。
+
+    这条守的是上一条docstring里那个事实——**两种钉法不是同一个registry的两种写法**。
+    若这里静默返回一个下标，粘着弹簧会去读一个不存在的槽。
+    """
+
+    layout = build_rigid_body_layout(
+        layout_id="layout/plain", node_count=1, rotating_bodies=()
+    )
+    with pytest.raises(RotationError, match="carries no rotation block"):
+        layout.rotation_base(0)
+
+
+def test_retransport_still_preserves_lengths_past_pi() -> None:
+    """重取局部图**在它真正要用的那一档**（`|θ| > π`）上仍然是一个转动。
+
+    2026-08-18对抗审核指出：既有那条重取的门取`|θ| ≈ 0.57 rad`，
+    **远小于π**——"大转角要重取"这句话的门只在小转角上走过。
+    本条把它推到`3.5 rad > π`。
+
+    `retransport_levers`把当前``θ``折进杠杆臂，所以它**必须保长**：
+    杠杆臂的长度是刚体的几何，重取局部图不该动它。
+
+    **本条守的仍然只是"折出来的还是一个转动"**，
+    **不是"不重取会坏成什么样"**——那一条至今没有实证，
+    对抗审核实测几何软化在`φ ≈ 0.1 rad`就已出现、条件数随`φ`**非单调**，
+    即"θ<π安全"这个叙事本身不成立。已登记在plans/07。
+    """
+
+    levers = ((10.0, 0.0, 0.0), (0.0, -4.0, 3.0), (1.3, -0.7, 2.1))
+    for theta in ((3.5, 0.0, 0.0), (2.0, -2.4, 1.3), (0.0, 0.0, math.pi + 1.0e-9)):
+        folded = retransport_levers(theta, levers)
+        assert len(folded) == len(levers)
+        for before, after in zip(levers, folded, strict=True):
+            length_before = math.sqrt(sum(value * value for value in before))
+            length_after = math.sqrt(sum(value * value for value in after))
+            assert abs(length_after - length_before) < 1.0e-12, (
+                f"|θ| = {math.sqrt(sum(v * v for v in theta)):.3f} 处重取之后不保长："
+                f"{length_before!r} → {length_after!r}"
+            )
