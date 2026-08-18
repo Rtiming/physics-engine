@@ -102,8 +102,10 @@ from physics_engine.contact.penalty import (
     PenaltyAnnulusLimit,
     PenaltyCylinderContact,
     PenaltyGrooveSweep,
+    PenaltyGrooveSweepLive,
     PenaltyNormalContact,
     PenaltySphereContact,
+    groove_sweep_live_walls,
     groove_sweep_walls,
 )
 from physics_engine.contact.stepper import (
@@ -139,6 +141,7 @@ __all__ = [
     "PenaltyAnnulusLimit",
     "PenaltyCylinderContact",
     "PenaltyGrooveSweep",
+    "PenaltyGrooveSweepLive",
     "PenaltyNormalContact",
     "PenaltySphereContact",
     "TangentialStickSpring",
@@ -148,6 +151,7 @@ __all__ = [
     "build_contact_layout",
     "coulomb_return_map",
     "damping_ratio_from_restitution",
+    "groove_sweep_live_walls",
     "groove_sweep_walls",
     "linear_dashpot_parameters",
     "restitution_from_damping_ratio",

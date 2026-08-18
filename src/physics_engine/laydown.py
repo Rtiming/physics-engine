@@ -520,6 +520,23 @@ class GrooveCenterline:
     def segment_count(self) -> int:
         return len(self.stations) - 1
 
+    def segment_bounds_mm(self, arc_mm: float) -> tuple[float, float]:
+        """``arc_mm``落在哪一段：返回该段**两端站点的弧长坐标**。
+
+        **这是"不许跨站点差分"那条纪律的公开面**（决策0078第二节）。
+        沿弧长差分帧取``κ``与``τ``时，探针**必须夹在同一段内**：
+        0075第四节第3条实测，跨一个站点差分时``κ_s``**当场变号**
+        （±1.402e-4，真值0）——那是位置插值跨站点只有``C¹``留下的指纹，
+        不是曲线的性质。**跨站点的差分不是"精度差一点"，是符号错。**
+
+        没有这个公开面，消费方只能去摸`_segment_index`那个私有方法，
+        于是这条纪律就没有一处写着它为什么存在。
+        """
+
+        resolved = self.resolve_arc_length_mm(arc_mm)
+        index = self._segment_index(resolved)
+        return (self.stations[index].arc_length_mm, self.stations[index + 1].arc_length_mm)
+
     # -- 弧长坐标的定义域策略 ----------------------------------------------
 
     def resolve_arc_length_mm(self, arc_mm: float) -> float:
@@ -710,6 +727,218 @@ class GrooveCenterline:
             arc = updated
         position, _, _ = self._position_on_segment(index, arc)
         return (arc, _norm(_sub(position, target)))
+
+
+# ------------------------------------------------------- 中心线的不变量 ---
+
+#: 沿**弧长**差分帧的两种取法。**没有默认值**，与`CenterlineSemantics`那五条同一条纪律：
+#: 取哪一种**改变答案**（决策0078第六节实测：在GCW那批2 mm导出上，
+#: 同一条曲线的``τ_max``两种取法差19%—25%），所以它是声明者要拿主意的东西。
+#:
+#: **与`RATE_SCHEMES`不是一回事**：那一条是`ArcRateProbe`沿**时间**差分的白名单
+#: （而且有``"backward"``一档）。两者名字撞了三个字母，域完全不同——
+#: 沿弧长没有"端点上取不到样点"这个问题，有的是"跨站点差分会变号"那个问题
+#: （0075第四节第3条）。
+ARC_DIFFERENCE_SCHEMES: frozenset[str] = frozenset({"forward", "central"})
+
+
+@dataclass(frozen=True)
+class StationInvariants:
+    """一个站点上的四个几何不变量。**工件系，单位1/mm。**
+
+    分解的两根轴是带材自己的（plans/14第2.1节）：
+
+    * ``curvature_s`` —— ``dT/ds``投到**带宽方向**``s``，即**hard-way / edgewise**，
+      在带材宽面**内**弯。它是`plans/14`第2.1节那张表的量，
+      边缘应变的闭式估计是``ε_edge = (w/2)·|κ_s|``；
+    * ``curvature_n`` —— 投到**槽面外法向**``n``，即**easy-way**，穿过带厚弯。
+      0.1 mm厚的带材在这根轴上几乎无害；
+    * ``curvature_total`` —— ``|dT/ds|``，两者的合成。``1/κ_total``是曲率半径，
+      plans/14第二节报的``R_min``是它的倒数的最小值；
+    * ``twist`` —— ``ds/da · n``，**帧绕切向的自转率**。它不是Frenet挠率：
+      Frenet挠率由曲线唯一决定，而这一条依赖**帧的选择**，
+      而槽的帧是工件给的（GCW导出的`s`列与`n`列）。plans/14管它叫"帧扭率"。
+
+    **``curvature_s``与``twist``是两个不同向的独立量**（plans/14第2.2节末段实测），
+    这正是"槽用扭转换掉了硬弯"这句话的所在——而换掉了多少要算，见该节。
+    """
+
+    arc_length_mm: float
+    curvature_s_per_mm: float
+    curvature_n_per_mm: float
+    curvature_total_per_mm: float
+    twist_per_mm: float
+
+
+def centerline_invariants(
+    centerline: GrooveCenterline, *, scheme: str
+) -> tuple[StationInvariants, ...]:
+    """站点表 → 每个站点上的四个不变量。**直接差分站点，不经插值。**
+
+    ## 为什么不走`sample_at`
+
+    `sample_at`会按声明的插值语义重建曲线，而**插值式的二阶导是插值式的指纹**
+    （0075第四节第3条实测：`hermite_tangent`下``κ_s``过一个站点当场变号，
+    真值0而两侧各给±1.402e-4）。要回答"这条工件曲线弯了多少"，
+    该问的是**站点**，不是我们替它编的那条曲线。
+
+    `contact.groove_sweep_live_walls`走的是另一条路（段内差分`sample_at`），
+    **那是刻意的**：那里要的是"局部模型在这一段里长什么样"，
+    而这里要的是"这条工件曲线是什么"。**两个问题不同，答案也不该同。**
+
+    ## 两种差分取法**改变答案**，所以必须声明
+
+    * ``"forward"`` —— ``f'(a_i) = (f[i+1] − f[i]) / (a[i+1] − a[i])``，
+      **一阶**。它测的是"这一段上帧转了多少"，不把相邻两段平均掉；
+    * ``"central"`` —— 非均匀三点中心差分，**二阶**。它更接近连续曲线的导数，
+      代价是把**只占一段**的尖峰摊到两段上。
+
+    在解析曲线上两者都收敛（`cases/real_centerline_invariants`实测：
+    平面圆上两者**都是二阶**，非均匀采样上只有``"central"``保持二阶）。
+    **在GCW那批2 mm导出上两者差19%—25%**
+    ——那不是哪一个错了，是**那些峰在2 mm采样下根本没收敛**。
+    决策0078第四节把这一条写成案例判据而不是一句注解。
+
+    ## 定义域
+
+    ``"forward"``给出站点``0 … n−2``（末站点没有前邻）；
+    ``"central"``给出``1 … n−2``（开曲线），闭合曲线则从``0``起、
+    用``n−2``当``0``的后邻（`_require_stations`保证闭合表的末站点**逐位重复**首站点，
+    所以这一步不引入任何缝）。
+    """
+
+    _require_declared_choice(scheme, ARC_DIFFERENCE_SCHEMES, "scheme")
+    stations = centerline.stations
+    closed = centerline.semantics.topology == "closed"
+    last = len(stations) - 1
+
+    def rates(index: int) -> tuple[Vector3, Vector3]:
+        """``(dT/ds, ds_hat/ds)``在站点``index``处。"""
+
+        if scheme == "forward":
+            ahead = stations[index + 1]
+            here = stations[index]
+            span = ahead.arc_length_mm - here.arc_length_mm
+            return (
+                _scale(_sub(ahead.tangent, here.tangent), 1.0 / span),
+                _scale(_sub(ahead.width_direction, here.width_direction), 1.0 / span),
+            )
+        behind = stations[index - 1] if index > 0 else stations[last - 1]
+        ahead = stations[index + 1]
+        here = stations[index]
+        #: 闭合曲线上``index == 0``的后邻是``last − 1``，它的弧长坐标比0大一整匝，
+        #: 所以步长要用**总长减去它**——直接相减会得到一个负的巨大步长。
+        back_span = (
+            here.arc_length_mm - behind.arc_length_mm
+            if index > 0
+            else centerline.total_arc_length_mm() - behind.arc_length_mm
+        )
+        fore_span = ahead.arc_length_mm - here.arc_length_mm
+        total = back_span + fore_span
+        #: 非均匀三点中心差分的系数。均匀网格上它退回``(f[i+1] − f[i−1]) / 2h``。
+        weight_back = -fore_span / (back_span * total)
+        weight_here = (fore_span - back_span) / (back_span * fore_span)
+        weight_ahead = back_span / (fore_span * total)
+
+        def derivative(pick) -> Vector3:
+            return _add(
+                _add(
+                    _scale(pick(behind), weight_back),
+                    _scale(pick(here), weight_here),
+                ),
+                _scale(pick(ahead), weight_ahead),
+            )
+
+        return (
+            derivative(lambda station: station.tangent),
+            derivative(lambda station: station.width_direction),
+        )
+
+    if scheme == "forward":
+        indices = range(last)
+    else:
+        indices = range(last) if closed else range(1, last)
+
+    out: list[StationInvariants] = []
+    for index in indices:
+        tangent_rate, width_rate = rates(index)
+        here = stations[index]
+        out.append(
+            StationInvariants(
+                arc_length_mm=here.arc_length_mm,
+                curvature_s_per_mm=_dot(tangent_rate, here.width_direction),
+                curvature_n_per_mm=_dot(tangent_rate, here.surface_normal),
+                curvature_total_per_mm=_norm(tangent_rate),
+                twist_per_mm=_dot(width_rate, here.surface_normal),
+            )
+        )
+    return tuple(out)
+
+
+def hard_way_edge_strain(
+    invariants: Sequence[StationInvariants], *, strip_width_mm: float
+) -> tuple[float, ...]:
+    """``ε_edge = (w/2)·|κ_s|`` —— plans/14第2.1节那条**教科书式**估计。
+
+    **它是上界不是预测值**，两条理由各自独立，一条都不能省：
+
+    1. plans/14第2.1节明写这个写法"属教科书估算，没找到可编号引用的一次文献"，
+       所以本函数给的数读作"量级与分布"，不读作验收判据；
+    2. plans/14第2.3节：它假定**带材宽面刚性跟着槽帧走**。真实带材可以绕自身
+       切向扭转，把edgewise弯曲换成easy-way弯曲＋扭转，而两条刚度差约1000倍
+       （``EI₁ ≈ 8.0e4``对``GJ ≈ 77 N·mm²``）——**所以带材一定优先扭而不是硬弯**。
+       换掉了多少，要"双轴弯曲＋扭转＋槽壁接触"三件一起算才知道。
+       **本仓今天算不了那个数**，`cases/real_centerline_invariants`第四节把它
+       登记成已知失效而不是藏起来。
+
+    ``strip_width_mm``**没有默认值**：plans/14那张表用的是``4.0 mm``，
+    而那批工件自己的槽宽是8 mm级与10 mm级两档（同节第3条实测，
+    换成各自的槽宽后超标占比全部变成13.4%—23.3%）。
+    **"用哪个宽度"是一条声明，替它猜等于替它改结论。**
+    """
+
+    if not (strip_width_mm > 0.0 and math.isfinite(strip_width_mm)):
+        raise LaydownError(
+            f"strip_width_mm must be positive and finite: {strip_width_mm!r}"
+        )
+    half = 0.5 * strip_width_mm
+    return tuple(half * abs(item.curvature_s_per_mm) for item in invariants)
+
+
+def arc_length_fraction_above(
+    centerline: GrooveCenterline,
+    invariants: Sequence[StationInvariants],
+    values: Sequence[float],
+    *,
+    threshold: float,
+) -> float:
+    """``values``超过``threshold``的那些站点**按弧长**占整条曲线的几分之几。
+
+    **按弧长权而不是按站点数**：采样非均匀时两者不是一回事。
+    每个站点认领"它到下一个站点"那一段（与`centerline_invariants`的``"forward"``
+    同一个口径——那一档的每个数本来就是那一段上的平均）。
+
+    GCW那批导出采样是均匀的2 mm，所以两种权法实测差``< 0.05``个百分点；
+    **判据仍然写成按弧长**，因为"采样均匀"是这一批语料的性质而不是本函数的前提。
+    """
+
+    if len(invariants) != len(values):
+        raise LaydownError(
+            f"invariants与values长度不一致：{len(invariants)} vs {len(values)}"
+        )
+    stations = centerline.stations
+    arc_of = {station.arc_length_mm: index for index, station in enumerate(stations)}
+    total = centerline.total_arc_length_mm()
+    covered = 0.0
+    for item, value in zip(invariants, values, strict=True):
+        index = arc_of[item.arc_length_mm]
+        ahead = stations[min(index + 1, len(stations) - 1)]
+        span = ahead.arc_length_mm - item.arc_length_mm
+        if span <= 0.0:
+            continue
+        if value > threshold:
+            covered += span
+    return covered / total
 
 
 # ------------------------------------------------------------ 自由跨段 ---
@@ -1156,6 +1385,7 @@ def assert_closure(
 
 __all__ = [
     "ACCEPTED_LENGTH_UNITS",
+    "ARC_DIFFERENCE_SCHEMES",
     "ARC_OUT_OF_RANGE",
     "ARC_OVER_CHORD_CEILING",
     "CENTERLINE_LENGTH_UNIT",
@@ -1173,9 +1403,13 @@ __all__ = [
     "GrooveCenterline",
     "GrooveSample",
     "GrooveStation",
+    "StationInvariants",
     "LaydownError",
     "LaydownModel",
     "LaydownPoint",
+    "arc_length_fraction_above",
     "assert_closure",
+    "centerline_invariants",
+    "hard_way_edge_strain",
     "rotate_by_quaternion",
 ]

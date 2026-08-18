@@ -1,0 +1,250 @@
+{
+  "arrays": {},
+  "case_id": "case/real_centerline_invariants",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/real_centerline_invariants",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/real_centerline_invariants/generate_oracle.py",
+    "sha256": "0b93eee489e672a9c1144fd8d381c3d93ae8afa0c96b71484c7b6e56a1706e19"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "965ba35f77807d1864a303e1e3dc264f5f0353cb3cbd5eed459c048a163969a9",
+  "oracles": [
+    {
+      "expected": {
+        "both_schemes_agree": true,
+        "curvature_n_per_mm": 0.00021573323542670522,
+        "curvature_quadrature_per_mm": 0.006868131868131868,
+        "curvature_s_per_mm": 0.00686474285965475,
+        "curvature_total_per_mm": 0.006868131868131868,
+        "edge_strain_at_probe": 0.0137294857193095,
+        "scheme_agreement_relative_bound": 0.0001,
+        "twist_is_negative": true,
+        "twist_per_mm": -0.0445058959258554
+      },
+      "id": "oracle:centerline/analytic_arc_invariants",
+      "inputs": {
+        "frame_twist_deg_per_mm": 2.55,
+        "kind": "circular_arc_with_twisting_frame",
+        "probe_arc_mm": 36.0,
+        "radius_mm": 145.6,
+        "refinement_steps_mm": [
+          2.0,
+          1.0,
+          0.5,
+          0.25
+        ],
+        "strip_width_mm": 4.0
+      },
+      "tolerances": {
+        "both_schemes_agree": {
+          "abs": 0.0,
+          "reason": "**布尔，零容差**：这条曲线的``κ``与``τ``沿弧长是**平滑**的，两种差分取法必须落在同一个数上。**这一条是下一个oracle的对照组**——那里两者差恰好2倍",
+          "rel": 0.0
+        },
+        "curvature_n_per_mm": {
+          "abs": 1e-09,
+          "reason": "同上，同一条零点理由（``κ_n = −cos(τa)/R``也过零）",
+          "rel": 5e-05
+        },
+        "curvature_quadrature_per_mm": {
+          "abs": 0.0,
+          "reason": "恒等式``κ_s² + κ_n² = κ_total²``，与`curvature_total`同档",
+          "rel": 1e-06
+        },
+        "curvature_s_per_mm": {
+          "abs": 1e-09,
+          "reason": "同上，另加一条**绝对**地板：``κ_s = sin(τa)/R``在``τa = kπ``附近过零，过零点上相对容差没有意义（`scalar_diffraction_airy`那条'判绝对不判相对：J1有零点'同源）",
+          "rel": 5e-05
+        },
+        "curvature_total_per_mm": {
+          "abs": 0.0,
+          "reason": "站点表上的差分，截断项``O(h²)``。``h = 0.25 mm``、``R = 145.6 mm``下``(h/R)² ≈ 3e-6``，留一个量级",
+          "rel": 1e-06
+        },
+        "edge_strain_at_probe": {
+          "abs": 1e-09,
+          "reason": "``(w/2)|κ_s|``继承``κ_s``的档；一次乘法不放大",
+          "rel": 5e-05
+        },
+        "scheme_agreement_relative_bound": {
+          "abs": 0.0,
+          "reason": "**它是判据的参数不是被判的量**，零容差逐字比。实测``τ``差4.16e-6、``κ_s``差1.25e-14，判1e-4留两个量级——而真语料上两者差2e-1，分辨力还有三个量级的余地",
+          "rel": 0.0
+        },
+        "twist_is_negative": {
+          "abs": 0.0,
+          "reason": "**布尔，零容差**。符号错了`PenaltyGrooveSweepLive`的接触力往反方向偏，而三根轴仍然正交、仍然都是单位向量——那是一个**安静的**错（决策0078第五节第3条）",
+          "rel": 0.0
+        },
+        "twist_per_mm": {
+          "abs": 0.0,
+          "reason": "**初稿把这一条写成1e-6并声称'恰好没有截断项'，那是错的。**帧不是绕``t``刚性自转——``n``里的'径向'那一半自己随``θ``转，于是``ds/da``带一个``O(h²·τ²)``的截断项。实测``h = 0.25``时相对2.06e-5（`central`档），比值恒为4.000（二阶）。5e-5是那个数留一档余量",
+          "rel": 5e-05
+        }
+      }
+    },
+    {
+      "expected": {
+        "central_spreads_over_two_stations": true,
+        "central_twist_integral_rad": 0.04997916927067833,
+        "central_twist_peak_per_mm": 0.012494792317669583,
+        "forward_twist_integral_rad": 0.04997916927067833,
+        "forward_twist_peak_per_mm": 0.024989584635339165,
+        "peak_ratio_central_over_forward": 0.5
+      },
+      "id": "oracle:centerline/one_segment_twist_spike",
+      "inputs": {
+        "kind": "straight_chain_with_one_segment_frame_spike",
+        "spike_angle_rad": 0.05,
+        "spike_index": 10,
+        "station_count": 21,
+        "step_mm": 2.0
+      },
+      "tolerances": {
+        "central_spreads_over_two_stations": {
+          "abs": 0.0,
+          "reason": "**布尔，零容差**：只判峰值比是判不出'摊到哪里去了'的。没有这一条，一个把central整体乘0.5的实现照样全绿",
+          "rel": 0.0
+        },
+        "central_twist_integral_rad": {
+          "abs": 0.0,
+          "reason": "``2·(sin Δ/2h)·h``。**与forward逐位相同这件事本身是判据**——峰值差2倍而积分不差，正是真实语料上实测到的形态",
+          "rel": 1e-15
+        },
+        "central_twist_peak_per_mm": {
+          "abs": 0.0,
+          "reason": "同上，多一次除以2（2的幂，**精确**）",
+          "rel": 1e-15
+        },
+        "forward_twist_integral_rad": {
+          "abs": 0.0,
+          "reason": "``(sin Δ/h)·h``；与峰值同档",
+          "rel": 1e-15
+        },
+        "forward_twist_peak_per_mm": {
+          "abs": 0.0,
+          "reason": "``sin Δ / h``，一次`sin`一次除法。超越函数不在IEEE-754的正确舍入承诺里，故不写零容差；1 ulp≈2.2e-16，留一档",
+          "rel": 1e-15
+        },
+        "peak_ratio_central_over_forward": {
+          "abs": 0.0,
+          "reason": "**本页最要紧的一条零容差。** 它不是数值巧合而是两个差分模板的代数事实（第五节第4条），所以`sin Δ`在比值里**整个约掉**——写非零容差等于承认不知道这是不是恒等式",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "arc_fraction_absolute_tolerance": 0.001,
+        "edge_strain_p100_relative_tolerance": 0.005,
+        "geometries_matched": 5,
+        "published_rows_without_a_file": 4,
+        "r_min_relative_tolerance": 0.005,
+        "rows_disagreeing_with_the_published_twist": 2,
+        "the_two_disagreeing_rows_swap_into_each_other": true,
+        "twist_max_relative_tolerance": 0.005
+      },
+      "id": "oracle:centerline/plans14_table_row",
+      "inputs": {
+        "kind": "published_table_rows",
+        "opt_in_env": "PE_REAL_CENTERLINE_CSV",
+        "rows_by_arc_length_mm": {
+          "1212.98": {
+            "above_004": 0.125,
+            "above_006": 0.059,
+            "edge_strain_p100": 0.01374,
+            "name": "v2-coil-01",
+            "published_twist_max_deg_per_mm": 2.55,
+            "r_min_mm": 75.2,
+            "twist_max_deg_per_mm": 2.55
+          },
+          "1966.33": {
+            "above_004": 0.038,
+            "above_006": 0.0,
+            "edge_strain_p100": 0.00532,
+            "name": "v1-coil-1",
+            "published_twist_max_deg_per_mm": 6.648,
+            "r_min_mm": 72.8,
+            "twist_max_deg_per_mm": 6.5686
+          },
+          "850.66": {
+            "above_004": 0.045,
+            "above_006": 0.021,
+            "edge_strain_p100": 0.00808,
+            "name": "v2-03-provisional",
+            "published_twist_max_deg_per_mm": 2.184,
+            "r_min_mm": 89.5,
+            "twist_max_deg_per_mm": 2.184
+          },
+          "851.94": {
+            "above_004": 0.028,
+            "above_006": 0.0,
+            "edge_strain_p100": 0.00592,
+            "name": "v2-coil-02",
+            "published_twist_max_deg_per_mm": 6.568,
+            "r_min_mm": 97.9,
+            "twist_max_deg_per_mm": 6.6467
+          },
+          "887.75": {
+            "above_004": 0.07,
+            "above_006": 0.014,
+            "edge_strain_p100": 0.00816,
+            "name": "v2-04-provisional",
+            "published_twist_max_deg_per_mm": 3.146,
+            "r_min_mm": 92.7,
+            "twist_max_deg_per_mm": 3.146
+          }
+        },
+        "scheme": "forward",
+        "source": "docs/plans/14_现场场景勘察_真实工件是非平面槽_20260817.md 第2.2节",
+        "strip_width_mm": 4.0
+      },
+      "tolerances": {
+        "arc_fraction_absolute_tolerance": {
+          "abs": 0.0,
+          "reason": "占比判**绝对**不判相对：`>0.6%`那几格原表就是`0.0%`，相对容差在零上没有意义",
+          "rel": 0.0
+        },
+        "edge_strain_p100_relative_tolerance": {
+          "abs": 0.0,
+          "reason": "同上。原表印三位小数的百分数（1.374%）",
+          "rel": 0.0
+        },
+        "geometries_matched": {
+          "abs": 0.0,
+          "reason": "**整数，零容差。** GCW的`handoff_runs`里按内在几何归并只有5份不同（三个run名各有两个时间戳、逐字节相同）。**判这个数是为了让'语料变了'当场红**",
+          "rel": 0.0
+        },
+        "published_rows_without_a_file": {
+          "abs": 0.0,
+          "reason": "**整数，零容差。** plans/14报9个几何，GCW侧只到得了5个——`test`、`clean_a`、`v1-coil-3`、`v1-coil-2`四行**本页够不到**。把够不到的条数写成判据，比在散文里说一句'部分覆盖'诚实",
+          "rel": 0.0
+        },
+        "r_min_relative_tolerance": {
+          "abs": 0.0,
+          "reason": "**它是判据的参数不是被判的量**，零容差逐字比。0.5%是原表的印刷位数（75.2、89.5……三位有效数字）",
+          "rel": 0.0
+        },
+        "rows_disagreeing_with_the_published_twist": {
+          "abs": 0.0,
+          "reason": "**整数，零容差。** 写成判据而不是散文：'大体对上'不是一个可以被后来的人验的说法，'恰好两行对不上'是",
+          "rel": 0.0
+        },
+        "the_two_disagreeing_rows_swap_into_each_other": {
+          "abs": 0.0,
+          "reason": "**布尔，零容差。** 这一条把'原表对调了'与'我们算错了'分开：算错不会让两个错数**恰好互为对方**。它红了要么是语料变了、要么是原表被订正了，两者都该有人来看",
+          "rel": 0.0
+        },
+        "twist_max_relative_tolerance": {
+          "abs": 0.0,
+          "reason": "同上。原表印四位有效数字（2.550、6.648），0.5%宽出两档",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
