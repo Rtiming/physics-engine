@@ -28,10 +28,10 @@
     },
     "accept_full": {
       "budget_s": 120.0,
-      "measured_median_s": 87.3,
+      "measured_median_s": 93.2,
       "load_tier": "local_batch",
-      "measured_on": "2026-08-17",
-      "measured_by": "docs/decisions/0069第五节收口。**波次三合入后35个案例**，安静机器三次实测 87.9/84.8/87.3 取中位数87.3，三次resource均为QUALIFIED。此前记的54.8是**28个案例时**测的（0062第八节，69.7/54.8/38.6），一度与plans/15初稿的48.8（单次、非中位数）、优化审计回执的68.2三个数并存——而陈旧度门容差是3倍、实际只差1.24倍，**它永远不会响**。**同批量到一条方法学**：accept full在这个规模上已经重到连跑会自己把自己判成不合格（实测开跑load 3.45、跑完超限值15.0，双端采样正确判UNQUALIFIED），所以台账这条「三次取中位数」现在需要每次之间等负载落回去。以下是0062当时的注记：docs/decisions/0062_绕线机端到端物理主线开工裁决_20260817.md 第八节。安静机器（1分钟负载4.89、resource=QUALIFIED）三次实测69.7/54.8/38.6秒取中位数。**同一份代码在负载18—86时给出157.9—186.3秒**，那些数resource=UNQUALIFIED、运行器已判performance=NOT_EVALUATED，不进本字段。"
+      "measured_on": "2026-08-18",
+      "measured_by": "**本仓第一次在一台真正安静的机器上量这个数**（plans/16的M8）。master（192核、amd96c、srun -c 8、1分钟负载2.0—2.3）连跑三次：93.3 / 93.0 / 93.2 秒，取中位数 93.2，**离散度不到 0.4%**，三次均 overall=PASS 四轴绿。入口是 tools/master/run_accept_on_master.sh（git bundle → 远端克隆 → srun 分配内跑）。此前记的 87.3 是 2026-08-17 在开发Mac上测的（35个案例），而这台Mac整天没安静过：同一功能面 2026-08-18 在本机量到 93.7（load 2.67）、121.5（load 4.9—10.7）、225（load 7.19）三个数，**而资源轴的 load 限值 15.0 一次都没响**（当天四次实证，plans/07 已登记）。**所以本字段此后以 master 为准**：本机的墙钟只作参考，不作台账。当前口径是 40 个案例、1881 + 119 条测试。"
     },
     "solve_equilibrium_cantilever_160free_dof": {
       "budget_s": 0.05,
