@@ -103,10 +103,51 @@ class ContactLayout:
     layout: StateLayout
     node_count: int
     slots: tuple[ContactSlot, ...]
+    #: 带转动块的节点号，按声明次序（决策0080）。**空元组时本类与2026-08-18之前
+    #: 逐字节相同**——字段清单、向量长度、指纹全都不变，那是三前提第三条的执行面。
+    rotating_bodies: tuple[int, ...] = ()
 
     @property
     def node_dof_count(self) -> int:
         return 3 * self.node_count
+
+    @property
+    def rotation_dof_count(self) -> int:
+        return 3 * len(self.rotating_bodies)
+
+    def rotation_base(self, body: int) -> int:
+        """该体转动块第一个标量的**绝对下标**。调用方永不手写偏移量。
+
+        ## 转动块排在锚点槽**之后**，而不是像`rotation.RigidBodyLayout`那样紧跟节点块
+
+        两处的次序不同**不是不一致，是各自的承重约束不同**：
+
+        * `RigidBodyLayout`没有锚点槽，转动块紧跟节点块是唯一的选择；
+        * 这里有锚点槽，而槽的下标是**历史的住处**。把转动块插在节点块与槽之间
+          会把每一个既有槽的``base``整体后移——**既有产物的锚点会读到别人的历史**，
+          而那是0001三前提第三条明令禁止的那一类改动。
+
+        转动块能排在最后，是因为`MaterialPoint.rotation_base`吃的是**绝对下标**，
+        它对"转动块在哪"没有任何假设（决策0080第二节）。
+        """
+
+        try:
+            order = self.rotating_bodies.index(body)
+        except ValueError:
+            raise ContactError(
+                f"node {body} carries no rotation block — "
+                f"带转动块的是{list(self.rotating_bodies)}"
+            ) from None
+        return self.node_dof_count + len(self.slots) * SLOT_WIDTH + 3 * order
+
+    def rotation_indices(self) -> frozenset[int]:
+        """全部转动标量下标——"把转动自由度全部钉住"就是把它交给`fixed_indices`。"""
+
+        return frozenset(
+            self.rotation_base(body) + axis
+            for body in self.rotating_bodies
+            for axis in range(3)
+        )
 
     def slot_of(self, pair_id: str, point_index: int = 0) -> ContactSlot:
         for slot in self.slots:
@@ -138,6 +179,9 @@ class ContactLayout:
         槽位出生即``REGIME_SEPARATED``、锚点为原点、活动标志为0：
         **一个还没碰过的接触没有历史**，而`REGIME_SEPARATED`恰好是0.0，
         所以"全零"就是正确的出生态，不需要额外的初始化步骤。
+
+        转动块同样全零——**局部图的原点就是``θ = 0``**，不需要额外初始化
+        （与`rotation.RigidBodyLayout.initial_vector`逐字同源）。
         """
 
         if len(node_positions_mm) != self.node_dof_count:
@@ -145,7 +189,9 @@ class ContactLayout:
                 f"expected {self.node_dof_count} node scalars, "
                 f"got {len(node_positions_mm)}"
             )
-        return tuple(node_positions_mm) + (0.0,) * (len(self.slots) * SLOT_WIDTH)
+        return tuple(node_positions_mm) + (0.0,) * (
+            len(self.slots) * SLOT_WIDTH + self.rotation_dof_count
+        )
 
 
 def build_contact_layout(
@@ -153,6 +199,7 @@ def build_contact_layout(
     layout_id: str,
     node_count: int,
     declarations: tuple[ContactDeclaration, ...],
+    rotating_bodies: tuple[int, ...] = (),
 ) -> ContactLayout:
     """按**声明**的接触对造定长布局。次序即声明次序。
 
@@ -161,10 +208,33 @@ def build_contact_layout(
     **同一份声明两次跑出不同次序，接触结果就不可复现**（轴3规则5）。
     这里更硬一层：次序还决定了每个槽落在向量的哪一格，
     **次序变了梯度与Hessian的索引全错，而多数测试不会发现**（spec/12第2.2节）。
+
+    ## ``rotating_bodies``：转动块（决策0080）
+
+    默认空元组，此时产出**与2026-08-18之前逐字节相同**——字段清单、向量长度、
+    `StateLayout`指纹全都不变。这不是"算出来恰好相等"，是那几行根本不执行。
+
+    非空时在锚点槽**之后**追加``body{b}_theta_{x,y,z}_rad``。
+    排在最后的理由见`ContactLayout.rotation_base`：插在中间会把每个既有槽的
+    ``base``后移，而槽是历史的住处。
     """
 
     if node_count < 1:
         raise ContactError("a contact layout needs at least one node")
+    seen_bodies: list[int] = []
+    for body in rotating_bodies:
+        if isinstance(body, bool) or not isinstance(body, int):
+            raise ContactError(f"rotating body must be an int node index: {body!r}")
+        if not (0 <= body < node_count):
+            raise ContactError(
+                f"rotating body {body} is outside the node block [0, {node_count})"
+            )
+        if body in seen_bodies:
+            raise ContactError(
+                f"node {body} declared twice as a rotating body — "
+                "重复声明意味着同一个体有两个转动块，而哪一个说了算只能靠读实现"
+            )
+        seen_bodies.append(body)
     identifiers = [declaration.pair_id for declaration in declarations]
     duplicates = sorted({name for name in identifiers if identifiers.count(name) > 1})
     if duplicates:
@@ -194,6 +264,13 @@ def build_contact_layout(
                 ContactSlot(pair_id=declaration.pair_id, point_index=point, base=base)
             )
             base += SLOT_WIDTH
+    #: 转动块**不是历史**（决策0079第二节裁的那条放宽），所以这几个字段
+    #: 不带``is_history``——它们是真自由度，牛顿会解它们。
+    fields.extend(
+        StateField(f"body{body}_theta_{axis}_rad", 1)
+        for body in rotating_bodies
+        for axis in ("x", "y", "z")
+    )
 
     return ContactLayout(
         layout=StateLayout(
@@ -205,6 +282,7 @@ def build_contact_layout(
         ),
         node_count=node_count,
         slots=tuple(slots),
+        rotating_bodies=tuple(rotating_bodies),
     )
 
 

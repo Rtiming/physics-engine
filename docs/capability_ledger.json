@@ -613,16 +613,20 @@
       "family": "接触族",
       "label": "三球金字塔双向摩擦",
       "criterion": "同一模型只改摩擦系数，一边必须撑住、一边必须塌",
-      "status": "partial",
+      "status": "done",
       "exercises_physics": true,
       "evidence": [
         "case:three_sphere_pyramid",
         "test:tests/cases/test_three_sphere_pyramid.py::test_the_static_decomposition_matches_the_closed_form",
         "case:three_sphere_pyramid_rotational",
-        "test:tests/cases/test_three_sphere_pyramid_rotational.py::test_the_critical_friction_is_two_minus_root_three"
+        "test:tests/cases/test_three_sphere_pyramid_rotational.py::test_the_critical_friction_is_two_minus_root_three",
+        "test:tests/cases/test_three_sphere_pyramid_rotational.py::test_the_pyramid_holds_and_nothing_happens",
+        "test:tests/cases/test_three_sphere_pyramid_rotational.py::test_the_pyramid_collapses_with_a_closed_form_rate",
+        "test:tests/cases/test_three_sphere_pyramid_rotational.py::test_the_collapse_never_leans_on_non_convergence",
+        "test:tests/cases/test_three_sphere_pyramid_rotational.py::test_the_slip_onset_brackets_two_minus_root_three",
+        "test:tests/cases/test_three_sphere_pyramid_rotational.py::test_the_collapse_rate_extrapolates_to_the_threshold"
       ],
-      "why": "定性判据（只改μ、一边撑住一边塌）零容差复现，静力分解F=W/√3、N=3W/2、T=W/(2√3)。 2026-08-18（0079）：含力矩平衡那一支的μc=2−√3已由转动接触自由度与`three_sphere_pyramid_rotational`兑现，金标为仓内Q(√3)精确有理算术，实测偏差1.766e-07。",
-      "missing": "**只差\"两侧判据\"这半句，不再差数学。** 0079已把原missing里\"该数学尚未由转动接触自由度与案例兑现\"兑现（μc=2−√3实测在册）。仍缺的是Chrono形制的\"同一模型只改μ、一边撑住一边塌\"：撑住那一边等价于max(|f|/F) ≤ μ，是一条可直接算的不等式；**塌那一边要真的让锚点滑起来**，而滑移改的是历史、历史住在锚点槽里、锚点槽的更新今天只认节点位置。触发条件：`advance_contact_quasistatic`接上转动块（0079第六节，本波因与轨A2同点冲突风险未做）。因此C7仍为partial，不进位。"
+      "why": "定性判据（只改μ、一边撑住一边塌）零容差复现，静力分解F=W/√3、N=3W/2、T=W/(2√3)。 2026-08-18（0079）：含力矩平衡那一支的μc=2−√3已由转动接触自由度与`three_sphere_pyramid_rotational`兑现，金标为仓内Q(√3)精确有理算术，实测偏差1.766e-07。 2026-08-18（0080）：**两侧判据补齐，本位进位**。滑移与转动块联动——`advance_contact_quasistatic`/`advance_contacts_quasistatic`的`node`吃`int | MaterialPoint`，锚点记的是两个物质点世界位置之差`(x₁+R₁ℓ₁)−(x₂+R₂ℓ₂)`，于是转动直接进滑移与耗散。撑住那一边（μ=0.30，25步）：四槽滑距逐位`0x0.0p+0`、判别全STICK、**整条状态向量逐位不变**、max(|f|/N)=0.26794924≤μ。塌那一边（μ=0.20，60步）：球-球判别SLIP而地面STICK且地面滑距逐位零、两底球逐步严格分开、顶球逐步严格下降、滑距不衰减（末/首=1.0000028）、**每一步都干净收敛**（必红专防：不许拿不收敛冒充塌了）。塌的速率有闭式`(μc−μ)·F/k_t`，三档μ=0.26/0.20/0.10实测偏差5.98e-6/7.24e-7/3.09e-7，余量2.8/2.7/2.6倍。阈值由二分独立走出（只问锚点动没动，不读任何力）：夹取区间宽5.46e-13、相对偏差+1.7661e-07，与全粘着解那条**同一个数**，两者差1.33e-13。向后兼容：基线树d082b65与本轮132行产物`float.hex()`逐位相同（含布局指纹），并冻进`test_the_legacy_stepper_products_are_frozen`。注错验证三轮18条全红、四个空门全部补齐（0080第七节）。"
     },
     {
       "index": 8,

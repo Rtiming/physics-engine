@@ -27,11 +27,18 @@ from physics_engine.contact.friction import (
 from physics_engine.contact.layout import (
     REGIME_SEPARATED,
     REGIME_STICK,
+    SLOT_WIDTH,
     ContactLayout,
     ContactSlot,
     NormalSource,
 )
 from physics_engine.energies import EnergyContext
+from physics_engine.rotation import (
+    MaterialPoint,
+    MaterialPointStickSpring,
+    RotationStickCoupling,
+    StickSpring,
+)
 from physics_engine.state import State
 
 
@@ -140,6 +147,223 @@ def _return_map(
     return outcome, excess
 
 
+#: 接触点在力学状态里的那一端：**节点号**（质点），或**物质点**（刚体上带杠杆臂的点）。
+#:
+#: 决策0080第一节裁的接口形态。`MaterialPoint`本身就是`int`的推广——
+#: ``MaterialPoint(n, (0,0,0), None)``与``n``描述的是同一个东西——
+#: 所以它进的是**同一个参数**，而不是另开一个并列参数让两者"哪个说了算"靠读实现。
+#: 那正是`_yield_surface`挡的同一类错（`PenaltyAnnulusLimit`的前科）。
+ContactEnd = int | MaterialPoint
+
+
+def _check_material_point(
+    point: MaterialPoint,
+    *,
+    contact_layout: ContactLayout,
+    vector: tuple[float, ...],
+    where: str,
+) -> None:
+    """物质点的落位校验——**把上面那四条推广到"转动块也不许写进别人的地盘"**。
+
+    节点那一半与`int`口径逐字相同。新出来的是**转动块**那一半，而它挡的错更狠：
+
+    * 转动块落进**节点块** → 牛顿把某个节点坐标当转角解，位形被静默改掉；
+    * 转动块与**锚点槽**重叠 → 牛顿把锚点当自由度解。
+      锚点是历史（0033），**历史被当成未知数去解就不再是历史**——
+      而这一条不会抛任何异常，它只会安静地给出一个"收敛了"的错答案。
+
+    第二条是`int`口径下不存在的新危险：节点块与锚点槽之间隔着一条
+    "槽必须在节点块之后"的检查就够了，而转动块**两边都要挡**。
+    """
+
+    node_dof_count = contact_layout.layout.node_dof_count
+    if 3 * point.node + 3 > node_dof_count:
+        raise ContactError(
+            f"{where}: 物质点的节点{point.node}落在节点块之外"
+            f"（节点块只有{node_dof_count}个自由度）——再往后是锚点槽"
+        )
+    base = point.rotation_base
+    if base is None:
+        return
+    if base < node_dof_count:
+        raise ContactError(
+            f"{where}: rotation_base={base}落在节点块之内"
+            f"（节点块{node_dof_count}个自由度）——牛顿会把某个节点坐标当转角解"
+        )
+    if base + 3 > len(vector):
+        raise ContactError(
+            f"{where}: rotation_base={base}的转动块越过了状态向量末尾"
+            f"（需要下标{base + 2}，向量只有{len(vector)}个）"
+        )
+    for slot in contact_layout.slots:
+        if base < slot.base + SLOT_WIDTH and slot.base < base + 3:
+            raise ContactError(
+                f"{where}: rotation_base={base}的转动块与锚点槽"
+                f"{slot.pair_id!r}点{slot.point_index}（[{slot.base}, "
+                f"{slot.base + SLOT_WIDTH})）重叠"
+                "——**牛顿会把锚点当自由度解，而锚点是历史**（决策0033）"
+            )
+
+
+def _check_end(
+    end: ContactEnd,
+    counterpart: MaterialPoint | None,
+    *,
+    contact_layout: ContactLayout,
+    vector: tuple[float, ...],
+    where: str,
+) -> None:
+    """一个接触端的落位校验。``int``那一支**逐字保留2026-08-12补的四条**。"""
+
+    if isinstance(end, MaterialPoint):
+        _check_material_point(
+            end, contact_layout=contact_layout, vector=vector, where=f"{where} first"
+        )
+        if counterpart is not None:
+            _check_material_point(
+                counterpart,
+                contact_layout=contact_layout,
+                vector=vector,
+                where=f"{where} second",
+            )
+        return
+    if counterpart is not None:
+        raise ContactError(
+            f"{where}: 给了counterpart却把这一端写成节点号{end!r}——"
+            "对边只能是`MaterialPoint`，而`int`那一支按构造是"
+            "**节点对世界锚点**（`TangentialStickSpring`只做这一种）"
+        )
+    node_dof_count = contact_layout.layout.node_dof_count
+    if not isinstance(end, int) or isinstance(end, bool) or end < 0:
+        raise ContactError(f"contact node index must be a nonnegative int: {end!r}")
+    if 3 * end + 3 > node_dof_count:
+        raise ContactError(
+            f"{where}: node {end} 落在节点块之外"
+            f"（节点块只有{node_dof_count}个自由度）"
+            "——**再往后是锚点槽，写进去就是改别人的历史**"
+        )
+
+
+def _rotates(end: ContactEnd, counterpart: MaterialPoint | None) -> bool:
+    if not isinstance(end, MaterialPoint):
+        return False
+    if end.rotation_base is not None:
+        return True
+    return counterpart is not None and counterpart.rotation_base is not None
+
+
+def _assemble_stick(entries):
+    """把这一趟的粘着弹簧装成能量项，并给出"每个接触点的试探力"。
+
+    ``entries``是``(end, counterpart, anchor, normal, stiffness)``的序列，
+    **按声明次序**——次序即形制（spec/12第3.3节），所以它一路传到项里面。
+
+    ## 三种项，装配次序是**声明的**：legacy → 物质点 → 转动增量
+
+    | 端的形态 | 项 |
+    |---|---|
+    | ``int`` | `friction.TangentialStickSpring`（**一个**，含全部legacy弹簧） |
+    | `MaterialPoint`，两端都不转 | `rotation.MaterialPointStickSpring` |
+    | `MaterialPoint`，有一端转 | 上一行 **＋** `rotation.RotationStickCoupling` |
+
+    全是``int``时返回的元组是``(TangentialStickSpring(...),)``——
+    与2026-08-17那版**同一个对象、同一个求和次序**，
+    所以既有调用方的产物逐位不变不是"算出来相等"，是**同一串代码**。
+
+    ## 试探力的符号：**两个类差一个负号，而这里必须统一到``+k·P(d)``**
+
+    `TangentialStickSpring.tangential_force_n`给``+k·P(x − a)``；
+    `MaterialPointStickSpring`/`RotationStickCoupling`给的是**作用在first端的力**
+    ``−k·P(d)``。return-map拿试探力做两件事：判模长（符号无关）、
+    **定锚点修正的方向**（符号要命）。
+
+    锚点修正的语义是"**锚点追着物质点走**"——滑移把零应力位形挪到当前位形那一侧，
+    所以修正必须沿``+P(d)``。取成``−P(d)``会让锚点往反方向跑，
+    于是下一步的弹性伸长**变大**而不是被削平，屈服残差发散而不是收敛，
+    **而这一切都不会报错**：它只会给出一个越滑越紧的摩擦。
+    因此这里对物质点那两支取负号，把两条路径统一到同一个符号约定上。
+    """
+
+    legacy_positions: list[int] = []
+    legacy_springs: list[tuple[int, tuple[float, float, float], tuple[float, float, float], float]] = []
+    material_positions: list[int] = []
+    material_springs: list[StickSpring] = []
+    coupling_positions: list[int] = []
+    coupling_springs: list[StickSpring] = []
+
+    for position, (end, counterpart, anchor, normal, stiffness) in enumerate(entries):
+        if not isinstance(end, MaterialPoint):
+            legacy_positions.append(position)
+            legacy_springs.append((end, anchor, normal, stiffness))
+            continue
+        spring = StickSpring(
+            first=end,
+            normal=normal,
+            stiffness_n_per_mm=stiffness,
+            anchor_mm=anchor,
+            second=counterpart,
+        )
+        material_positions.append(position)
+        material_springs.append(spring)
+        #: **只把有转动端的弹簧交给耦合项**：`RotationStickCoupling`对
+        #: "一端都不转"的弹簧是失败关闭的（那是个恒零项，声明它只会让读者
+        #: 以为转动接上了）。混着声明因此是允许的，而不是被这条检查挡住。
+        if _rotates(end, counterpart):
+            coupling_positions.append(position)
+            coupling_springs.append(spring)
+
+    terms: list[object] = []
+    legacy_term = (
+        TangentialStickSpring(springs=tuple(legacy_springs)) if legacy_springs else None
+    )
+    if legacy_term is not None:
+        terms.append(legacy_term)
+    material_term = (
+        MaterialPointStickSpring(springs=tuple(material_springs))
+        if material_springs
+        else None
+    )
+    if material_term is not None:
+        terms.append(material_term)
+    coupling_term = (
+        RotationStickCoupling(springs=tuple(coupling_springs)) if coupling_springs else None
+    )
+    if coupling_term is not None:
+        terms.append(coupling_term)
+
+    #: 转动端的弹簧在``coupling_term``里排第几个。**每个位置只被写一次**——
+    #: 起草时写的是"先按不含转动的项写一遍、再让转动项覆盖"，
+    #: 那一版的取舍分支**观测不到**：把它拆掉，覆盖那一步照样给出同一个答案。
+    #: 注错验证第一轮就是这么抓出来的（0080第七节空门一）。
+    #: **一个观测不到的分支不是判据，是障眼法。**
+    coupling_order = {
+        position: order for order, position in enumerate(coupling_positions)
+    }
+
+    def trial_of(state: State) -> tuple[tuple[float, float, float], ...]:
+        result: list[tuple[float, float, float] | None] = [None] * len(entries)
+        if legacy_term is not None:
+            for position, force in zip(
+                legacy_positions, legacy_term.tangential_force_n(state), strict=True
+            ):
+                result[position] = force
+        if material_term is not None:
+            plain = material_term.tangential_force_n(state)
+            rotated = (
+                coupling_term.tangential_force_n(state)
+                if coupling_term is not None
+                else ()
+            )
+            for offset, position in enumerate(material_positions):
+                order = coupling_order.get(position)
+                force = plain[offset] if order is None else rotated[order]
+                result[position] = (-force[0], -force[1], -force[2])
+        assert all(value is not None for value in result)
+        return tuple(result)  # type: ignore[arg-type]
+
+    return tuple(terms), trial_of
+
+
 def advance_contact_quasistatic(
     *,
     registry_without_stick,
@@ -147,7 +371,8 @@ def advance_contact_quasistatic(
     contact_layout: ContactLayout,
     slot: ContactSlot,
     vector: tuple[float, ...],
-    node: int,
+    node: ContactEnd,
+    counterpart: MaterialPoint | None = None,
     normal: NormalSource,
     normal_force_of: Callable[[State], float],
     tangential_stiffness_n_per_mm: float,
@@ -210,6 +435,29 @@ def advance_contact_quasistatic(
     逐字相同的那串代码（见`_return_map`）。0068第五节第2条裁的
     "不切默认"在这里继续成立——**能走这条路**与**默认走这条路**是两件事，
     而今天仍然没有消费方声明过两个系数。
+
+    ## ``node``可以是**物质点**（决策0080，本函数第一次与转动块联动）
+
+    刚体上的接触点不是质心，是"质心 + 参考构型下的杠杆臂 + 转动基址"，
+    即`rotation.MaterialPoint`。``node``因此吃``int | MaterialPoint``，
+    对边由``counterpart``给（``None``时另一端是世界锚点）。
+
+    **``int``那一支一个字节都没变**：装配的项、求和次序、试探力的符号
+    全部是同一串代码（见`_assemble_stick`），所以既有调用方的产物逐位不变
+    是构造性的，不是对拍出来的。
+
+    ### 锚点记的是什么，滑移按什么算
+
+    这是本次扩展**唯一**改了语义的地方，而它只对物质点那一支成立：
+
+    > 锚点``a``记的是**两个物质点世界位置之差**在上一次粘住时的值，
+    > 即``a = (x₁ + R₁ℓ₁) − (x₂ + R₂ℓ₂)``；
+    > 滑移量是``|Δa|``，方向沿``P(d₀+u)``。
+
+    ``R(θ)ℓ``在里面，所以**转动直接进滑移**：同一个物质点转过去之后世界位置变了，
+    那一段位移与质心平移一样是真实的相对滑动，一样要耗散。
+    按节点位置算等于把杠杆臂上的那一段抹掉——**摩擦耗散会系统性偏小，
+    而所有法向量、所有力都还是对的**，那是最难看的一类错。
     """
 
     from physics_engine.energies import EnergyRegistry
@@ -238,14 +486,16 @@ def advance_contact_quasistatic(
     #: 这两种都不会抛`IndexError`——负下标与越界写在元组切片上是静默的，
     #: 而那正是决策0050落地时`PenaltySphereContact`吃过的亏
     #: （``node = -1``被接受、``vector[-3:]``读的正是锚点槽）。
+    #: 物质点进来之后这四条推广成两条（`_check_end`/`_check_material_point`），
+    #: 而`int`那一支**逐字保留**——推广不许顺手改既有口径。
     node_dof_count = contact_layout.layout.node_dof_count
-    if not isinstance(node, int) or isinstance(node, bool) or node < 0:
-        raise ContactError(f"contact node index must be a nonnegative int: {node!r}")
-    if 3 * node + 3 > node_dof_count:
-        raise ContactError(
-            f"node {node} 落在节点块之外（节点块只有{node_dof_count}个自由度）"
-            "——**再往后是锚点槽，写进去就是改别人的历史**"
-        )
+    _check_end(
+        node,
+        counterpart,
+        contact_layout=contact_layout,
+        vector=vector,
+        where="advance_contact_quasistatic",
+    )
     if slot.base < node_dof_count:
         raise ContactError(
             f"slot.base={slot.base} 落在节点块之内（节点块{node_dof_count}个自由度）"
@@ -261,7 +511,7 @@ def advance_contact_quasistatic(
 
     anchor = tuple(vector[slot.anchor_base : slot.anchor_base + 3])
     current = vector
-    stick_term = solved = outcome = None
+    solved = outcome = None
     normal_force = 0.0
     passes = 0
     #: **分离时不许接粘着项**（2026-08-06对抗审核抓到的静默错值）。
@@ -290,11 +540,19 @@ def advance_contact_quasistatic(
             if friction_ellipse is None
             else friction_ellipse.at(normal=direction, vector=current)
         )
-        stick_term = TangentialStickSpring(
-            springs=((node, anchor, direction, tangential_stiffness_n_per_mm),)
+        stick_terms, trial_of = _assemble_stick(
+            (
+                (
+                    node,
+                    counterpart,
+                    anchor,
+                    direction,
+                    tangential_stiffness_n_per_mm,
+                ),
+            )
         )
         terms = (
-            (*registry_without_stick.terms, stick_term)
+            (*registry_without_stick.terms, *stick_terms)
             if engaged
             else registry_without_stick.terms
         )
@@ -314,7 +572,7 @@ def advance_contact_quasistatic(
 
         normal_force = normal_force_of(solved.state)
         engaged = normal_force > 0.0
-        trial = stick_term.tangential_force_n(solved.state)[0] if engaged else (0.0,) * 3
+        trial = trial_of(solved.state)[0] if engaged else (0.0,) * 3
         #: 屈服残差：试探力超出屈服面多少。粘着时它按定义≤0，
         #: 故本判据只在滑移分支上有内容——粘着一趟就退出，与旧行为一致。
         outcome, excess = _return_map(
@@ -403,15 +661,24 @@ class ContactPoint:
     ``friction_coefficient``与``friction_ellipse``恰好给一个，**每个点各判各的**：
     带材压在导轮上时几十个接触点共用同一套材料常数，但把它做成整步一个参数
     就等于宣布"一步之内不许有两种屈服面"，而那句话本仓没有理由说。
+
+    ## ``node``可以是物质点，``counterpart``给对边（决策0080）
+
+    与单槽位版本同一条口径。**混着声明是允许的**：同一步里一部分点是质点
+    （``int``）、另一部分是刚体上的物质点，因为"这一端是不是刚体"是**体**的属性，
+    不是这一步的属性——与屈服面逐点声明那条逐字同源。
     """
 
     slot: ContactSlot
-    node: int
+    node: ContactEnd
     normal: NormalSource
     normal_force_of: Callable[[State], float]
     tangential_stiffness_n_per_mm: float
     friction_coefficient: float | None = None
     friction_ellipse: FrictionEllipseSpec | None = None
+    #: 对边的物质点。``None``时另一端是世界锚点（地面那一类）。
+    #: **只能与`MaterialPoint`一起给**，理由见`_check_end`。
+    counterpart: MaterialPoint | None = None
 
     def __post_init__(self) -> None:
         _yield_surface(
@@ -501,15 +768,15 @@ def advance_contacts_quasistatic(
     node_dof_count = contact_layout.layout.node_dof_count
     seen_slots: set[int] = set()
     for index, point in enumerate(contacts):
-        #: 逐点复用单槽位版本那四条落位校验——它们挡的是**静默写坏状态**，
+        #: 逐点复用单槽位版本那几条落位校验——它们挡的是**静默写坏状态**，
         #: 而多槽位下写坏的概率恰好乘以点数。
-        if not isinstance(point.node, int) or isinstance(point.node, bool) or point.node < 0:
-            raise ContactError(f"contact node index must be a nonnegative int: {point.node!r}")
-        if 3 * point.node + 3 > node_dof_count:
-            raise ContactError(
-                f"contacts[{index}]的节点{point.node}落在节点块之外"
-                f"（节点块只有{node_dof_count}个自由度）——再往后是锚点槽"
-            )
+        _check_end(
+            point.node,
+            point.counterpart,
+            contact_layout=contact_layout,
+            vector=vector,
+            where=f"contacts[{index}]",
+        )
         if point.slot.base < node_dof_count:
             raise ContactError(
                 f"contacts[{index}]的slot.base={point.slot.base}落在节点块之内"
@@ -579,19 +846,21 @@ def advance_contacts_quasistatic(
             spec = contacts[index].friction_ellipse
             if spec is not None:
                 ellipses[index] = spec.at(normal=direction, vector=current)
-        springs = tuple(
+        active = tuple(index for index in range(count) if engaged[index])
+        entries = tuple(
             (
                 contacts[index].node,
+                contacts[index].counterpart,
                 anchors[index],
                 directions[index],
                 contacts[index].tangential_stiffness_n_per_mm,
             )
-            for index in range(count)
-            if engaged[index]
+            for index in active
         )
+        stick_terms, trial_of = _assemble_stick(entries)
         terms = (
-            (*registry_without_stick.terms, TangentialStickSpring(springs=springs))
-            if springs
+            (*registry_without_stick.terms, *stick_terms)
+            if entries
             else registry_without_stick.terms
         )
         solved = solve_equilibrium(
@@ -607,21 +876,12 @@ def advance_contacts_quasistatic(
             raise ContactError(f"contact step did not converge: {solved.reason}")
         current = solved.state.vector
 
-        #: 试探力要按**装配时**的活动集取——`tangential_force_n`按springs的次序返回，
-        #: 而springs只含当时engaged的那些。用求解后的新活动集去索引会错位。
-        trials: list[tuple[float, float, float]] = []
-        spring_cursor = 0
-        stick_forces = (
-            TangentialStickSpring(springs=springs).tangential_force_n(solved.state)
-            if springs
-            else ()
-        )
-        for index in range(count):
-            if engaged[index]:
-                trials.append(stick_forces[spring_cursor])
-                spring_cursor += 1
-            else:
-                trials.append((0.0, 0.0, 0.0))
+        #: 试探力要按**装配时**的活动集取——`trial_of`按``entries``的次序返回，
+        #: 而``entries``只含当时engaged的那些。用求解后的新活动集去索引会错位。
+        trials: list[tuple[float, float, float]] = [(0.0, 0.0, 0.0)] * count
+        if entries:
+            for index, force in zip(active, trial_of(solved.state), strict=True):
+                trials[index] = force
 
         for index, point in enumerate(contacts):
             normal_force = point.normal_force_of(solved.state)
@@ -694,6 +954,7 @@ def advance_contacts_quasistatic(
 
 
 __all__ = [
+    "ContactEnd",
     "ContactPoint",
     "ContactStep",
     "MultiContactStep",

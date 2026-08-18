@@ -50,7 +50,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from physics_engine.oracles import file_sha256, write_manifest  # noqa: E402
 
 ALGORITHM_ID = "algorithm:oracle/three_sphere_pyramid_rotational"
-ALGORITHM_VERSION = "1.0.0"
+#: 1.1.0：加"两侧"那一组（决策0080）。**旧的五组一个数都没动**——
+#: 新增oracle不改既有oracle，那是三前提第三条在金标上的形式。
+ALGORITHM_VERSION = "1.1.0"
 
 RADIUS_MM = 10.0
 MASS_KG = 1.5
@@ -100,6 +102,15 @@ class Q3:
 
 def rational(value) -> Q3:
     return Q3(Fraction(value), Fraction(0))
+
+
+def _rate_key(mu: float) -> str:
+    """速率律那一组的量名：``mu``进名字，因为**每一档各有各的容差**。
+
+    小数点写成``p``——量名要能当标识符读，而`oracle.json`是给人看的。
+    """
+
+    return f"slip_per_contact_mm_at_mu_{mu:.2f}".replace(".", "p")
 
 
 ZERO = rational(0)
@@ -246,6 +257,40 @@ def main() -> int:
     #: 2e6档实测``μ``偏差1.766e-07，取5e-7约2.8倍余量。
     force_relative_tolerance = 5.0e-7
 
+    #: —— 两侧那一组（决策0080）：撑住是不动点，塌是恒速率的不可逆滑移 ——
+    #:
+    #: **塌那一边的速率有闭式**，所以它不是一句定性话：
+    #: 全粘着解在球-球接触上要求``|f| = μc·F``，而摩擦锥只给得起``μ·F``，
+    #: 差出来的那一截除以切向刚度就是这一步滑掉的距离
+    #:
+    #:     滑距/步 = (μc − μ)·F/k_t，   F = W/2
+    #:
+    #: ``μ → μc⁻``时它线性趋于零，``μ ≥ μc``时**逐位为零**——
+    #: 于是"撑住/塌"这条定性判据有了一个连续的、可对拍的量。
+    hold_friction = 0.30
+    collapse_friction = 0.20
+    rate_law_frictions = (0.26, 0.20, 0.10)
+    sphere_normal_force_n = solution["F1"].to_float() * WEIGHT_N
+
+    def slip_per_step_mm(mu: float) -> float:
+        """一步一个球-球接触滑掉多少。``exact_mu``是精确的，只有``μ``与``k``是输入。"""
+
+        return (critical_friction - mu) * sphere_normal_force_n / force_stiffness
+
+    def rate_tolerance(mu: float) -> float:
+        """速率律的容差是**推出来的，不是试出来的**。
+
+        实测``|f|/F``比精确``μc``大``δ = 1.766e-07``（相对），
+        而滑距正比于``μc − μ``，所以同一个``δ``在滑距上被放大``μc/(μc − μ)``倍。
+        取与``μc``那条同一个声明容差``5e-7``再乘这个放大因子，
+        余量因此**逐档保持2.6—2.8倍**（实测5.98e-6/7.24e-7/3.09e-7）。
+
+        **不写成一个统一的魔数**：统一魔数要么在``μ``靠近``μc``时过紧、
+        要么在远处松到抓不住错——而这条判据的全部意义就在``μ → μc``那一端。
+        """
+
+        return force_relative_tolerance * critical_friction / (critical_friction - mu)
+
     oracles = [
         {
             "id": "oracle:pyramid_rot/critical_friction",
@@ -368,6 +413,178 @@ def main() -> int:
                     "reason": "**前置断言**：偏差必须逐档单调减小。"
                               "不减小时比值区间那条门是在拿噪声算阶",
                 },
+            },
+        },
+        {
+            "id": "oracle:pyramid_rot/two_sided_hold_and_collapse",
+            "inputs": {
+                "kind": "three_sphere_pyramid_rotational_two_sided",
+                "radius_mm": RADIUS_MM,
+                "mass_kg": MASS_KG,
+                "gravity_mm_s2": GRAVITY_MM_S2,
+                "stiffness_n_per_mm": force_stiffness,
+                "hold_friction": hold_friction,
+                "collapse_friction": collapse_friction,
+                "hold_steps": 25,
+                "collapse_steps": 60,
+            },
+            "expected": {
+                "hold_slip_increment_mm": 0.0,
+                "hold_is_a_fixed_point": True,
+                "hold_regime": 1.0,
+                "hold_demand_ratio": critical_friction,
+                "collapse_sphere_regime": 2.0,
+                "collapse_ground_regime": 1.0,
+                "collapse_ground_slip_increment_mm": 0.0,
+                "collapse_base_gap_grows_strictly": True,
+                "collapse_top_descends_strictly": True,
+                "collapse_slip_does_not_decay": True,
+                "collapse_every_step_converges": True,
+                "collapse_slip_per_contact_mm": slip_per_step_mm(collapse_friction),
+            },
+            "tolerances": {
+                "hold_slip_increment_mm": {
+                    "abs": 0.0, "rel": 0.0,
+                    "reason": "**逐位零**（判`float.hex()`必须是``0x0.0p+0``）。"
+                              "``μ > μc``时试探力落在锥内，return-map返回的锚点修正是"
+                              "**构造性的零矢量**，不是一个很小的数——"
+                              "给它任何非零容差都等于允许一次不该发生的耗散",
+                },
+                "hold_is_a_fixed_point": {
+                    "abs": 0.0, "rel": 0.0,
+                    "reason": "整条状态向量**逐位不变**（25步全判`float.hex()`）。"
+                              "只判滑距为零不够：滑距为零而位形在漂，说明有别的东西"
+                              "在写状态——**"
+                              "撑住的含义是这一步什么都没发生**，那是可以逐位判的",
+                },
+                "hold_regime": {
+                    "abs": 0.0, "rel": 0.0,
+                    "reason": "四个槽全是`REGIME_STICK`。**它与滑距为零不是同一条**："
+                              "一个把regime写死成STICK的实现照样滑，"
+                              "一个忘了写regime的实现照样不滑",
+                },
+                "hold_demand_ratio": {
+                    "abs": 0.0, "rel": force_relative_tolerance,
+                    "reason": "撑住那一边等价于``max(|f|/N) ≤ μ``，而这个上确界就是``μc``。"
+                              "**判它而不只判“没滑”**：没滑可能是因为力算错了，"
+                              "而需求比对上``2−√3``说明力是对的、锥也是对的",
+                },
+                "collapse_sphere_regime": {
+                    "abs": 0.0, "rel": 0.0,
+                    "reason": "球-球两槽全程`REGIME_SLIP`——**卡住的是球-球**，"
+                              "与`sphere_sphere_is_the_binding_contact`同一条物理，"
+                              "但这一次是从**滑移**那一侧独立判出来的",
+                },
+                "collapse_ground_regime": {
+                    "abs": 0.0, "rel": 0.0,
+                    "reason": "地面两槽全程`REGIME_STICK`：地面的需求是``(2−√3)/3``，"
+                              "宽松3倍，``μ = 0.20``按不动它。"
+                              "**“塌”不是“到处都在滑”**，分不清这两件事的实现要红",
+                },
+                "collapse_ground_slip_increment_mm": {
+                    "abs": 0.0, "rel": 0.0,
+                    "reason": "逐位零（`float.hex()`）。与上一条配对：判别与滑距**都**要对，"
+                              "因为它们由两段不同的代码写出来",
+                },
+                "collapse_base_gap_grows_strictly": {
+                    "abs": 0.0, "rel": 0.0,
+                    "reason": "**两底球逐步严格分开**（不是“平均趋势”，是逐步比较）。"
+                              "这是“塌”的方向判据：滑移必须朝金字塔散架那一侧走，"
+                              "**朝反方向单调也满足“锚点动了”**——那正是把符号取反的实现"
+                              "会给出的样子（见`_assemble_stick`那段符号注释）",
+                },
+                "collapse_top_descends_strictly": {
+                    "abs": 0.0, "rel": 0.0,
+                    "reason": "顶球逐步严格下降。与上一条一起把“塌”钉成两个独立方向上的"
+                              "单调，而不是一个可以靠噪声凑出来的标量",
+                },
+                "collapse_slip_does_not_decay": {
+                    "abs": 0.0, "rel": 0.0,
+                    "reason": "**这一条才是“塌”与“松一下就稳住”的分界**：末步滑距不小于首步。"
+                              "``μ < μc``时静解**不存在**，所以每一步滑掉同样多、"
+                              "累计滑移线性发散；一个“滑一下就收敛”的实现在这里必红。"
+                              "实测60步内比值1.0000028（增，不减）",
+                },
+                "collapse_every_step_converges": {
+                    "abs": 0.0, "rel": 0.0,
+                    "reason": "**必红专防：不许拿“求解器不收敛”冒充“塌了”。**"
+                              "两者是两回事——塌是“静解不存在”这条物理，"
+                              "不收敛是数值。本判据要求塌那一边的**每一步**都干净收敛，"
+                              "于是“塌”这个结论只能来自滑移与位形，不能来自异常。"
+                              "近阈值确有一条不收敛带（见case.md第四节第7条），"
+                              "本组的``μ``刻意远离它",
+                },
+                "collapse_slip_per_contact_mm": {
+                    "abs": 0.0, "rel": rate_tolerance(collapse_friction),
+                    "reason": "闭式``(μc − μ)·F/k_t``，``F = W/2``。"
+                              "**把定性的“塌”变成一个有闭式的速率**——"
+                              "它在``μ → μc⁻``线性趋零，于是两侧判据不是一刀切的开关，"
+                              "而是一条连续的、可对拍的曲线。容差由`rate_tolerance`推出",
+                },
+            },
+        },
+        {
+            "id": "oracle:pyramid_rot/slip_onset_threshold",
+            "inputs": {
+                "kind": "three_sphere_pyramid_rotational_slip_onset",
+                "radius_mm": RADIUS_MM,
+                "mass_kg": MASS_KG,
+                "gravity_mm_s2": GRAVITY_MM_S2,
+                "stiffness_n_per_mm": force_stiffness,
+                "bracket_low": 0.20,
+                "bracket_high": 0.35,
+                "bracket_width": 1.0e-12,
+            },
+            "expected": {
+                "critical_friction": critical_friction,
+                "onset_matches_stick_demand": True,
+            },
+            "tolerances": {
+                "critical_friction": {
+                    "abs": 0.0, "rel": force_relative_tolerance,
+                    "reason": "**这一条是从另一条路走到同一个数**：不解全粘着解、"
+                              "不读任何力，只对``μ``二分“走一步之后锚点动没动”。"
+                              "锚点是历史，动没动是一个布尔量，"
+                              "所以这条判据不含任何容差——容差只在最后与``2−√3``对拍时出现。"
+                              "实测阈值0.26794923975367058，相对偏差1.766e-07，"
+                              "与全粘着解那条**同一个数**（0079第5.1节）",
+                },
+                "onset_matches_stick_demand": {
+                    "abs": 0.0, "rel": 0.0,
+                    "reason": "二分出来的阈值必须与全粘着解的需求比``max(|f|/N)``"
+                              "落在同一个夹取区间内（实测差1.33e-13 ≤ 半宽5e-13）。"
+                              "**没有这一条，两条路各自对上``2−√3``也可能是巧合**——"
+                              "5e-7的容差留得下一个1e-7量级的共同偏差",
+                },
+            },
+        },
+        {
+            "id": "oracle:pyramid_rot/collapse_rate_law",
+            "inputs": {
+                "kind": "three_sphere_pyramid_rotational_collapse_rate",
+                "radius_mm": RADIUS_MM,
+                "mass_kg": MASS_KG,
+                "gravity_mm_s2": GRAVITY_MM_S2,
+                "stiffness_n_per_mm": force_stiffness,
+                "frictions": list(rate_law_frictions),
+            },
+            "expected": {
+                _rate_key(mu): slip_per_step_mm(mu) for mu in rate_law_frictions
+            },
+            "tolerances": {
+                _rate_key(mu): {
+                    "abs": 0.0,
+                    "rel": rate_tolerance(mu),
+                    #: **逐档一个容差，不是三档共用一个**。`_parse_tolerance`只收标量，
+                    #: 而这恰好逼出了对的形制：``μ = 0.26``要1.7e-5、``μ = 0.10``只要8.0e-7，
+                    #: 共用一个数就等于让远端那两档白判。
+                    "reason": f"``μ = {mu}``：闭式``(μc − μ)·F/k_t``，容差由"
+                              "`rate_tolerance`推出（``5e-7·μc/(μc−μ)``）。"
+                              "实测偏差5.98e-6/7.24e-7/3.09e-7（三档），余量2.8/2.7/2.6倍。"
+                              "**三档一起才有内容**：单档对上只说明那一个数凑巧，"
+                              "三档沿``μc − μ``线性对上说明速率律本身是对的",
+                }
+                for mu in rate_law_frictions
             },
         },
         {

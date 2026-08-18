@@ -109,6 +109,7 @@ from physics_engine.contact.penalty import (
     groove_sweep_walls,
 )
 from physics_engine.contact.stepper import (
+    ContactEnd,
     ContactPoint,
     ContactStep,
     MultiContactStep,
@@ -126,6 +127,7 @@ __all__ = [
     "SLOT_WIDTH",
     "TRIAL_OUT_OF_PLANE_TOLERANCE",
     "ContactDeclaration",
+    "ContactEnd",
     "ContactError",
     "ContactLayout",
     "ContactPoint",
