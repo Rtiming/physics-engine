@@ -123,6 +123,17 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
         "laydown",
         "rigidbody",
         "rod",
+        #: `rotation`归力学（2026-08-18，决策0079）：它import `energies`（取`POTENTIAL`
+        #: 与`EnergyContext`）与`state`（取`StateField`/`StateLayout`），两者都在力学——
+        #: **没有一条边越到别的域，也没有向上**。它没有长进`contact`里是所有权问题：
+        #: `contact`今天的全部内容都以"节点是质点"为前提（锚点槽、罚法向、return-map），
+        #: 而本模块给的是**状态里多一块转动自由度**，那是`state`一侧的形制而不是接触本构。
+        #: 有人会觉得它该和`rigidbody`合并（都是SO(3)）：**否决**，0074第四节裁得很清——
+        #: 准静态要无约束参数化、动态要长时程稳定，**同一个群的两种坐标**，
+        #: 合并意味着一个既能准静态又能时间积分的统一刚体状态，而今天没有任何消费方
+        #: 需要同一个体同时走两条路（0063第六节）。判据仍是0035那条：
+        #: **import决定环，不是愿望决定环**。
+        "rotation",
         "section_beam",
         "sections",
         "sensors",
