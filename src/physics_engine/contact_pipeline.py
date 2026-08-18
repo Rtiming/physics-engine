@@ -11,6 +11,40 @@
 网格窄相和活动历史写回不在这里冒充完成。
 
 全部对象只在进程内流动，不落盘、不进run package，因此本批没有新增字节facet。
+
+## 时间步上限：**相对接触刚度的那一条**（2026-08-18，plans/16的M6）
+
+本模块此前**一条时间步上限都没有声明**。``rigidbody.RK4_BODY.declaration.step_bound``
+写着``h < 2.785/|ω|_max``，那是**转动模态**的；罚接触把一根刚度为`k`的弹簧接进
+显式积分器，于是多出一条**刚度模态**的上限。research/17第五节逐条核过同行：
+TinyDEM式49给的是``Δt = Rmin·√((1−ν²)/E)``，理由原文是
+"based on the propagation of elastic waves across particles"——**那正是刚度模态**。
+
+**两条挡的不是同一个物理，是独立的两条，实际步长取更紧的那个。**
+这句话在本模块里不是散文：``governing_step_bound``把它做成一个可判的函数，
+返回值同时报出**是哪一条在管**（`ContactPipelineError`级的失败关闭不适用于它——
+它不判对错，它报事实）。
+
+### 为什么不照抄TinyDEM那个式子
+
+``Rmin·√((1−ν²)/E)``**按字面缺一个密度因子**：量纲上`[R]·√(1/[E])`不是时间，
+补上`√ρ`才是（``R·√(ρ(1−ν²)/E) = R/c``，`c`是弹性波速）。它是一份把密度吸收进
+常数的工程写法，**照抄进本仓会变成一个量纲不齐的判据**。
+本仓用等价而量纲齐全的那一支：``ω0 = √(k/m_eff)``（与`contact/damping.py`的
+``linear_dashpot_parameters``**同一个式子**，那里已经算过`ω0`与
+``stability_rate_per_s``），于是
+
+    h < stability_radius / stability_rate
+
+`stability_radius`是**积分器**的实轴稳定区半径，与`rigidbody`那条转动上限用的是
+同一个数（RK4取2.785、显式Euler取2.0）——**上限的分子属于积分器、分母属于物理**，
+两条上限的差别只在分母。
+
+### 上限按**候选池**算，不按活动集算
+
+定步长显式积分器在撞上的那一帧才发现"刚度模态太快"已经晚了：那一步已经跨过去了。
+因此``stiffness_step_bound``扫的是**全部声明候选**（含此刻没接触的），
+取其中最紧的一条。**"现在没接触"不是"这个步长安全"的理由。**
 """
 
 from __future__ import annotations
@@ -27,7 +61,14 @@ from physics_engine.contact import (
     LinearNormalDashpot,
     PenaltySphereContact,
 )
-from physics_engine.energies import DISSIPATION, POTENTIAL, EnergyContext, Matrix, Vector
+from physics_engine.energies import (
+    DISSIPATION,
+    MM_PER_M,
+    POTENTIAL,
+    EnergyContext,
+    Matrix,
+    Vector,
+)
 from physics_engine.scene import FinalizedScene
 from physics_engine.shapes import GeneratedShape, PosedBody, Sphere, Vector3
 from physics_engine.state import State
@@ -35,6 +76,23 @@ from physics_engine.state import State
 
 class ContactPipelineError(ValueError):
     """检测—响应整合层的失败关闭。"""
+
+
+#: RK4的实轴稳定区半径。**与`rigidbody.RK4_BODY.declaration.step_bound`里的
+#: 那个2.785是同一个数**——上限的分子属于积分器，两条上限只在分母上不同。
+RK4_STABILITY_RADIUS = 2.785
+
+#: 显式Euler的实轴稳定区半径（同上，对应`rigidbody.EXPLICIT_EULER_BODY`的``h < 2/|ω|_max``）。
+EXPLICIT_EULER_STABILITY_RADIUS = 2.0
+
+#: 本模块声明的那条上限，写成一句可引用的话（形制对齐
+#: `integrate.IntegratorDeclaration.step_bound`：**上限是被声明的，不是被口头说的**）。
+CONTACT_STIFFNESS_STEP_BOUND = (
+    "h < stability_radius / stability_rate，其中"
+    "stability_rate = ω0（ζ≤1）或 (ζ+√(ζ²−1))·ω0（ζ>1）、ω0 = √(1000·k/m_eff)；"
+    "**这是罚刚度模态的上限，与`rigidbody`那条`h < 2.785/|ω|_max`（转动模态）"
+    "是独立的两条，实际步长取更紧的那个**（见`governing_step_bound`）"
+)
 
 
 @dataclass(frozen=True)
@@ -243,6 +301,46 @@ class SphereContactPipeline:
     def node_index_bound(self) -> int:
         return max(self._node_by_body.values()) + 1
 
+    def stiffness_step_bound(
+        self,
+        context: EnergyContext,
+        *,
+        stability_radius: float = RK4_STABILITY_RADIUS,
+    ) -> ContactStiffnessStepBound:
+        """本流水线**全部声明候选**里最紧的那条刚度模态步长上限。
+
+        扫候选而不是扫活动集：定步长显式积分器在撞上的那一帧才发现步长太大已经晚了，
+        那一步已经跨过去了。**"现在没接触"不是"这个步长安全"的理由。**
+
+        约化质量取``m_a·m_b/(m_a+m_b)``——两个都在动，这是它们相对运动的惯量。
+        单边固定（一个体质量趋于无穷）时它退化为动的那一个，**本层今天没有那种候选**
+        （两端都必须是绑到状态节点的球），所以这里不发明那条分支。
+        """
+
+        masses = context.node_masses_kg
+        tightest: ContactStiffnessStepBound | None = None
+        for index, (body_a, body_b) in enumerate(self._candidate_pairs):
+            node_a, node_b = self._node_by_body[body_a], self._node_by_body[body_b]
+            for node in (node_a, node_b):
+                if node >= len(masses):
+                    raise ContactPipelineError(
+                        f"candidate node {node} has no mass in context "
+                        f"{context.context_id!r} ({len(masses)} nodes)"
+                    )
+            mass_a, mass_b = masses[node_a], masses[node_b]
+            bound = contact_stiffness_step_bound(
+                stiffness_n_per_mm=self.stiffness_n_per_mm,
+                effective_mass_kg=mass_a * mass_b / (mass_a + mass_b),
+                damping_n_s_per_mm=self.damping_n_s_per_mm,
+                stability_radius=stability_radius,
+                pair_id=self._candidate_ids[index],
+            )
+            if tightest is None or bound.step_bound_s < tightest.step_bound_s:
+                tightest = bound
+        if tightest is None:  # pragma: no cover - `__post_init__`已挡住空候选池
+            raise ContactPipelineError("no declared contact pairs to bound the step")
+        return tightest
+
     def _assert_state_covers_bindings(self, state: State) -> None:
         node_dof = state.layout.node_dof_count
         if node_dof is None:
@@ -350,6 +448,128 @@ class SphereContactPipeline:
 
 
 @dataclass(frozen=True)
+class ContactStiffnessStepBound:
+    """一条**相对接触刚度**的显式积分时间步上限，连同算它用到的全部中间量。
+
+    中间量全部进结果，理由与`solve.SolveResult.backtracks`同源：
+    **一个只给最终数字的上限，读的人无法判断它是不是算错了。**
+    """
+
+    #: 罚接触的无阻尼固有角频率``√(1000·k/m_eff)``，rad/s。
+    omega0_rad_per_s: float
+    #: 阻尼比``ζ = 1000·c/(2·m_eff·ω0)``（无量纲）。
+    damping_ratio: float
+    #: 显式积分要挡住的那个最快模态速率：ζ≤1时是`ω0`，过阻尼时是``(ζ+√(ζ²−1))·ω0``。
+    #: **过阻尼这一支不能省**：阻尼越大最快模态越快，"加阻尼总是更稳"是错的。
+    stability_rate_per_s: float
+    #: 约化质量``m_a·m_b/(m_a+m_b)``，kg。
+    effective_mass_kg: float
+    stiffness_n_per_mm: float
+    damping_n_s_per_mm: float
+    #: 积分器的实轴稳定区半径（RK4=2.785、显式Euler=2.0）。
+    stability_radius: float
+    #: 上限本身，秒。
+    step_bound_s: float
+    #: 定这条上限的那个候选对的``pair_id``；不由某一对定（比如逐对相同）时为空串。
+    governing_pair_id: str = ""
+
+
+def contact_stiffness_step_bound(
+    *,
+    stiffness_n_per_mm: float,
+    effective_mass_kg: float,
+    damping_n_s_per_mm: float,
+    stability_radius: float = RK4_STABILITY_RADIUS,
+    pair_id: str = "",
+) -> ContactStiffnessStepBound:
+    """算一条接触的刚度模态步长上限。
+
+    ``ω0``与``stability_rate``的式子**与`contact/damping.py`的
+    ``linear_dashpot_parameters``逐字相同**——那里是从恢复系数出发派生阻尼，
+    这里是从已有的``(k, c, m_eff)``反过来读阻尼比。两处不许漂，
+    ``test_the_step_bound_uses_the_same_omega0_as_the_dashpot_derivation``钉着。
+    """
+
+    if not math.isfinite(stiffness_n_per_mm) or stiffness_n_per_mm <= 0.0:
+        raise ContactPipelineError(
+            f"step bound needs a positive finite stiffness: {stiffness_n_per_mm!r}"
+        )
+    if not math.isfinite(effective_mass_kg) or effective_mass_kg <= 0.0:
+        raise ContactPipelineError(
+            f"step bound needs a positive finite effective mass: {effective_mass_kg!r}"
+        )
+    if not math.isfinite(damping_n_s_per_mm) or damping_n_s_per_mm < 0.0:
+        raise ContactPipelineError(
+            f"step bound needs a finite nonnegative damping: {damping_n_s_per_mm!r}"
+        )
+    if not math.isfinite(stability_radius) or stability_radius <= 0.0:
+        raise ContactPipelineError(
+            f"step bound needs a positive finite stability radius: {stability_radius!r}"
+        )
+    omega0 = math.sqrt(MM_PER_M * stiffness_n_per_mm / effective_mass_kg)
+    damping_ratio = MM_PER_M * damping_n_s_per_mm / (2.0 * effective_mass_kg * omega0)
+    if damping_ratio <= 1.0:
+        stability_rate = omega0
+    else:
+        root = math.sqrt(damping_ratio - 1.0) * math.sqrt(damping_ratio + 1.0)
+        stability_rate = (damping_ratio + root) * omega0
+    return ContactStiffnessStepBound(
+        omega0_rad_per_s=omega0,
+        damping_ratio=damping_ratio,
+        stability_rate_per_s=stability_rate,
+        effective_mass_kg=effective_mass_kg,
+        stiffness_n_per_mm=stiffness_n_per_mm,
+        damping_n_s_per_mm=damping_n_s_per_mm,
+        stability_radius=stability_radius,
+        step_bound_s=stability_radius / stability_rate,
+        governing_pair_id=pair_id,
+    )
+
+
+@dataclass(frozen=True)
+class GoverningStepBound:
+    """两条独立上限里更紧的那一条，**连同"是哪一条在管"**。
+
+    只报数字不报出处，读的人会以为唯一那条上限就是全部——
+    而research/17第五节抓到的正是这个错：`rigidbody`看着有一条`step_bound`，
+    **它只挡了一半物理**。
+    """
+
+    step_bound_s: float
+    #: `contact_stiffness`／`rotational_mode`／`both`（两条恰好相等时）。
+    governed_by: Literal["contact_stiffness", "rotational_mode", "both"]
+    contact_stiffness_bound_s: float
+    rotational_mode_bound_s: float
+
+
+def governing_step_bound(
+    *, contact_stiffness_bound_s: float, rotational_mode_bound_s: float
+) -> GoverningStepBound:
+    """取两条独立上限里更紧的那个。**这就是"取更紧的那个"这句话的执行体。**"""
+
+    for name, value in (
+        ("contact stiffness", contact_stiffness_bound_s),
+        ("rotational mode", rotational_mode_bound_s),
+    ):
+        if not math.isfinite(value) or value <= 0.0:
+            raise ContactPipelineError(
+                f"{name} step bound must be positive and finite: {value!r}"
+            )
+    if contact_stiffness_bound_s < rotational_mode_bound_s:
+        governed = "contact_stiffness"
+    elif rotational_mode_bound_s < contact_stiffness_bound_s:
+        governed = "rotational_mode"
+    else:
+        governed = "both"
+    return GoverningStepBound(
+        step_bound_s=min(contact_stiffness_bound_s, rotational_mode_bound_s),
+        governed_by=governed,
+        contact_stiffness_bound_s=contact_stiffness_bound_s,
+        rotational_mode_bound_s=rotational_mode_bound_s,
+    )
+
+
+@dataclass(frozen=True)
 class DetectedSphereContactPotential:
     """只把``SphereContactPipeline``当前确认的活动对送进罚势。"""
 
@@ -448,11 +668,18 @@ class DetectedSphereContactDissipation:
 
 
 __all__ = [
+    "CONTACT_STIFFNESS_STEP_BOUND",
+    "EXPLICIT_EULER_STABILITY_RADIUS",
+    "RK4_STABILITY_RADIUS",
     "ActiveSphereContact",
     "ContactPipelineError",
+    "ContactStiffnessStepBound",
     "DetectedSphereContactDissipation",
     "DetectedSphereContactPotential",
+    "GoverningStepBound",
     "SphereContactEvaluation",
     "SphereContactPipeline",
     "SphereNodeBinding",
+    "contact_stiffness_step_bound",
+    "governing_step_bound",
 ]
