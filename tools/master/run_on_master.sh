@@ -84,7 +84,28 @@ fi
 ln -sfn "$VENV" "$DIR/.venv"
 echo "[master] uptime: $(uptime)"
 echo "[master] 分区=$PARTITION 核数=$CORES 命令: $USER_CMD"
-srun -p "$PARTITION" -c "$CORES" --time="$TIMELIMIT" bash -lc "cd '$DIR' && export PYTHONPATH='$DIR/src' && export PATH='$VENV/bin:\$PATH' && $USER_CMD"
+
+# 作业体**再生成一个文件**，不往`srun ... bash -lc "..."`里塞第二层引号。
+#
+# 第一版塞了，代价是一次**静默挂死**（2026-08-18实测，作业跑了19分钟没有任何输出）：
+# 那一层里写的是`export PATH='$VENV/bin:\$PATH'`——**单引号**，于是远端拿到的
+# `PATH`字面量里带着一个没被展开的`$PATH`，`/usr/bin`当场从PATH上消失。
+# 结果是命令里凡是用到外部程序的那一半（`tail`、`grep`……）全都找不到，
+# 而`python`因为在venv里还在，于是管道一头在写、另一头根本不存在——
+# **进程停在`pipe_read`上不退不报错**。
+# 前几次跑之所以没撞上，纯粹是因为那几条命令碰巧只用了`python`一个外部程序。
+#
+# 这与本脚本开头那条"嵌套heredoc把srun那行拆坏"是同一个病：
+# **多一层引号就多一次静默出错的机会**。作业体现在是一个逐字写下的文件。
+JOB="$DIR/.pe_job.sh"
+{
+    echo 'set -euo pipefail'
+    printf 'cd %q\n' "$DIR"
+    printf 'export PYTHONPATH=%q\n' "$DIR/src"
+    printf 'export PATH=%q:"$PATH"\n' "$VENV/bin"
+    printf '%s\n' "$USER_CMD"
+} > "$JOB"
+srun -p "$PARTITION" -c "$CORES" --time="$TIMELIMIT" bash "$JOB"
 REMOTE_BODY
 
 rtime-sync push "$STAGE/remote.sh" "$HOST:/tmp/pe-run-$SHORT-$RUN_TAG.sh" >/dev/null
