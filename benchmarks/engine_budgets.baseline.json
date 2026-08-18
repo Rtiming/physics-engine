@@ -60,6 +60,14 @@
       "load_tier": "interactive",
       "workload": "一个WDS式三节点easy-axis站点，64个弹塑性中点纤维，释放一个节点坐标后全局Newton回弹，4步0回溯",
       "measured_by": "docs/decisions/0060_WDS运动学截面站点全局装配_20260813.md"
+    },
+    "accept_full_batch_tier_on_master": {
+      "budget_s": 90.0,
+      "measured_median_s": 59.21,
+      "load_tier": "local_batch",
+      "measured_on": "2026-08-18",
+      "workload": "`pytest tests -m batch`（102 passed / 4 skipped）单跑。**这不是accept full整档**——它是那一档里最重的那一段（交互级1879条只要14.81秒、最慢一条0.33秒，那一段是平的）。",
+      "measured_by": "docs/decisions/0083_性能画像与模块化体检_热点不在申报的那条路上_20260818.md 第七节。**机器与负载写死在这里，不许省**（本仓2026-08-17刚为「性能数字没注明在哪台机器上量的」登记过一条欠账）：master、192核324GB、SLURM `srun -p amd96c -c 8`、1分钟负载3.03—6.33、远端独立venv（pytest>=8，不是master系统那份7.4.4）。**A/B四轮交错量**（两个提交轮流跑，不分两批——同一天该机负载在2.0到350.6之间跳过，分两批会把负载漂移记成优化效果）：优化前`5fe49ab` 65.48/65.26/65.28/65.21，优化后`6de946c` 59.23/59.37/58.81/59.18，中位数65.27→59.21，**−9.3%**，四轮全部同向。改动是`transport`/`tension_control`每步重建改直接构造＋两个校验器的派发快路，**产物158818行`float.hex()`逐字节不变**（SHA256 babc9f66…）。预算90.0是**观察位不是承诺**：墙钟不进门（research/05第四节，共享runner CV=2.66%、2%阈值假阳率45%），本条与`accept_full`一样只供人看。"
     }
   },
   "deterministic_gates": {
