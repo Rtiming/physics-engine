@@ -6,6 +6,31 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
 
 ## Unreleased
 
+### `tools/model/centerline_csv.py`：真实中心线第一次有路进来（2026-08-18）
+
+- **0073第五节第2步落地**（纯标准库，`tools/`内、wheel外、`src/`不import，
+  身份边界由`tests/governance/test_model_tools_stay_out_of_the_kernel.py`守）：
+  GCW的22列`centerline.csv`＋`centerline.meta.json` → `laydown.GrooveStation`的五元组。
+  **引擎源码零改动**，`source_bytes`不变——这个工具不吃那26259字节的余量；
+- **它守的是一条数值上不报错的错**：CSV列序是`t → n → s`，帧基序是`t → s → n`
+  （GCW自己用`csv_field_order_is_basis_order: false`说过）。按列序读成基序，
+  每一步都还是单位向量、还是右手系，**只是"带宽方向往哪边"整体错90°**。
+  工具交出的元组按**基序**排，另有一条门判它与`GrooveStation`字段顺序逐位对齐；
+- **失败关闭六条**：sidecar缺失／schema不是`gcw.centerline_frame.v1`／
+  `ordered_basis`不符／生产者自称`convention_valid`或`tangent_order_aligned`为假／
+  缺列（认列名不认列号）／帧不是单位或`s ≠ n×t`或`t·n ≠ 0`／弧长不严格递增；
+- **五条语义与闭合缺口都不裁**：`CenterlineSemantics`那五条0067已裁不许有默认值，
+  所以输出里它是`None`；首末间距只报数不下"闭合"的结论（真实语料恰好差一个采样步）；
+- **注错验证抓到自己两道空门**：`ordered_basis`判据与`t·n`正交判据各自有判据、
+  没有必红用例，整条拿掉后其余门全绿。两条已补——正交那条的可达窗口只有
+  `1e-9 < |t·n| ≲ 4.5e-5`（再大会先被单位向量判据挡住），**窄不等于空**；
+- **真实语料的门选择进入**（`PE_REAL_CENTERLINE_CSV`，形制抄`PE_REPLAY_CASE_RUNS`）：
+  0073裁决真实资产永不进仓，所以指了才跑、不指明示skip。
+  已在GCW的**8份真实导出**上实跑：426—984站、弧长850.66—1966.33 mm、
+  首末间距1.999—2.002 mm（恰好一个采样步），全部读通且内核`GrooveStation`接受；
+- **案例仍是0条**：本条只让"读得进来"成立。plans/15阶段二2.1要的
+  "曲率/扭率与plans/14第2.2节逐档对上"**还没做**——那要一条案例，不是一个读取器。
+
 ## 0.8.0 — 2026-08-18
 
 ### 0.8.0：两个并行波次的物理零件一次发出（2026-08-18）
