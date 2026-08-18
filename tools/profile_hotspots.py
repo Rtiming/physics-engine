@@ -37,6 +37,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+#: 仓库根也要进path——`tests/test_bench_measurement.py`等会`from tools import bench`，
+#: 而进程内跑pytest时`sys.path[0]`是本脚本所在的`tools/`而不是仓库根（实测：
+#: 第一次上master跑当场2个收集错误`No module named 'tools'`）。
+sys.path.insert(0, str(ROOT))
 
 
 def _run_pytest_under_profile(marker: str, top: int, sort: str) -> int:
