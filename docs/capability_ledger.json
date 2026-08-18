@@ -612,8 +612,8 @@
       "id": "C7",
       "family": "接触族",
       "label": "三球金字塔双向摩擦",
-      "criterion": "同一模型只改摩擦系数，一边必须撑住、一边必须塌",
-      "status": "done",
+      "criterion": "Chrono `utest_DEM_pyramid.cpp` 的**真实内容**（2026-08-18由对抗审核取回原文、收口方用 `gh api` 独立复核逐字确认）：**DEM完全动力学**——从 `pyramid_checkpoint.dat` 读入已沉降位形，`AdvanceSimulation(step_size)` 逐步积分，量 `contact_time` 与动能，`KE < precision_KE = 1e-7` 判 `settled`。两支**各改两件事不是一件**：hold 是 `mu_k = 0.5` **且** `SetRollingMode(SCHWARTZ)` + `mu_r = 0.2`；collapse 是 `mu_k = 0.01` **且** `NO_RESISTANCE`（滚动阻力整体关闭）。文件头第17行原话：\"This test is to verify the **rolling friction** of the chrono::dem\"。**Chrono 代码里没有任何 μc 闭式，也没有 2−√3。**",
+      "status": "partial",
       "exercises_physics": true,
       "evidence": [
         "case:three_sphere_pyramid",
@@ -626,7 +626,8 @@
         "test:tests/cases/test_three_sphere_pyramid_rotational.py::test_the_slip_onset_brackets_two_minus_root_three",
         "test:tests/cases/test_three_sphere_pyramid_rotational.py::test_the_collapse_rate_extrapolates_to_the_threshold"
       ],
-      "why": "定性判据（只改μ、一边撑住一边塌）零容差复现，静力分解F=W/√3、N=3W/2、T=W/(2√3)。 2026-08-18（0079）：含力矩平衡那一支的μc=2−√3已由转动接触自由度与`three_sphere_pyramid_rotational`兑现，金标为仓内Q(√3)精确有理算术，实测偏差1.766e-07。 2026-08-18（0080）：**两侧判据补齐，本位进位**。滑移与转动块联动——`advance_contact_quasistatic`/`advance_contacts_quasistatic`的`node`吃`int | MaterialPoint`，锚点记的是两个物质点世界位置之差`(x₁+R₁ℓ₁)−(x₂+R₂ℓ₂)`，于是转动直接进滑移与耗散。撑住那一边（μ=0.30，25步）：四槽滑距逐位`0x0.0p+0`、判别全STICK、**整条状态向量逐位不变**、max(|f|/N)=0.26794924≤μ。塌那一边（μ=0.20，60步）：球-球判别SLIP而地面STICK且地面滑距逐位零、两底球逐步严格分开、顶球逐步严格下降、滑距不衰减（末/首=1.0000028）、**每一步都干净收敛**（必红专防：不许拿不收敛冒充塌了）。塌的速率有闭式`(μc−μ)·F/k_t`，三档μ=0.26/0.20/0.10实测偏差5.98e-6/7.24e-7/3.09e-7，余量2.8/2.7/2.6倍。阈值由二分独立走出（只问锚点动没动，不读任何力）：夹取区间宽5.46e-13、相对偏差+1.7661e-07，与全粘着解那条**同一个数**，两者差1.33e-13。向后兼容：基线树d082b65与本轮132行产物`float.hex()`逐位相同（含布局指纹），并冻进`test_the_legacy_stepper_products_are_frozen`。注错验证三轮18条全红、四个空门全部补齐（0080第七节）。"
+      "why": "定性判据（只改μ、一边撑住一边塌）零容差复现，静力分解F=W/√3、N=3W/2、T=W/(2√3)。 2026-08-18（0079）：含力矩平衡那一支的μc=2−√3已由转动接触自由度与`three_sphere_pyramid_rotational`兑现，金标为仓内Q(√3)精确有理算术，实测偏差1.766e-07。 2026-08-18（0080）：**两侧判据补齐，本位进位**。滑移与转动块联动——`advance_contact_quasistatic`/`advance_contacts_quasistatic`的`node`吃`int | MaterialPoint`，锚点记的是两个物质点世界位置之差`(x₁+R₁ℓ₁)−(x₂+R₂ℓ₂)`，于是转动直接进滑移与耗散。撑住那一边（μ=0.30，25步）：四槽滑距逐位`0x0.0p+0`、判别全STICK、**整条状态向量逐位不变**、max(|f|/N)=0.26794924≤μ。塌那一边（μ=0.20，60步）：球-球判别SLIP而地面STICK且地面滑距逐位零、两底球逐步严格分开、顶球逐步严格下降、滑距不衰减（末/首=1.0000028）、**每一步都干净收敛**（必红专防：不许拿不收敛冒充塌了）。塌的速率有闭式`(μc−μ)·F/k_t`，三档μ=0.26/0.20/0.10实测偏差5.98e-6/7.24e-7/3.09e-7，余量2.8/2.7/2.6倍。阈值由二分独立走出（只问锚点动没动，不读任何力）：夹取区间宽5.46e-13、相对偏差+1.7661e-07，与全粘着解那条**同一个数**，两者差1.33e-13。向后兼容：基线树d082b65与本轮132行产物`float.hex()`逐位相同（含布局指纹），并冻进`test_the_legacy_stepper_products_are_frozen`。注错验证三轮18条全红、四个空门全部补齐（0080第七节）。",
+      "missing": "**2026-08-18从 `done` 退回 `partial`——这是一次订正，不是回退实现。** 0080 把本位标成 done，依据是 `research/05` 第2.3节把这条测试转述成「同一模型只改摩擦系数，一边撑住一边塌」。**那句转述失真**，而失真经本文件的 `criterion` 字段一路带进了 done 的判定里（见上方已订正的 criterion）。三处对不上：**① 动力学 vs 准静态**——Chrono 逐步积分并用动能判沉降，本仓是准静态、无时间积分、无角速度；**② 滚动阻力 vs 库仑滑动摩擦**——Chrono 那条测试自己声明验的是 rolling friction，两支同时切换滚动模式，而本仓「点接触不传力偶」、根本没有滚动阻力模型；**③ 无闭式 vs 自造闭式**——Chrono 没有 μc，本仓的 `μc = 2−√3` 是自己推的。**所以本仓这条案例是一道自主推导并双向验证的题，不是 Chrono 那道题**，不能与 Chrono 的数值对拍，也不该记成「复现了同行标准案例」。0080 的引擎实现与判据本身经独立复核是扎实的（38条测试、金标可独立重算、LEGACY 产物逐位对拍、方向/收敛/阈值三组必红均可独立复现红）——**站不住的只有「进位」这个外部权威性主张**。触发条件：本仓有了刚体动力学时间积分与滚动阻力模型（0063 路径B，S3.7 的「翻倒/无滑滚动」同一批），届时才谈得上与这条 Chrono 测试对同一道题。"
     },
     {
       "index": 8,
