@@ -869,8 +869,9 @@ class RotationStickCoupling:
                                     ),
                                 )
                             )
-            #: 同一端的弹簧刚度块（与几何刚度相加）。
-            for sign, point in ends:
+            #: 同一端的弹簧刚度块（与几何刚度相加）。**它没有符号**——
+            #: ``s_p·s_p = 1``，两端都一样。几何刚度那一块才带``s_p``。
+            for _sign, point in ends:
                 base = point.rotation_base
                 assert base is not None
                 for j in range(3):

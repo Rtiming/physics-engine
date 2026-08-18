@@ -25,7 +25,6 @@ from physics_engine.rotation import (
     build_rigid_body_layout,
 )
 from physics_engine.solve import (
-    SolveError,
     solve_equilibrium,
     tangent_stiffness_is_positive_definite,
 )
