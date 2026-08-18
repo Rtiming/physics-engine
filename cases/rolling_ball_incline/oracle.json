@@ -1,0 +1,136 @@
+{
+  "arrays": {},
+  "case_id": "case/rolling_ball_incline",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/rolling_ball_incline",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/rolling_ball_incline/generate_oracle.py",
+    "sha256": "172561fb6864b57e68bdb24d841ce2665f26cb9bdc0084d1de3208e1b0ba10f1"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "12ee29ffda3bed9d2db9817a6a8647db14999d7230b63d15416c3a03fc0c6d3b",
+  "oracles": [
+    {
+      "expected": {
+        "critical_friction_at_incline": 0.10399149550462924,
+        "no_slip_limit_coefficient": 3.5,
+        "required_friction_coefficient": 0.2857142857142857,
+        "rolling_coefficient": 0.7142857142857143
+      },
+      "id": "oracle:rolling_ball/exact_coefficients",
+      "inputs": {
+        "inertia_coefficient_den": 5,
+        "inertia_coefficient_num": 2
+      },
+      "tolerances": {
+        "critical_friction_at_incline": {
+          "abs": 0.0,
+          "reason": "Q上的精确有理数（5/7、2/7、7/2）化成double —— 它不是测量值是代数恒等式，容差留一点就等于允许它变成别的数",
+          "rel": 0.0
+        },
+        "no_slip_limit_coefficient": {
+          "abs": 0.0,
+          "reason": "Q上的精确有理数（5/7、2/7、7/2）化成double —— 它不是测量值是代数恒等式，容差留一点就等于允许它变成别的数",
+          "rel": 0.0
+        },
+        "required_friction_coefficient": {
+          "abs": 0.0,
+          "reason": "Q上的精确有理数（5/7、2/7、7/2）化成double —— 它不是测量值是代数恒等式，容差留一点就等于允许它变成别的数",
+          "rel": 0.0
+        },
+        "rolling_coefficient": {
+          "abs": 0.0,
+          "reason": "Q上的精确有理数（5/7、2/7、7/2）化成double —— 它不是测量值是代数恒等式，容差留一点就等于允许它变成别的数",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "acceleration_mm_per_s2": 2396.584004303436,
+        "acceleration_over_alpha_radius": 1.0,
+        "required_friction_n": 0.9586336017213744,
+        "sliding_flag": 0.0
+      },
+      "id": "oracle:rolling_ball/rolling_branch",
+      "inputs": {
+        "dt_s": 1e-06,
+        "friction_coefficient": 0.3,
+        "gravity_mm_per_s2": 9810.0,
+        "incline_deg": 20.0,
+        "mass_kg": 1.0,
+        "normal_stiffness_n_per_mm": 500000.0,
+        "radius_mm": 10.0,
+        "steps": 20000,
+        "tangential_stiffness_n_s_per_mm": 50.0
+      },
+      "tolerances": {
+        "acceleration_mm_per_s2": {
+          "abs": 0.0,
+          "reason": "罚接触的穿透是O(1/k_n)的模型自带量，速度型摩擦另有O(μN/k_t)的残余滑移——两者都进这条判据。实测偏差1.1e-04，余量约45倍。零容差在这里是错的：它会把模型自带量当成实现缺陷",
+          "rel": 0.005
+        },
+        "acceleration_over_alpha_radius": {
+          "abs": 0.0,
+          "reason": "罚接触的穿透是O(1/k_n)的模型自带量，速度型摩擦另有O(μN/k_t)的残余滑移——两者都进这条判据。实测偏差1.1e-04，余量约45倍。零容差在这里是错的：它会把模型自带量当成实现缺陷",
+          "rel": 0.005
+        },
+        "required_friction_n": {
+          "abs": 0.0,
+          "reason": "罚接触的穿透是O(1/k_n)的模型自带量，速度型摩擦另有O(μN/k_t)的残余滑移——两者都进这条判据。实测偏差1.1e-04，余量约45倍。零容差在这里是错的：它会把模型自带量当成实现缺陷",
+          "rel": 0.005
+        },
+        "sliding_flag": {
+          "abs": 0.0,
+          "reason": "布尔量编码成1/0，零容差——「滑没滑」是判据本身不是被测量（0081第三节第4条）",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "acceleration_mm_per_s2": 2894.2983755293217,
+        "acceleration_over_alpha_radius": 2.511761874129619,
+        "angular_acceleration_rad_per_s2": 115.22980762387202,
+        "sliding_flag": 1.0
+      },
+      "id": "oracle:rolling_ball/sliding_branch",
+      "inputs": {
+        "dt_s": 1e-06,
+        "friction_coefficient": 0.05,
+        "gravity_mm_per_s2": 9810.0,
+        "incline_deg": 20.0,
+        "mass_kg": 1.0,
+        "normal_stiffness_n_per_mm": 500000.0,
+        "radius_mm": 10.0,
+        "steps": 20000,
+        "tangential_stiffness_n_s_per_mm": 50.0
+      },
+      "tolerances": {
+        "acceleration_mm_per_s2": {
+          "abs": 0.0,
+          "reason": "同上两项模型自带量；滑动支实测偏差1.3e-05（a）与8.4e-05（α），余量两个数量级以上",
+          "rel": 0.005
+        },
+        "acceleration_over_alpha_radius": {
+          "abs": 0.0,
+          "reason": "同上两项模型自带量；滑动支实测偏差1.3e-05（a）与8.4e-05（α），余量两个数量级以上",
+          "rel": 0.005
+        },
+        "angular_acceleration_rad_per_s2": {
+          "abs": 0.0,
+          "reason": "同上两项模型自带量；滑动支实测偏差1.3e-05（a）与8.4e-05（α），余量两个数量级以上",
+          "rel": 0.005
+        },
+        "sliding_flag": {
+          "abs": 0.0,
+          "reason": "布尔量编码成1/0，零容差——「滑没滑」是判据本身不是被测量（0081第三节第4条）",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
