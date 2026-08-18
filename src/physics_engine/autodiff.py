@@ -329,7 +329,33 @@ def ad_cos(value):
 
 
 def ad_dot(left, right):
-    return sum(a * b for a, b in zip(left, right, strict=True))
+    """点积。**顺序累加，不用`sum()`——这一行是2026-08-18一次跨机实测逼出来的。**
+
+    `sum()`看着无害，但**CPython对纯`float`的`sum()`走的是补偿求和**
+    （Neumaier式，误差被一个补偿项吃掉），而对`Jet1`/`Jet2`只能退回泛型
+    `__add__`——**于是同一个`ad_dot`在两种输入上用的是两套不同的加法算法**。
+
+    后果不是"精度略差"，是**`spec/12`第3.1节那条承重条款被悄悄破坏**：
+    融合路径（`quantities`，走Jet）与单独调`energy`（走float）的能量值
+    **在每个顶点上本来就不同**。实测（`anisotropic_rod_bending`、15节点螺旋线）：
+
+    | 平台 | 逐顶点不同的顶点数 | 求和后的总能量 |
+    |---|---|---|
+    | macOS arm64 / CPython 3.13 | **1个**（顶点3） | **恰好抵消，逐位相同——门是绿的** |
+    | Linux x86-64 / CPython 3.12 | **4个** | 差1 ULP，**门当场红** |
+
+    **门此前一直绿，靠的是求和时误差恰好抵消。** 换一台机器就不抵消了。
+    这也是本仓第一次在第二个平台上跑全量套件（`tools/master/run_accept_on_master.sh`）
+    抓到的第一件事。
+
+    写成显式的三项相加之后，两条路**按构造**做同一串加法，
+    不再依赖"`sum()`对这种输入恰好怎么做"。
+    """
+
+    total = left[0] * right[0]
+    for index in range(1, len(left)):
+        total = total + left[index] * right[index]
+    return total
 
 
 def ad_cross(left, right):

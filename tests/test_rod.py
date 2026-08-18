@@ -907,3 +907,59 @@ def test_signed_angle_and_the_frame_agree_on_the_sign_convention() -> None:
         seed_d1=(0.0, 1.0, 0.0),
     )
     assert frame.d2[0] == pytest.approx((0.0, 0.0, 1.0), abs=1.0e-15)
+
+
+def test_the_fused_path_matches_per_vertex_not_only_in_the_sum() -> None:
+    """**逐顶点**相同，不只是求和后相同——2026-08-18跨机实测逼出来的一条门。
+
+    既有的`test_the_fused_path_reproduces_the_separate_calls_bytewise`只比**总能量**。
+    实测发现两条路**在每个顶点上本来就不同**，而那道门在本机一直绿，
+    **靠的是求和时误差恰好抵消**：
+
+    | 平台 | 逐顶点不同的顶点数 | 总能量 |
+    |---|---|---|
+    | macOS arm64 / CPython 3.13 | 1个 | 恰好抵消，门绿 |
+    | Linux x86-64 / CPython 3.12 | 4个 | 差1 ULP，门红 |
+
+    根因在`autodiff.ad_dot`：它原来用`sum()`，而**CPython对纯`float`的`sum()`
+    走补偿求和、对`Jet`只能走泛型`__add__`**——同一个函数在两种输入上用了两套加法。
+
+    **这条门判的位置比那条更靠里**：抵消发生在求和这一步，
+    所以判总和的门永远看不见它。本仓plans/09教训二的通则
+    （"判据要落在结构位置上"）在这里的形态就是**判到还没被求和的那一层**。
+    """
+
+    model, state = _helix_model(15, radius=40.0, pitch=12.0, sweep=1.0)
+    for term in model.terms():
+        for vertex in range(term._vertex_count()):
+            plain = term._vertex_energy(state, vertex, order=0)
+            jet = term._vertex_energy(state, vertex, order=2)
+            jet_value = jet.value if hasattr(jet, "value") else jet
+            assert plain.hex() == float(jet_value).hex(), (
+                f"{term.name} 顶点{vertex}：float路 {plain.hex()} 与 jet路 "
+                f"{float(jet_value).hex()} 不同 —— 两条路在被求和之前就已经分叉，"
+                "而判总和的那道门会因为误差抵消而看不见"
+            )
+
+
+def test_ad_dot_does_not_use_compensated_summation() -> None:
+    """必红：`ad_dot`必须与**顺序累加**逐位相同，不许退回`sum()`。
+
+    构造一组会让两种算法分道扬镳的输入（大数相消）：
+    `sum()`的补偿项会救回那个1.0，顺序累加不会。**判的是`ad_dot`站在后一边。**
+    """
+
+    from physics_engine.autodiff import ad_dot
+
+    left = (1.0e16, 1.0, -1.0e16)
+    right = (1.0, 1.0, 1.0)
+    sequential = left[0] * right[0]
+    for index in range(1, 3):
+        sequential = sequential + left[index] * right[index]
+
+    assert sum(a * b for a, b in zip(left, right, strict=True)) != sequential, (
+        "这组输入没能把两种求和算法分开 —— 那本条用例就没有分辨力了"
+    )
+    assert ad_dot(left, right).hex() == sequential.hex(), (
+        "ad_dot 走回了补偿求和 —— 那会让它在float与Jet两种输入上用两套加法"
+    )

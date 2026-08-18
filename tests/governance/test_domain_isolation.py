@@ -114,6 +114,13 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
     "mechanics": (
         "autodiff",
         "contact",
+        #: `contact_dynamics`归力学（2026-08-18，plans/16的M1）：它只import
+        #: `rigidbody`（布局、`cross`、两个方向的姿态换算），**只有这一条边、且在域内**。
+        #: 没长进`contact`的理由与`rotation`同源不同料：`contact`全部内容以
+        #: "节点是质点"为前提，而本模块吃的是**刚体的13维状态**（含四元数）。
+        #: 也没长进`rigidbody`：research/17第六节实测的同行分层是
+        #: "接触产出几何量 → 力矩装配 → 积分器回调"，**积分器不该知道接触**。
+        "contact_dynamics",
         "contact_pipeline",
         "disturbance",
         "drives",
