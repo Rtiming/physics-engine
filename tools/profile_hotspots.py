@@ -43,7 +43,9 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT))
 
 
-def _run_pytest_under_profile(marker: str, top: int, sort: str) -> int:
+def _run_pytest_under_profile(
+    marker: str, top: int, sort: str, callers: tuple[str, ...]
+) -> int:
     import pytest
 
     argv = ["tests", "-q", "-p", "no:cacheprovider", "-m", marker]
@@ -68,6 +70,13 @@ def _run_pytest_under_profile(marker: str, top: int, sort: str) -> int:
     stats.sort_stats(sort).print_stats("physics_engine", top)
     print(f"\n--- 只看 physics_engine，按 {sort} 排序 前{top} ---")
     print(stream.getvalue())
+    # 归因：一个热点函数本身改不动时，**要改的是谁在调它**。
+    for pattern in callers:
+        stream = io.StringIO()
+        stats = pstats.Stats(profiler, stream=stream)
+        stats.print_callers(pattern)
+        print(f"\n--- 谁在调 {pattern!r} ---")
+        print(stream.getvalue()[:12000])
     return 0
 
 
@@ -87,9 +96,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--marker", default="not batch and not serverclass")
     parser.add_argument("--top", type=int, default=30)
     parser.add_argument("--sort", default="tottime")
+    parser.add_argument(
+        "--callers",
+        action="append",
+        default=[],
+        help="额外打印「谁在调它」的函数名正则；可重复。",
+    )
     args = parser.parse_args(argv)
     if args.mode == "suite":
-        return _run_pytest_under_profile(args.marker, args.top, args.sort)
+        return _run_pytest_under_profile(
+            args.marker, args.top, args.sort, tuple(args.callers)
+        )
     return _run_durations(args.marker, args.top)
 
 
