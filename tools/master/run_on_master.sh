@@ -14,6 +14,15 @@
 #
 # 命令里的`python`由远端venv提供（脚本会把venv的bin放进PATH），
 # `PYTHONPATH`指向检出目录的`src`。
+#
+# ## 远端落点带一个**运行号**，不只带SHA（2026-08-18实测撞上）
+#
+# 第一版按`$HOME/<dir>/<short-sha>`落点并在开头`rm -rf`。同一个SHA上**并发**发两个
+# 作业时，后发的那个把先发的那个的检出目录连同正在跑的进程一起删了——
+# 实测回执是`cd: .../7bab386: No such file or directory`，**先发那个作业的
+# 全部结果直接丢失，而且它自己的日志里没有任何"我被删了"的痕迹**。
+# 这与本仓反复记的"静默出错"同族：不报错、只算错（这里是只丢结果）。
+# 现在落点是`<short-sha>-<运行号>`，运行号取秒级时戳＋PID，**并发不再互相踩**。
 set -euo pipefail
 
 CMD="${1:?用法: run_on_master.sh '<要在仓库根跑的命令>'}"
@@ -22,6 +31,8 @@ REMOTE_DIR="${PE_MASTER_DIR:-program/physics-engine-accept}"
 CORES="${PE_MASTER_CORES:-8}"
 PARTITION="${PE_MASTER_PARTITION:-amd96c}"
 TIMELIMIT="${PE_MASTER_TIME:-02:00:00}"
+#: 运行号：同一SHA上的并发作业各自一份检出目录。
+RUN_TAG="${PE_MASTER_RUN_TAG:-$(date +%Y%m%d%H%M%S)-$$}"
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
@@ -36,7 +47,7 @@ SHORT="$(git rev-parse --short HEAD)"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 git bundle create "$STAGE/pe.bundle" HEAD 2>/dev/null
-rtime-sync push "$STAGE/pe.bundle" "$HOST:/tmp/pe-run-$SHORT.bundle" >/dev/null
+rtime-sync push "$STAGE/pe.bundle" "$HOST:/tmp/pe-run-$SHORT-$RUN_TAG.bundle" >/dev/null
 echo "[master] 已送达 $SHORT"
 
 # 命令**写进远端脚本文件再逐字送过去**，不用嵌套heredoc——
@@ -44,6 +55,7 @@ echo "[master] 已送达 $SHORT"
 cat > "$STAGE/remote.sh" <<REMOTE_HEADER
 set -euo pipefail
 SHORT="$SHORT"
+RUN_TAG="$RUN_TAG"
 HEAD_SHA="$HEAD_SHA"
 REMOTE_DIR="$REMOTE_DIR"
 PARTITION="$PARTITION"
@@ -52,11 +64,11 @@ TIMELIMIT="$TIMELIMIT"
 REMOTE_HEADER
 printf 'USER_CMD=%q\n' "$CMD" >> "$STAGE/remote.sh"
 cat >> "$STAGE/remote.sh" <<'REMOTE_BODY'
-DIR="$HOME/$REMOTE_DIR/$SHORT"
+DIR="$HOME/$REMOTE_DIR/$SHORT-$RUN_TAG"
 rm -rf "$DIR"
 mkdir -p "$(dirname "$DIR")"
-git clone -q "/tmp/pe-run-$SHORT.bundle" "$DIR"
-rm -f "/tmp/pe-run-$SHORT.bundle"
+git clone -q "/tmp/pe-run-$SHORT-$RUN_TAG.bundle" "$DIR"
+rm -f "/tmp/pe-run-$SHORT-$RUN_TAG.bundle"
 cd "$DIR"
 GOT="$(git rev-parse HEAD)"
 if [ "$GOT" != "$HEAD_SHA" ]; then
@@ -75,5 +87,5 @@ echo "[master] 分区=$PARTITION 核数=$CORES 命令: $USER_CMD"
 srun -p "$PARTITION" -c "$CORES" --time="$TIMELIMIT" bash -lc "cd '$DIR' && export PYTHONPATH='$DIR/src' && export PATH='$VENV/bin:\$PATH' && $USER_CMD"
 REMOTE_BODY
 
-rtime-sync push "$STAGE/remote.sh" "$HOST:/tmp/pe-run-$SHORT.sh" >/dev/null
-rtime-ssh "$HOST" "bash /tmp/pe-run-$SHORT.sh; rm -f /tmp/pe-run-$SHORT.sh"
+rtime-sync push "$STAGE/remote.sh" "$HOST:/tmp/pe-run-$SHORT-$RUN_TAG.sh" >/dev/null
+rtime-ssh "$HOST" "bash /tmp/pe-run-$SHORT-$RUN_TAG.sh; rm -f /tmp/pe-run-$SHORT-$RUN_TAG.sh"
