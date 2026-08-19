@@ -35,27 +35,32 @@
 
 ## 必红矩阵（2026-08-18逐条注错**实测**）
 
-| 注错 | 红掉 |
-|---|---|
-| `turn_mean_radius_mm`取``R(index)``（半径更新晚一匝） | 6 |
-| `turn_mean_radius_mm`取``R(index+1)``（半径更新早一匝） | 6 |
-| `radius_integral_mm`连续式写成``R₀·n + slope·n²``（漏掉½） | 5 |
-| `radius_integral_mm`写成``R(n)·n``（整卷按最外匝算） | 5 |
-| `effective_layer_thickness_mm`写成``t·packing``（堆积因子反了） | 4 |
-| `layers_at`台阶式改用`ceil`（层数早跳一格） | 4 |
-| `radius_mm`漏掉``t_eff``（半径不长） | 8 |
-| `segments_in_free_span`漏掉``min``（跨距吃掉全部料） | 3 |
-| `segments_on_spool`写成``fed_count − free_span``（少减1） | 2 |
-| `turns_at_length_mm`连续式取``(−R₀+√…)/c``那一支 | 1 |
+| 注错 | 本文件红掉 | conformance红掉 |
+|---|---|---|
+| `radius_mm`漏掉``t_eff``（半径不长） | 12 | 2 |
+| `radius_integral_mm`连续式写成``R₀n + slope·n²``（漏掉½） | 6 | 2 |
+| `radius_integral_mm`写成``R(n)·n``（整卷按最外匝算） | 6 | 2 |
+| `turn_mean_radius_mm`取``R(index+1)``（半径更新**早**一匝） | 6 | 1 |
+| `layers_at`台阶式改用`ceil`（层数早跳一格） | 6 | 1 |
+| `segments_on_spool`写成``fed_count − free_span``（少减1） | 4 | 1 |
+| `turn_mean_radius_mm`取``R(index)``（半径更新**晚**一匝） | 3 | 1 |
+| `effective_layer_thickness_mm`写成``t·packing``（堆积因子反了） | 2 | 2 |
+| `turns_at_length_mm`连续式取``(−R₀+√…)/c``那一支 | 2 | 1 |
+| `segments_in_free_span`漏掉``min``（跨距吃掉全部料） | **1（补门前0）** | 1 |
 
-**十条全被抓到，最低一条。** 最后一条只红一处是**有信息的**：
-那一支在本文件的参数下还没进到相消区（``R₀/(cS)``不够大），
-真正把它打红的是`cases/spool_winding_growth`薄带那几档——
-**这说明"数值稳定的写法"这件事只有薄带极限才验得动**，
-判据表里那条容差因此写了它的适用区。
+**十条全被抓到，最低一条。** 两条有信息的：
+
+* **最后一行原本是0红**——守恒恒等式``in_span + on_spool == fed``对
+  "两边同时错了一个常数"是**盲的**：``7 + (k−1−7) == k−1``在``k < 8``时照样成立，
+  只不过盘上是**负**的。补了`test_the_spool_never_holds_a_negative_amount_of_material`
+  才抓到。**这是plans/09教训一"两处各说各的"的数值版**：两边各自自洽，合起来无意义；
+* **倒数第二行只红2处**：那一支在本文件与案例的参数下都还没进到严重相消区
+  （``R₀/(cS)``不够大）。**"数值稳定的写法"这件事只有薄带极限才验得动**，
+  而本批没扫到那一角——写进案例页"已知失效清单"第2条并登记GAP，
+  **不假装它验过了**。
 
 注错测法自己的坑（`tests/test_feed.py`第30行已记）：**同字节数的变异会留下
-一份被当成新鲜的`.pyc`**。本轮每次变异前清`__pycache__`。
+一份被当成新鲜的`.pyc`**。本轮每次变异前清`__pycache__`并关字节码写入。
 """
 
 from __future__ import annotations

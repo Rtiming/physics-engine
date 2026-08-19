@@ -17,20 +17,19 @@
 
 | 注错 | 本文件红掉 |
 |---|---|
-| `turn_mean_radius_mm`取``R(index)``（半径更新晚一匝） | 2 |
-| `turn_mean_radius_mm`取``R(index+1)``（半径更新早一匝） | 2 |
-| `radius_integral_mm`连续式漏掉½ | 3 |
-| `radius_integral_mm`写成``R(n)·n`` | 3 |
-| `effective_layer_thickness_mm`写成``t·packing`` | 3 |
+| `radius_mm`漏掉``t_eff`` | 2 |
+| `radius_integral_mm`连续式漏掉½ | 2 |
+| `radius_integral_mm`写成``R(n)·n`` | 2 |
+| `effective_layer_thickness_mm`写成``t·packing`` | 2 |
+| `turn_mean_radius_mm`取``R(index)``（半径更新晚一匝） | 1 |
+| `turn_mean_radius_mm`取``R(index+1)``（半径更新早一匝） | 1 |
 | `layers_at`台阶式改用`ceil` | 1 |
-| `radius_mm`漏掉``t_eff`` | 4 |
 | `segments_in_free_span`漏掉``min`` | 1 |
 | `segments_on_spool`写成``fed_count − free_span`` | 1 |
 | `turns_at_length_mm`连续式取``(−R₀+√…)/c``那一支 | 1 |
 
-**十条全被抓到。** 收敛阶那一条判据（第3条）单独看抓了其中4条——
-它是本文件里分辨力最强的一格，因为**建模偏差是1e-7量级，
-任何一处半径的错都比它大四个数量级以上，当场把阶打到零**。
+**十条全被抓到。** 完整的两列矩阵（本文件与`tests/test_winding.py`并排）
+在后者的模块文档里；那里还记着**其中一条原本是0红**的经过。
 """
 
 from __future__ import annotations
