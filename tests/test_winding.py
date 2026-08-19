@@ -382,8 +382,11 @@ def test_the_radius_and_the_length_never_go_backwards() -> None:
         pack = _exact_pack(turns_per_layer=3, layer_advance=advance)
         radii = [pack.radius_mm(turn * 0.25) for turn in range(0, 80)]
         lengths = [pack.wound_length_mm(turn * 0.25) for turn in range(0, 80)]
-        assert all(b >= a for a, b in zip(radii, radii[1:]))
-        assert all(b > a for a, b in zip(lengths[1:], lengths[2:]))
+        assert all(b >= a for a, b in zip(radii, radii[1:], strict=False))
+        #: 与上一行同族：**偏移一位的相邻配对**，两边长度天然差一。
+        #: 2026-08-18把`B905`一刀切成`strict=True`时，正是这一行当场`ValueError`——
+        #: **一条lint规则的"正确答案"要按每一处的语义定，不能按规则名定。**
+        assert all(b > a for a, b in zip(lengths[1:], lengths[2:], strict=False))
 
 
 # ------------------------------------------------------- 判据4：喂料前沿与运动学
@@ -500,7 +503,7 @@ def test_the_front_angular_rate_is_the_derivative_of_the_turn_count() -> None:
         here = pack.turns_at_length_mm(line_speed_mm_s * at_s)
         closed = pack.front_angular_rate_rad_s(here, line_speed_mm_s)
         errors.append(abs(measured - closed) / closed)
-    orders = [math.log2(a / b) for a, b in zip(errors, errors[1:])]
+    orders = [math.log2(a / b) for a, b in zip(errors, errors[1:], strict=False)]
     assert all(order >= 1.9 for order in orders), orders
 
 
@@ -518,8 +521,8 @@ def test_the_spool_radius_grows_as_the_front_feeds() -> None:
     samples = [200, 500, 900, 1400]
     turns = [winding.turns_on_spool(fed) for fed in samples]
     radii = [winding.radius_on_spool_mm(fed) for fed in samples]
-    assert all(b > a for a, b in zip(turns, turns[1:]))
-    assert all(b > a for a, b in zip(radii, radii[1:]))
+    assert all(b > a for a, b in zip(turns, turns[1:], strict=False))
+    assert all(b > a for a, b in zip(radii, radii[1:], strict=False))
     assert turns[-1] > 13.0, turns[-1]
 
 

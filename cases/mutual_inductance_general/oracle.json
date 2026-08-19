@@ -7,10 +7,10 @@
     "algorithm_id": "algorithm:oracle/mutual_inductance_general",
     "algorithm_version": "1.0.0",
     "path_relative": "cases/mutual_inductance_general/generate_oracle.py",
-    "sha256": "2373fe688df30b597562ef063010b2233d6defa49c779265ad551115b0684815"
+    "sha256": "3e4457c06fda25ce65c25629529fa637d5b098fbcfbae8403047e6a5eb89020a"
   },
   "load_tier": "interactive",
-  "manifest_self_sha256": "2227ab6e9ab153c10841b3e564730bccab28e2d1c52a1e09adcc3721d674afaa",
+  "manifest_self_sha256": "54ca5a9b66abc6c78943c705d6cb44512abccde9ede8b1e5774fee636b5baac5",
   "oracles": [
     {
       "expected": {

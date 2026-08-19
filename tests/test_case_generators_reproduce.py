@@ -199,7 +199,7 @@ def _compare(where: str, actual, want, tolerance: dict) -> list[str]:
         if len(actual) != len(want):
             return [f"{where}: 长度 {len(actual)} != {len(want)}"]
         out: list[str] = []
-        for index, (a, b) in enumerate(zip(actual, want)):
+        for index, (a, b) in enumerate(zip(actual, want, strict=True)):
             out += _compare(f"{where}[{index}]", a, b, tolerance)
         return out
     if isinstance(actual, bool) or isinstance(want, bool) or not isinstance(actual, (int, float)):
@@ -283,7 +283,7 @@ def _differing_paths(left, right, path: str = "") -> list[str]:
         return out
     if isinstance(left, list) and isinstance(right, list) and len(left) == len(right):
         out = []
-        for index, (a, b) in enumerate(zip(left, right)):
+        for index, (a, b) in enumerate(zip(left, right, strict=True)):
             out += _differing_paths(a, b, f"{path}[{index}]")
         return out
     return [] if left == right else [path or "/"]

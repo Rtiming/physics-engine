@@ -414,7 +414,7 @@ def flux_mutual_h(
     abscissas, gauss_weights = legendre_nodes(radial_count)
     angular_weight = 2.0 * math.pi / angular_count
     terms: list[float] = []
-    for abscissa, gauss_weight in zip(abscissas, gauss_weights):
+    for abscissa, gauss_weight in zip(abscissas, gauss_weights, strict=True):
         radius = 0.5 * radius_b * (abscissa + 1.0)
         radial_weight = 0.5 * radius_b * gauss_weight * radius
         for angular_index in range(angular_count):

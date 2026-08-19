@@ -181,11 +181,16 @@
         {
           "id": "S3.2",
           "label": "不规则体的网格碰撞窄相",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": false,
-          "evidence": [],
-          "why": "「不规则体」这三个字的碰撞侧落点。",
-          "missing": "`collision.py`只有球/胶囊族窄相；**圆柱/盒/网格窄相为零**（plans/07第三节）。~~plans/08阶段7的EPA还是MPR是0052第八节明写「今天裁会是猜」的待裁项~~——**2026-08-18（0094）按事实关掉，记为「不做」**：那三个collision网格全部非凸（凸性通过率0.15%/3.72%/26.19%），而EPA与MPR**都要凸体输入**，0073第七节第1条又裁过不vendored凸分解库。**没有凸体输入，那道选择题就不存在。**"
+          "evidence": [
+            "case:narrow_phase_signed_distance",
+            "test:tests/test_narrow_phase_shapes.py::test_the_existing_sphere_capsule_narrow_phase_is_unchanged_bit_for_bit",
+            "test:tests/test_narrow_phase_shapes.py::test_sphere_sphere_matches_the_closed_form_pointwise",
+            "test:tests/test_narrow_phase_shapes.py::test_the_frozen_fingerprint_goes_red_when_one_bit_moves"
+          ],
+          "why": "0090把label里那三个词分成三道题并各自处置。**EPA与MPR在前置上就出局**：两者都要凸体，而0074第二节实测三个collision网格凸性通过率0.15%/3.72%/26.19%、凸分解又已由0073第七节第1条裁掉；MPR还需要**一个内点**，非凸件上AABB中心可能根本不在体内；**两者都只给一个接触点**，与0082那条「底面是一组物质点」方向相反。**0052第八节那条「今天裁会是猜」的待裁项因此按事实关掉。**落地的是**距离场查询**：圆柱/盒族窄相与场探针，既有球/胶囊窄相**逐位不变**（120对语料34对相交，`penetration_mm.hex()` 34/34），闭式对拍球-球1.421e-14、盒-盒轴对齐7.105e-15，**场的偏差被声明成一个式子而不是一句话**（`(h²/6)·tr(∇²φ)`，凸球实测偏差/估计=0.999992—1.000000、**凹孔符号相反**），并抄了Bullet那条自洽恒等式与IPC那条超集＋逐条证人。",
+          "missing": "**`missing`原文那两半都不成立了**（「圆柱/盒窄相为零」、「EPA还是MPR待裁」），**但label里「网格」两个字一个都没兑现**，所以本位仍是partial。四条逐条：① **`MeshAsset`不带几何**——本仓的网格资产只有哈希与包盒，所以「不规则体的网格窄相」今天连输入都没有；② **场只接球型探针**——`φ(c) − r`读成穿透深度只对球型探针成立，形对形没有；③ **一般凸对凸的穿透深度仍为零**（EPA/MPR出局之后没有替代，而那不是本位的label要的东西，但调用方会以为有）；④ **`sampled_field`进不了接触管线**——域隔离门不许`collision`（基座圈）import`contact.field`（力学域圈），**答案是协议不是import**，那条协议还没裁。另登记一条0090抓到的：**`FiniteCylinder.flange_outer_radius_mm`没有实体语义**、全仓只撑AABB，按无法兰算时真实导轮同一探针从「体内10mm」变成「离开5mm」——**符号都反了**；plans/07那条「0032/0034法兰轴向尺寸」欠的比「轴向尺寸」这四个字多。"
         },
         {
           "id": "S3.3",

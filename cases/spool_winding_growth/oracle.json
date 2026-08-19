@@ -7,10 +7,10 @@
     "algorithm_id": "algorithm:oracle/spool_winding_growth",
     "algorithm_version": "1.0.0",
     "path_relative": "cases/spool_winding_growth/generate_oracle.py",
-    "sha256": "962fbca18c17644963ce1851ba2e8656d0019dc7f3ff0981c71ead43fc9cec0d"
+    "sha256": "a0adce8780423b02ed7eda20cb5ec77b22f2023b603c74c14d601eb18b9e5a57"
   },
   "load_tier": "interactive",
-  "manifest_self_sha256": "69e128219c6e17f96084354948ae5cf100c2b0766e92b68d653fe1aa6758ae59",
+  "manifest_self_sha256": "a610acdc3edf2aa6b291ec0c97e2380634fc1e4c99c82d291c4e50ed03f7f677",
   "oracles": [
     {
       "expected": {

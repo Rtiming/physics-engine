@@ -276,10 +276,12 @@ def order_oracle() -> dict:
         for thickness in ORDER_THICKNESSES_MM
     ]
     deviations = [
-        abs(model - exact) / exact for model, exact in zip(concentric, spiral)
+        abs(model - exact) / exact for model, exact in zip(concentric, spiral, strict=True)
     ]
     orders = [
-        math.log2(before / after) for before, after in zip(deviations, deviations[1:])
+        # `zip(xs, xs[1:])`是**相邻配对**，两边长度天然差一，`strict=True`在这里是错的
+        # （2026-08-18实测：一刀切成True时生成器当场`ValueError`）。
+        math.log2(before / after) for before, after in zip(deviations, deviations[1:], strict=False)
     ]
     return {
         "id": "oracle:winding/concentric_versus_archimedean_order",
@@ -331,7 +333,7 @@ def order_oracle() -> dict:
 def feed_oracle() -> dict:
     segments_fed = [count - 1 for count in FEED_SAMPLES]
     in_span = [min(fed, FEED_FREE_SPAN_SEGMENTS) for fed in segments_fed]
-    on_spool = [fed - span for fed, span in zip(segments_fed, in_span)]
+    on_spool = [fed - span for fed, span in zip(segments_fed, in_span, strict=True)]
     lengths = [count * FEED_REST_LENGTH_MM for count in on_spool]
     #: 由盘上长度反解匝数：``2π(R₀n + t n²/2) = ℓ`` ⟹
     #: ``n = 2S/(R₀ + √(R₀² + 2tS))``，``S = ℓ/2π``。

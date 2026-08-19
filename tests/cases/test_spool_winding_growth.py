@@ -143,7 +143,7 @@ def test_the_concentric_model_converges_to_the_archimedean_spiral_at_second_orde
         abs(model - exact) / exact for model, exact in zip(lengths, spiral, strict=True)
     ]
     orders = [
-        math.log2(before / after) for before, after in zip(deviations, deviations[1:])
+        math.log2(before / after) for before, after in zip(deviations, deviations[1:], strict=False)
     ]
     case.check_all({
         "concentric_length_mm": lengths,
@@ -152,11 +152,11 @@ def test_the_concentric_model_converges_to_the_archimedean_spiral_at_second_orde
     })
 
     claim = case.inputs["asymptotic_order_claim"]
-    assert all(after < before for before, after in zip(deviations, deviations[1:])), (
+    assert all(after < before for before, after in zip(deviations, deviations[1:], strict=False)), (
         "逐档偏差不单调下降——没有进渐近区，下面那个阶不许当收敛阶引用", deviations
     )
     assert all(order >= 1.9 for order in orders), orders
-    assert all(after > before for before, after in zip(orders, orders[1:])), (
+    assert all(after > before for before, after in zip(orders, orders[1:], strict=False)), (
         "阶本身不单调趋近——首项以外还有同量级的东西在，二阶这个说法要重审", orders
     )
     assert orders[-1] < claim, (
