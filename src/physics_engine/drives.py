@@ -91,7 +91,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 from physics_engine.actuators import ActuatorError
@@ -396,7 +396,24 @@ class PidController:
             + self.integral_gain * integral
             + self.derivative * rate
         )
-        return replace(self, integral=integral, previous_error=error), output
+        #: **直接构造，不走`dataclasses.replace`**（决策0087丙3，改法与0083第四节
+        #: 在`transport`/`tension_control`上那两处逐字相同）。本类全部字段都是
+        #: `init=True`、没有`InitVar`，于是`replace`做的就是"把未覆盖的字段读出来
+        #: 再调一次`__init__`"——省掉的只是标准库每次都要重走一遍的
+        #: `__dataclass_fields__`自省与kwargs字典。
+        #: **`__post_init__`照常跑，一条校验都没有被跳过**：本处不是
+        #: `_from_validated_pairs`那种"跳过校验的私有构造"。
+        return (
+            PidController(
+                proportional=self.proportional,
+                integral_gain=self.integral_gain,
+                derivative=self.derivative,
+                integral_limit=self.integral_limit,
+                integral=integral,
+                previous_error=error,
+            ),
+            output,
+        )
 
 
 def second_order_natural_frequency_rad_s(
@@ -703,11 +720,18 @@ class TensionLoop:
             current_a=effective_current,
             error_n=error,
         )
+        #: 直接构造，理由与`PidController.step_on_error`那处逐字相同（决策0087丙3）。
+        #: 本类全部字段`init=True`、无`InitVar`，`__post_init__`照常跑。
         return (
-            replace(
-                self,
+            TensionLoop(
+                clutch=self.clutch,
+                spool=self.spool,
                 controller=controller,
+                setpoint_n=self.setpoint_n,
+                dt_s=self.dt_s,
                 delay_line=delay_line,
+                sensor=self.sensor,
+                measurement_transfer=self.measurement_transfer,
                 torque_nmm=torque,
                 turns=self.turns + turns_increment,
                 step_index=self.step_index + 1,
