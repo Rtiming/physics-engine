@@ -14,13 +14,13 @@
 | 想干什么 | 命令 | 期望 |
 |---|---|---|
 | **改完代码的内循环**（秒级） | `.venv/bin/python -m pytest tests/test_你在动的.py -q` | 绿 |
-| **本机快档**（约32秒） | `.venv/bin/python -m pytest tests -q -m "not batch and not serverclass"` | 全绿，5条skip各带理由 |
+| **本机快档**（约35秒、2525条） | `.venv/bin/python -m pytest tests -q -m "not batch and not serverclass"` | 全绿，5条skip各带理由 |
 
 ## 二、验收：**墙钟以master为准，不以本机为准**
 
 | 想干什么 | 命令 | 期望 |
 |---|---|---|
-| **全档验收（权威）** | `bash tools/master/run_accept_on_master.sh full` | `overall=PASS functional=PASS timing=PASS perf=EVALUABLE resource=QUALIFIED`，墙钟约110秒/180 |
+| **全档验收（权威）** | `bash tools/master/run_accept_on_master.sh full` | `overall=PASS functional=PASS timing=PASS perf=EVALUABLE resource=QUALIFIED`，墙钟约**117秒/180**（2026-08-19 master三次中位数） |
 | **本机全档**（只作参考） | `.venv/bin/python tools/accept.py full` | 四轴绿，但**这台Mac整天负载5—20，本机墙钟不进台账** |
 | **在master跑任意一条命令** | `bash tools/master/run_on_master.sh '<命令>'` | 回执带节点、负载、核数 |
 
@@ -69,7 +69,7 @@ python tools/verify_optin.py --search-root <你的lab根>
 | `.venv/bin/python tools/check_case_pages.py` | 案例页六字段、索引表、分层表三处一致 |
 | `.venv/bin/python tools/check_gap_register.py` | 每份登记了欠账的决策记录都进了缺口清册 |
 | `.venv/bin/python tools/check_conflict_markers.py` | 冲突标记 |
-| `.venv/bin/python -m pytest tests/test_case_generators_reproduce.py -m batch` | **40个案例生成器重跑得动、且落在各自声明的容差内** |
+| `.venv/bin/python -m pytest tests/test_case_generators_reproduce.py -m batch` | **每个案例生成器重跑得动、且落在各自声明的容差内**（逐字节那一半只在产出它的那台机器上判，见plans/07「轴7」那一行） |
 
 ## 七、发版（**只有干净仓＋accept绿＋CHANGELOG有条目才准发**）
 
