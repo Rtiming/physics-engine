@@ -130,20 +130,30 @@ tools/view/.venv/bin/rerun rrd verify work/view/nominal_band.rrd
 `rerun_shutdown()`再报数，**好让回执里那个字节数是真的**
 （与`run_package.publish_package`那套"写完复验哈希"同源）。
 
-## 五、`engine_run_trace`形制（**草案，未进面清册**）
+## 五、`engine_run_trace`形制（**已进面清册，出生draft**）
 
 `src/physics_engine/engine_facets.py`是本仓的面清册，
 "任何跨边界字节形制先登记再落盘"是硬纪律（AGENTS.md／决策0017）。
-**本形制今天没有登记**，理由与做法：
 
-* 本轨的卖点之一是**它不吃源码预算**，`src/`零字节改动；
-  而`engine_facets.py`在`src/`里。**偷偷加一个进去比不加更坏。**
-* 所以形制写在这里作为**草案**，落盘的字节里`"facet": "engine_run_trace"`
-  照写——**这样它一旦升进清册，已有的轨迹文件不用改一个字节**。
-* **要不要升进`engine_facets`由后续批次裁**（0076第五节登记了这条待裁项）。
-  升，就补一条`ENGINE_RUN_TRACE_FACET`出生draft；
-  不升，就把它明确记成"工具间的私有形制，不作跨边界承诺"。
-  **今天两者都没有裁，本节就是这个状态的如实记录。**
+**2026-08-18已登记**（决策0084第四节，兑现0076第五节那条待裁项）：
+`ENGINE_RUN_TRACE_FACET`／`ENGINE_RUN_TRACE_VERSION`，出生draft。
+0076当时不登记的理由是"那一轨承诺`src/`零字节改动，而清册在`src/`里"——
+**那是一条轨道范围内的约束，不是一条原则**，而0084已把源码上限抬到4 MiB。
+
+登记之后的三件事：
+
+* **落盘的字节一个都没变**。0076当时就把`"facet": "engine_run_trace"`照写进产物，
+  正是为了"升进清册时已有的轨迹文件不用改一个字节"。实测兑现：
+  同一档同一抽样的轨迹在改动前后SHA相同（`7508215864f2…`，535251字节）；
+* **产的那一侧不再自己抄常量**——`trace_from_closed_loop.py`从清册import。
+  它本来就认识`physics_engine`，抄一份就意味着"清册改了而落盘的字节没改"，
+  而那正是0017那次教训的形状；
+* **读的那一侧仍然抄**，而且必须抄——`replay.py`住在rerun那个venv里、
+  不认识`physics_engine`，让它import内核会破掉"两个环境互不认识对方的依赖"
+  这条承诺（`tests/governance/test_view_tools_stay_out_of_the_kernel.py`第四条判据在守它）。
+  把读端与清册钉在一起的是一道**静态扫源码的门**
+  （`tests/governance/test_run_trace_facet.py`），不是一条import。
+  **门在这里正是因为不能靠import。**
 
 ### 5.1 字段
 

@@ -58,11 +58,20 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from physics_engine.drives import MagneticParticleClutch, PidController  # noqa: E402
+from physics_engine.engine_facets import (  # noqa: E402
+    ENGINE_RUN_TRACE_FACET,
+    ENGINE_RUN_TRACE_VERSION,
+)
 from physics_engine.tension_control import ClosedTensionLoop  # noqa: E402
 from physics_engine.transport import FreeSpan, PayoutReel  # noqa: E402
 
-FACET = "engine_run_trace"
-FACET_VERSION = "0.1"
+#: **形制名与版本从面清册取，不在这里再写一遍**（2026-08-18，0084第四节裁升之后）。
+#: 产的那一侧本来就认识`physics_engine`（上面三行import），所以它没有理由抄一份常量——
+#: 抄一份就意味着清册改了而落盘的字节没改，**而那正是面清册要防的那件事**。
+#: 读的那一侧（`replay.py`）不能这么做：它住在rerun那个venv里、不认识`physics_engine`，
+#: 把它钉住的是`tests/governance/test_run_trace_facet.py`那道门。
+FACET = ENGINE_RUN_TRACE_FACET
+FACET_VERSION = ENGINE_RUN_TRACE_VERSION
 
 CASE_ID = "case/closed_loop_tension_step"
 ORACLE_PATH = ROOT / "cases/closed_loop_tension_step/oracle.json"

@@ -52,6 +52,23 @@ BEHAVIOR_BASELINE_VERSION = "0.1"
 MATERIAL_RECORD_FACET = "engine_material_record"
 MATERIAL_RECORD_VERSION = "0.1"
 
+#: 运行轨迹面：一次run的时间序列落盘形制（`tools/view/`的两个工具之间那份JSON）。
+#: 出生draft。
+#:
+#: **它2026-08-18之前一直没有登记，而它确实跨边界**——`trace_from_closed_loop.py`
+#: 写、`replay.py`读，两个工具住在**互不认识对方依赖的两个环境**里（0076），
+#: 中间只有这份字节。当时不登记的理由写在`tools/view/README.md`第五节：
+#: 那一轨的卖点是`src/`零字节改动，而本文件在`src/`里。
+#: **那是一条轨道范围内的约束，不是一条原则**，而0084已按所有者裁决把源码上限抬到4 MiB，
+#: 约束不复存在。0076第五节把这件事登记成"由后续批次裁"，本批就是那个批次：**裁升**。
+#:
+#: 读的那一侧`replay.py`**仍然不import本模块**——它住在rerun那个venv里，
+#: 让它认识`physics_engine`会破掉0076那条"两个环境互不认识对方的依赖"。
+#: 把它与本清册钉在一起的是一道门（`tests/governance/test_run_trace_facet.py`），
+#: 不是一条import。**门在这里正是因为不能靠import。**
+ENGINE_RUN_TRACE_FACET = "engine_run_trace"
+ENGINE_RUN_TRACE_VERSION = "0.1"
+
 ENGINE_REGISTRY = FacetRegistry(
     Facet(
         name=ACCEPTANCE_RECEIPT_FACET,
@@ -95,6 +112,12 @@ ENGINE_REGISTRY = FacetRegistry(
         max_tested_minor=1,
         status=FacetStatus.DRAFT,
     ),
+    Facet(
+        name=ENGINE_RUN_TRACE_FACET,
+        major=0,
+        max_tested_minor=1,
+        status=FacetStatus.DRAFT,
+    ),
 )
 
 __all__ = [
@@ -105,6 +128,8 @@ __all__ = [
     "COLLISION_EVENTS_FACET",
     "COLLISION_EVENTS_VERSION",
     "ENGINE_REGISTRY",
+    "ENGINE_RUN_TRACE_FACET",
+    "ENGINE_RUN_TRACE_VERSION",
     "MATERIAL_RECORD_FACET",
     "MATERIAL_RECORD_VERSION",
     "ORACLE_MANIFEST_FACET",
