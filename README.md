@@ -230,6 +230,22 @@ WDS随后在R25固定材料顶点完成逐纤维塑性history事务，再完成�
 - `winding-deviation-sim`：引擎层依赖本仓属动`src/`，须走其冻结diff→重签回执→
   全量门禁流程，并附现有案例产物指纹逐字节不变证据。
 
+## 怎么跑：入口一页表
+
+**想验证某件事、跑哪条命令、期望看到什么，全在
+[`docs/entry_points.md`](docs/entry_points.md)。**
+那一页立于2026-08-18，理由是实测出来的：入口散在`tools/`、`validation/`、`cases/`
+与四个环境变量里，而**没有任何一个地方能让人一眼看完**——
+后果是有三条选择进入的通道**从来没有被整体跑过一次**，
+而`accept full`只会报skipped，**skip在回执里看起来和pass一样绿**。
+
+最常用的两条：
+
+```bash
+.venv/bin/python -m pytest tests -q -m "not batch and not serverclass"   # 本机快档，约32秒
+bash tools/master/run_accept_on_master.sh full                            # 全档验收（墙钟以master为准）
+```
+
 ## 安装与调用（舰队wheelhouse链路，decisions/0010）
 
 ```bash
