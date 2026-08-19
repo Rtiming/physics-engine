@@ -112,11 +112,16 @@
         {
           "id": "S2.2",
           "label": "一般位形的互感（倾斜、偏心、非共轴）",
-          "status": "todo",
+          "status": "done",
           "exercises_physics": false,
-          "evidence": [],
-          "why": "真线圈组不共轴，而共轴闭式在那里直接失效——这是场景②从「一半」走到「整条」的那一步。",
-          "missing": "`inductance.mutual_inductance_h`只吃共轴`CircularLoop`（模块docstring第五节明写「不做一般位形」）；Neumann双回路积分**只活在案例的金标生成器里**（`cases/mutual_inductance_coaxial/generate_oracle.py`），引擎侧零。"
+          "evidence": [
+            "case:mutual_inductance_general",
+            "test:tests/cases/test_mutual_inductance_general.py::test_the_general_quadrature_degenerates_to_the_coaxial_closed_form",
+            "test:tests/cases/test_mutual_inductance_general.py::test_general_placements_match_an_independent_flux_integral",
+            "test:tests/cases/test_mutual_inductance_general.py::test_the_general_mutual_inductance_is_reciprocal_bit_for_bit",
+            "test:tests/cases/test_mutual_inductance_general.py::test_the_self_inductance_singularity_fails_closed_and_the_gate_has_two_sides"
+          ],
+          "why": "0092落地`electromagnetics/neumann.py`（零依赖），label三样（倾斜／偏心／非共轴）逐个走到。**本位最实的一条不是某个偏差，是「收敛阶不是一个数」**：中点切元求积在解析周期被积函数上是**几何收敛**（每加8段误差降固定倍数，实测log₂比3.9599/3.9399/3.9253/3.9093，比值不衰减、max/min=1.0129），而**折线弦（多边形细丝）离散是代数二阶**（同构型同档实测0.5253/0.4449/0.3854/0.3220，与二阶理论值0.5261/0.4448/0.3853/0.3219逐位吻合）——**两者在N=64处差六个数量级**。同轴退化对已有的Maxwell/AGM闭式rel `2.85e-16 / 0（逐位相同）/ 1.65e-15 / 5.68e-15`；一般位形对**独立的**Biot-Savart圆盘磁通rel ≤ 1.94e-15；**互易`M(a,b) == M(b,a)`零容差逐位**且分段数跟着交换（96/61与71/53）；远场三族取向各五档倍频程、12个收敛阶**逐个钉住**（1.98→2.00）而不断言成2；正交零磁通构型`|M| ≤ 7.3e-26`。**自感失败关闭、不做任何正则化**——GMD要导线截面半径＝一个建模选择，不许伪装成数值参数；必红门实测：绕开拒跑后同一条回路在N=48/96/192给出三个**都很正常**的数（单调增长、彼此不到2倍），**没有拒跑就没有任何东西看得出那是发散积分**。"
         },
         {
           "id": "S2.3",
@@ -133,12 +138,17 @@
         {
           "id": "S2.4",
           "label": "有截面的真实线圈（不是理想细丝）",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": false,
-          "evidence": [],
+          "evidence": [
+            "case:mutual_inductance_general",
+            "test:tests/cases/test_mutual_inductance_general.py::test_the_section_bundle_converges_to_the_four_dimensional_reference",
+            "test:tests/test_section_bundle.py::test_a_zero_section_is_legal_and_reproduces_the_centre_filament",
+            "test:tests/test_section_bundle.py::test_the_current_density_assumption_is_a_plain_average"
+          ],
           "shared_gap": "体积与厚度",
-          "why": "plans/05对场景②的判词原文是「真线圈有截面、有多匝」。",
-          "missing": "`CircularLoop`是半径+匝数的细丝；导体截面上的电流分布无处安放（与S1.2同源，但问的量不同：那里是带材内的电流密度，这里是导体截面的邻近效应）。"
+          "why": "0092的`electromagnetics/bundle.py`把导体截面按n×n中点网格离散成丝束，**解开了label里「有截面」那一半**：截面细分对**四维Gauss-Legendre参考**代数二阶（1.99207/1.99794）、细丝极限二阶（2.00075/2.00022/2.00006）、零截面**逐位等于**中心细丝、互易逐位（且截面细分4与3、分段数48与31都不同）。",
+          "missing": "**只解开了截面几何那一半，电流分布那一半没有动。** 本位`missing`原文问的是「导体截面上的电流分布无处安放」——`bundle.py`假设的是**均匀电流密度**（有一条门专门看着这个建模假设别被悄悄改成别的加权），而交流下的**趋肤效应与邻近效应**在这个假设里无处安放。触发条件：第一个消费方给出频率那天。另：**一般位形的有截面线圈没有独立金标**（四维Gauss-Legendre参考只在同轴上建过）。"
         },
         {
           "id": "S2.5",
@@ -411,14 +421,16 @@
         {
           "id": "S5.3",
           "label": "线圈盘几何与半径随匝数生长",
-          "status": "partial",
+          "status": "done",
           "exercises_physics": false,
           "evidence": [
-            "case:generator_determinism",
-            "test:tests/cases/test_generator_determinism.py::test_the_spool_products_are_real_shapes_with_closed_form_mass_properties"
+            "case:spool_winding_growth",
+            "test:tests/cases/test_spool_winding_growth.py::test_the_radius_ladder_matches_the_hand_written_closed_form",
+            "test:tests/cases/test_spool_winding_growth.py::test_the_wound_material_is_conserved_turn_by_turn",
+            "test:tests/test_winding.py::test_the_degenerate_pack_and_the_drive_side_radius_are_the_same_float",
+            "test:tests/test_winding.py::test_the_stepped_pack_reproduces_the_generator_layer_growth_bit_for_bit"
           ],
-          "why": "`modelgen.generate_spool`产出的是真形状，质量属性对圆柱/胶囊教科书闭式rel 1e-15，且同参数逐字节相同。",
-          "missing": "**只做了静态几何**。有效半径随层数生长引擎侧为零（WDS有`WindingSurface`可搬）。"
+          "why": "label两半各自有证据。**「线圈盘几何」**：`modelgen.generate_spool`产筒＋两片法兰、三件互不重叠且对溢出法兰失败关闭。**「半径随匝数生长」**：0093的`winding.py`落地，而判据强度靠**恒等式**不靠容差——半径对手写闭式14档**零容差浮点`==`**；材料守恒`Σ R(k+½) == ∫₀ⁿR ds`五种形制×32匝**真的浮点`==`**；反解`长度→匝`往返最坏rel **1.3158e-16**（1 ulp）；另有一条**从下方单调逼近2**的收敛阶（同心圆理想化对真阿基米德螺线弧长闭式，七档1.9354→1.9670→1.9833→1.9916→1.9958→1.9986）。**本仓三处写着「半径随卷绕生长」的关系被两道逐位门钉住而不是靠注释**：退化档与`drives.radius_mm`给同一个浮点数、台阶式与`generate_spool`在冻结那组入参下同为`68.0`——三者**不是三份重复，自变量不同**（`drives`吃匝答力、`generate_spool`吃层答形、`winding`补中间那段匝→层换算）。**本位进位时删掉了一句已经过期的`missing`**：原文写「有效半径随层数生长引擎侧为零」，而`modelgen.py`第244行起早就在按已卷层数生长（主代理合入时逐行核过）。"
         },
         {
           "id": "S5.4",
@@ -431,7 +443,7 @@
             "test:tests/test_feed.py::test_the_fed_portion_behaves_like_a_rod_of_that_length"
           ],
           "why": "十几匝不是一次装配出来的，是一匝一匝喂出来的——自由度数在过程中变。0062丙1已落`feed.FeedFront`，**解法直接复用0050对锚点裁过的形制**：节点数不由『已经喂进来多少』决定，由『这一卷总共要喂多少』决定；预算在声明期定死、布局定长，`fed_count`是**向量里的一个值不是一次布局变更**，未喂节点停在喂料口后方一个静止段长处并被钉住。于是S5.4原文那句『自由度数在过程中变』在这里**不变**——0050那条承重条款（指纹跨步不变）保住了。未喂边的贡献**逐字节为零**（全预算项与只含已喂边的项能量/梯度逐字节相同），不是被if跳过的——跳过会让求和次序随`fed_count`变，而求和次序是形制。",
-          "missing": "**不是材料注入**。WDS `research/05`第三节称『当前最大的单项缺口』的那一条是**带材从轮面上流过、边界随材料移动**（欧拉式），而本模块是**拉格朗日**的：每个节点始终是同一块材料，喂料只是往前接长度。横漂稳态、绞盘全滑都要材料注入，本模块给不了。另无匝数与半径生长的接线（那是`drives.SpoolTension`的`turns`，两者尚未接在一起）、无自接触（S5.2）、无喂料速度与线速的耦合、未喂节点的停放位置是一条直线而不是放线盘上的真实位形。故只报partial。"
+          "missing": "**不是材料注入**。WDS `research/05`第三节称『当前最大的单项缺口』的那一条是**带材从轮面上流过、边界随材料移动**（欧拉式），而本模块是**拉格朗日**的：每个节点始终是同一块材料，喂料只是往前接长度。横漂稳态、绞盘全滑都要材料注入，本模块给不了。~~另无匝数与半径生长的接线~~（**2026-08-18已接**：0093的`winding.py`把喂料前沿与卷绕堆积接在一起，`喂进来 == 跨距里 + 盘上`1400档**整数`==`**，前沿角速率`ω = v/R`对中心差分五档实测二阶）、无自接触（S5.2）、无喂料速度与线速的耦合、未喂节点的停放位置是一条直线而不是放线盘上的真实位形。故只报partial。"
         },
         {
           "id": "S5.5",

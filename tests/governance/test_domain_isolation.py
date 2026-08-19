@@ -153,6 +153,10 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
         #: 判据仍是0035那条：**import决定环，不是愿望决定环**。
         "tension_control",
         "transport",
+        #: `winding`归力学（2026-08-18，决策0093）：包内只import`feed`一条边、
+        #: 在域内、不向上。它补的是`drives`（吃匝答力）与`modelgen.generate_spool`
+        #: （吃层答形）之间缺的那一段——匝→层换算、堆积因子、长度↔匝。
+        "winding",
     ),
     "optics": ("optics",),
     #: 第三个物理域（决策0041第三节预登记；0042互感、0047超导薄带两块落地）。
