@@ -48,6 +48,15 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 HEAD_SHA="$(git rev-parse HEAD)"
 SHORT="$(git rev-parse --short HEAD)"
+#: 运行号：同一SHA上的并发作业各自一份检出目录与各自一份/tmp落点。
+#:
+#: **这一条2026-08-18补，而它是`run_on_master.sh`修过一次的同一个缺陷**（提交5fe49ab）。
+#: 那次实测：同一个SHA上并发发两个作业，后发的那个把先发的那个的检出目录连同
+#: 正在跑的进程一起`rm -rf`掉了，回执是`cd: .../7bab386: No such file or directory`，
+#: **先发那个作业的全部结果直接丢失、而且它自己的日志里没有任何"我被删了"的痕迹**。
+#: 那次只修了通用入口，**本脚本原样带着那个缺陷**——两个入口之间没有任何门在比。
+#: 现在有了：`tests/governance/test_master_dispatch_scripts.py`。
+RUN_TAG="${PE_MASTER_RUN_TAG:-$(date +%Y%m%d%H%M%S)-$$}"
 
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
@@ -58,7 +67,7 @@ trap 'rm -rf "$STAGE"' EXIT
 git bundle create "$STAGE/pe.bundle" main HEAD 2>/dev/null
 echo "[master] 打包 $SHORT（$(wc -c < "$STAGE/pe.bundle") 字节）"
 
-rtime-sync push "$STAGE/pe.bundle" "$HOST:/tmp/pe-accept-$SHORT.bundle" >/dev/null
+rtime-sync push "$STAGE/pe.bundle" "$HOST:/tmp/pe-accept-$SHORT-$RUN_TAG.bundle" >/dev/null
 echo "[master] 已送达 $HOST"
 
 # 远端脚本**生成成一个真正的文件再送过去执行**，不用嵌套heredoc。
@@ -70,6 +79,7 @@ echo "[master] 已送达 $HOST"
 cat > "$STAGE/remote.sh" <<REMOTE_HEADER
 set -euo pipefail
 SHORT="$SHORT"
+RUN_TAG="$RUN_TAG"
 HEAD_SHA="$HEAD_SHA"
 REMOTE_DIR="$REMOTE_DIR"
 PROFILE="$PROFILE"
@@ -77,11 +87,11 @@ PARTITION="$PARTITION"
 CORES="$CORES"
 REMOTE_HEADER
 cat >> "$STAGE/remote.sh" <<'REMOTE_BODY'
-DIR="$HOME/$REMOTE_DIR/$SHORT"
+DIR="$HOME/$REMOTE_DIR/$SHORT-$RUN_TAG"
 rm -rf "$DIR"
 mkdir -p "$(dirname "$DIR")"
-git clone -q "/tmp/pe-accept-$SHORT.bundle" "$DIR"
-rm -f "/tmp/pe-accept-$SHORT.bundle"
+git clone -q "/tmp/pe-accept-$SHORT-$RUN_TAG.bundle" "$DIR"
+rm -f "/tmp/pe-accept-$SHORT-$RUN_TAG.bundle"
 cd "$DIR"
 
 # 克隆出来是分离头指针，SHA应与本仓相同；不同就停——否则回执对不回一个commit。
@@ -110,5 +120,5 @@ srun -p "$PARTITION" -c "$CORES" --time=01:00:00 "$VENV/bin/python" tools/accept
 echo "[master] 回执：$DIR/work/acceptance/$PROFILE-latest.json"
 REMOTE_BODY
 
-rtime-sync push "$STAGE/remote.sh" "$HOST:/tmp/pe-remote-$SHORT.sh" >/dev/null
-rtime-ssh "$HOST" "bash /tmp/pe-remote-$SHORT.sh; rm -f /tmp/pe-remote-$SHORT.sh"
+rtime-sync push "$STAGE/remote.sh" "$HOST:/tmp/pe-remote-$SHORT-$RUN_TAG.sh" >/dev/null
+rtime-ssh "$HOST" "bash /tmp/pe-remote-$SHORT-$RUN_TAG.sh; rm -f /tmp/pe-remote-$SHORT-$RUN_TAG.sh"
