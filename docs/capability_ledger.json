@@ -112,11 +112,16 @@
         {
           "id": "S2.2",
           "label": "一般位形的互感（倾斜、偏心、非共轴）",
-          "status": "todo",
+          "status": "done",
           "exercises_physics": false,
-          "evidence": [],
-          "why": "真线圈组不共轴，而共轴闭式在那里直接失效——这是场景②从「一半」走到「整条」的那一步。",
-          "missing": "`inductance.mutual_inductance_h`只吃共轴`CircularLoop`（模块docstring第五节明写「不做一般位形」）；Neumann双回路积分**只活在案例的金标生成器里**（`cases/mutual_inductance_coaxial/generate_oracle.py`），引擎侧零。"
+          "evidence": [
+            "case:mutual_inductance_general",
+            "test:tests/cases/test_mutual_inductance_general.py::test_the_general_quadrature_degenerates_to_the_coaxial_closed_form",
+            "test:tests/cases/test_mutual_inductance_general.py::test_general_placements_match_an_independent_flux_integral",
+            "test:tests/cases/test_mutual_inductance_general.py::test_the_general_mutual_inductance_is_reciprocal_bit_for_bit",
+            "test:tests/cases/test_mutual_inductance_general.py::test_the_self_inductance_singularity_fails_closed_and_the_gate_has_two_sides"
+          ],
+          "why": "0092落地`electromagnetics/neumann.py`（零依赖），label三样（倾斜／偏心／非共轴）逐个走到。**本位最实的一条不是某个偏差，是「收敛阶不是一个数」**：中点切元求积在解析周期被积函数上是**几何收敛**（每加8段误差降固定倍数，实测log₂比3.9599/3.9399/3.9253/3.9093，比值不衰减、max/min=1.0129），而**折线弦（多边形细丝）离散是代数二阶**（同构型同档实测0.5253/0.4449/0.3854/0.3220，与二阶理论值0.5261/0.4448/0.3853/0.3219逐位吻合）——**两者在N=64处差六个数量级**。同轴退化对已有的Maxwell/AGM闭式rel `2.85e-16 / 0（逐位相同）/ 1.65e-15 / 5.68e-15`；一般位形对**独立的**Biot-Savart圆盘磁通rel ≤ 1.94e-15；**互易`M(a,b) == M(b,a)`零容差逐位**且分段数跟着交换（96/61与71/53）；远场三族取向各五档倍频程、12个收敛阶**逐个钉住**（1.98→2.00）而不断言成2；正交零磁通构型`|M| ≤ 7.3e-26`。**自感失败关闭、不做任何正则化**——GMD要导线截面半径＝一个建模选择，不许伪装成数值参数；必红门实测：绕开拒跑后同一条回路在N=48/96/192给出三个**都很正常**的数（单调增长、彼此不到2倍），**没有拒跑就没有任何东西看得出那是发散积分**。"
         },
         {
           "id": "S2.3",
@@ -133,12 +138,17 @@
         {
           "id": "S2.4",
           "label": "有截面的真实线圈（不是理想细丝）",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": false,
-          "evidence": [],
+          "evidence": [
+            "case:mutual_inductance_general",
+            "test:tests/cases/test_mutual_inductance_general.py::test_the_section_bundle_converges_to_the_four_dimensional_reference",
+            "test:tests/test_section_bundle.py::test_a_zero_section_is_legal_and_reproduces_the_centre_filament",
+            "test:tests/test_section_bundle.py::test_the_current_density_assumption_is_a_plain_average"
+          ],
           "shared_gap": "体积与厚度",
-          "why": "plans/05对场景②的判词原文是「真线圈有截面、有多匝」。",
-          "missing": "`CircularLoop`是半径+匝数的细丝；导体截面上的电流分布无处安放（与S1.2同源，但问的量不同：那里是带材内的电流密度，这里是导体截面的邻近效应）。"
+          "why": "0092的`electromagnetics/bundle.py`把导体截面按n×n中点网格离散成丝束，**解开了label里「有截面」那一半**：截面细分对**四维Gauss-Legendre参考**代数二阶（1.99207/1.99794）、细丝极限二阶（2.00075/2.00022/2.00006）、零截面**逐位等于**中心细丝、互易逐位（且截面细分4与3、分段数48与31都不同）。",
+          "missing": "**只解开了截面几何那一半，电流分布那一半没有动。** 本位`missing`原文问的是「导体截面上的电流分布无处安放」——`bundle.py`假设的是**均匀电流密度**（有一条门专门看着这个建模假设别被悄悄改成别的加权），而交流下的**趋肤效应与邻近效应**在这个假设里无处安放。触发条件：第一个消费方给出频率那天。另：**一般位形的有截面线圈没有独立金标**（四维Gauss-Legendre参考只在同轴上建过）。"
         },
         {
           "id": "S2.5",
