@@ -97,6 +97,9 @@
   0066说的"真机上跨长逐样点变"是错的——两个端点都是世界系固定的，`L_geo`是常数）
 - `physics_engine.sensors` —— 传感器声明层（spec/10 `Sensor`）
 - `physics_engine.modelgen` —— 参数化模型生成器（spec/11）
+- `physics_engine.mesh` —— 三角网格的质量属性：体积、质心、绕质心惯量张量
+  （决策0085；散度定理的四面体法。**只对闭合定向流形成立**——0074实测真实件
+  全是脏的（非流形边、非watertight），所以它今天算不了真实件，那是另一次裁决）
 - `physics_engine.cli` —— `pe-scene`命令行的实现（数据层入口；
   **它是被`[project.scripts]`暴露的真公开面**，此前长期不在本清单里）
 - `physics_engine.optics` —— 光学域：干涉/衍射/FTS仪器线型的闭式解（spec/15）

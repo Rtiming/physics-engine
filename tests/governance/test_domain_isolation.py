@@ -182,7 +182,10 @@ SUBSTRATE_RINGS: dict[str, tuple[str, ...]] = {
     #: 要么整体改归力学、要么按"声明层留在scene / 物理半边进力学"分裂——两条都走决策。
     "scene": ("actuators", "motion", "scene"),
     "orchestration": ("cli",),
-    "modelgen": ("collision", "geometry", "modelgen", "shapes"),
+    #: `mesh`（0085）归这一圈的判据仍是0035那条"import决定环"：它只import
+    #: `geometry`与`shapes`，两者都在本圈内。它算的是几何量不是物理量——
+    #: 与`geometry`给解析原语惯量是同一件事的两种输入（一个吃形状声明、一个吃三角）。
+    "modelgen": ("collision", "geometry", "mesh", "modelgen", "shapes"),
     "materials": ("materials",),
 }
 

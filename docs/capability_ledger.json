@@ -180,11 +180,16 @@
         {
           "id": "S3.3",
           "label": "不规则体的质量属性（从三角网格算质量、质心、惯量张量）",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": false,
-          "evidence": [],
-          "why": "落体是不规则的，惯量张量就不能再从解析原语取——而S3.1的转动积分吃的正是这个张量。",
-          "missing": "`geometry.py`只有四种解析原语的惯量（0022）；`mesh_asset_integrity`只验资产哈希与包盒，不算质量属性。0020登记的「引擎自己算网格包盒」是同一族欠账的邻居。"
+          "evidence": [
+            "test:tests/test_mesh.py::test_the_box_reproduces_the_closed_form_bit_for_bit",
+            "test:tests/test_mesh.py::test_the_sphere_inertia_converges_at_second_order",
+            "test:tests/test_mesh.py::test_the_parallel_axis_theorem_closes_between_two_independent_paths",
+            "test:tests/test_mesh.py::test_a_non_manifold_edge_is_refused"
+          ],
+          "why": "落体是不规则的，惯量张量就不能再从解析原语取——而S3.1的转动积分吃的正是这个张量。0085的`mesh.py`用散度定理的四面体法把体积/质心/绕质心惯量算出来了：**盒对`geometry.py`的闭式`float.hex()`全等**（三角化误差恒为零，它是那条四面体二阶矩代数的唯一无噪声证人）；球体积细分2→5比3.7396/3.9320/3.9828/3.9957、球惯量细分3→5比3.9736/3.9934（**惯量比体积晚一级进渐近区，2→3是3.8962**，如实写在测试里）；圆柱16→128段比3.9085/3.9769/3.9942/3.9986。平移轴定理由**两条不共用中间量**的路各算一次，相对偏差<1e-12。带符号体积对朝向精确变号（rel 1e-14），朝向反了`mass_properties`拒。",
+          "missing": "**只对闭合定向流形成立，而0074第一节实测真实件全是脏的**——`e1_carrier`有6条、`workpiece`有10条非流形边（≥3个三角共用一条边）且没有一条开放边界边（多实体布尔拼接没焊接），`static_009_new`虽然100%流形但凸性通过率只有0.15%。散度定理那条推导要的是\"每一片面元恰好被数一次、朝向一致\"，非流形边上这个前提直接不成立。**所以「不规则体的质量属性」这一位今天只对我们自己三角化出来的干净网格成立，对真实件仍然算不出来**——那不是修`mesh.py`，是一次新的裁决（要么先修网格、要么改用不依赖流形性的体积判据，例如烘SDF之后在场上积分）。另：薄三角不拒（\"多薄算薄\"给不出有根据的阈值，本仓不编一个），这条限制有会红的用例钉住。"
         },
         {
           "id": "S3.4",
