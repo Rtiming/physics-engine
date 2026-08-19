@@ -246,6 +246,25 @@ def generate_spool(
 
         R_eff = (barrel_radius_ratio + wound_layers · layer_thickness_ratio) · L
 
+    ## 本式与`winding`／`drives`那两份半径式子的关系（决策0093）
+
+    本仓有**三处**写着"半径随卷绕生长"，而它们的自变量不同，**不是三份重复**：
+
+    * **本函数**：自变量是**层**``wound_layers``，走无量纲比值，产出的是**形状**；
+    * `drives.SpoolTension.radius_mm`：自变量是**匝**，走mm，回答的是**力**
+      （``T = M/R``，同扭矩下卷满比空卷张力小``R₀/R``倍）；
+    * `winding.WindingPack`：**匝→层**的换算（``turns_per_layer``）与**堆积因子**，
+      外加``长度 ↔ 匝``。它是上面两者中间缺的那一段，**不是第三份同样的东西**。
+
+    对应关系由判据钉住而不是由注释钉住：
+    `tests/test_winding.py::test_the_stepped_pack_reproduces_the_generator_layer_growth_bit_for_bit`
+    取本函数在`cases/generator_determinism`里冻结的那组二进制精确入参，
+    判``WindingPack(layer_advance="stepped").radius_mm(m)``与本函数产出的
+    ``FiniteCylinder.radius_mm``**逐位相同**。
+
+    **本函数的数值路径与声明指纹一个字节都没动**——`cases/generator_determinism`
+    的金标依赖它，0093只加了这段交叉引用。
+
     参数（除`characteristic_length_mm`外全是无量纲比值）：
 
     * `characteristic_length_mm`——特征长度L，本生成器唯一带单位的入参；
