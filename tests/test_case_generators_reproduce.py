@@ -66,6 +66,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -211,6 +212,10 @@ def _compare(where: str, actual, want, tolerance: dict) -> list[str]:
     return [f"{where}: |{actual!r} − {want!r}| 超出 abs={tolerance.get('abs')} rel={tolerance.get('rel')}"]
 
 
+#: "取不到"的哨兵。**不用`None`**——`None`是合法取值。
+_MISSING = object()
+
+
 def _both_are_numbers(left, right) -> bool:
     """两边都是真数（`bool`不算数——它在Python里是`int`的子类，而它不是量）。"""
 
@@ -221,24 +226,26 @@ def _both_are_numbers(left, right) -> bool:
 
 
 def _at(document, path: str):
-    """按`_differing_paths`产的路径取值。取不到返回`None`。"""
+    """按`_differing_paths`产的路径取值。取不到返回哨兵`_MISSING`。
+
+    路径形制来自那个函数：字典是``/键``，列表是``[下标]``紧跟在键后面，
+    例如``/oracles[1]/inputs/xxx``。**不返回`None`当"取不到"**——
+    `None`是合法的取值，用它当哨兵会把"字段是null"误判成"路径不对"。
+    """
 
     node = document
-    for token in path.strip("/").split("/"):
-        if not token:
-            continue
-        while token.endswith("]") and "[" in token:
-            token, _, index = token.rpartition("[")
+    for token in [part for part in path.strip("/").split("/") if part]:
+        key, *indices = re.findall(r"[^\[\]]+", token)
+        if not isinstance(node, dict) or key not in node:
+            return _MISSING
+        node = node[key]
+        for index in indices:
+            if not isinstance(node, list):
+                return _MISSING
             try:
-                node = node[int(index.rstrip("]"))] if isinstance(node, list) else None
-            except (ValueError, IndexError, TypeError):
-                return None
-            if token == "":
-                break
-        if token:
-            node = node.get(token) if isinstance(node, dict) else None
-        if node is None:
-            return None
+                node = node[int(index)]
+            except (ValueError, IndexError):
+                return _MISSING
     return node
 
 
@@ -280,3 +287,39 @@ def _differing_paths(left, right, path: str = "") -> list[str]:
             out += _differing_paths(a, b, f"{path}[{index}]")
         return out
     return [] if left == right else [path or "/"]
+
+
+# ---------------------------------------------------------------------------
+# 路径解析器自己的门：**它错了会把数值字段误判成非数值，然后判红**
+# ---------------------------------------------------------------------------
+
+
+def test_the_path_resolver_reaches_into_lists_and_dicts():
+    """第一版写错过，实测后果是`double_slit_propagated`在master上被判红——
+
+    那个字段是个`float`（`4.02e-17`），而解析器取不到它、返回了"取不到"，
+    于是`_both_are_numbers`说不是数、字段落进"非数值字段"那一档、判红。
+    **一个错的解析器不会说自己错了，它会说被解析的东西错了。**
+    """
+
+    document = {"oracles": [{"inputs": {"x": 1.5}}, {"inputs": {"y": [0.0, 2.5]}}]}
+    assert _at(document, "/oracles[0]/inputs/x") == 1.5
+    assert _at(document, "/oracles[1]/inputs/y[1]") == 2.5
+    assert _at(document, "/oracles[9]/inputs/x") is _MISSING
+    assert _at(document, "/nope") is _MISSING
+
+
+def test_missing_is_not_none_because_none_is_a_legal_value():
+    """哨兵不能用`None`——`None`是合法取值，用它当哨兵会把"字段是null"误判成"路径不对"。"""
+
+    assert _at({"a": None}, "/a") is None
+    assert _at({"a": None}, "/b") is _MISSING
+    assert _MISSING is not None
+
+
+def test_booleans_are_not_treated_as_numbers():
+    """`bool`在Python里是`int`的子类，但它不是一个量——按数值放行会让`True != 1`这类漂移溜过去。"""
+
+    assert _both_are_numbers(1.0, 2.0)
+    assert not _both_are_numbers(True, False)
+    assert not _both_are_numbers(1, True)
