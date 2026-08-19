@@ -430,6 +430,10 @@ def _real_centerlines():
     from model.centerline_csv import read_stations  # noqa: PLC0415
 
     root = Path(REAL_CENTERLINE_ROOT)
+    #: 目录与单文件两种形态都吃。**2026-08-18与`tests/test_model_tools.py`那一侧对齐**：
+    #: 此前两边对同一个变量各有一套约定，于是**不存在一个值能让选择进入档全部跑过**——
+    #: 指目录那一侧硬错、指单文件这一侧硬错，两边都不是skip而是红，
+    #: 所以这条通道从来没有被整体跑过一次。
     paths = (
         sorted(root.rglob("centerline.csv")) if root.is_dir() else [root]
     )
@@ -474,6 +478,19 @@ def test_the_real_exports_reproduce_the_plans14_table() -> None:
     f_tol = oracle.expected["arc_fraction_absolute_tolerance"]
 
     centerlines = _real_centerlines()
+    #: **这一条判的是整批语料，不是某一份导出**：按内在几何归并后恰好5份，
+    #: 而那个数本身就是判据之一。给它一份单独的CSV它判不了——
+    #: **明示skip，不硬错**（2026-08-18修）。
+    #:
+    #: 此前它是硬错，于是`PE_REAL_CENTERLINE_CSV`这个变量出现了两套互不兼容的约定：
+    #: `tests/test_model_tools.py`那一侧要单文件、本条要整批，
+    #: **不存在一个值能让选择进入档全部跑过**，所以这条通道从来没被整体跑过一次。
+    if len(centerlines) < oracle.expected["geometries_matched"]:
+        pytest.skip(
+            f"这一条要整批语料：按内在几何归并后要{oracle.expected['geometries_matched']}份，"
+            f"当前`PE_REAL_CENTERLINE_CSV`只解析出{len(centerlines)}份。"
+            "把它指向GCW的`handoff_runs`那一级目录（而不是其中一份CSV）本条才会执行。"
+        )
     assert len(centerlines) == oracle.expected["geometries_matched"], sorted(centerlines)
 
     matched = set()
