@@ -1,0 +1,259 @@
+{
+  "arrays": {},
+  "case_id": "case/narrow_phase_signed_distance",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/narrow_phase_signed_distance",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/narrow_phase_signed_distance/generate_oracle.py",
+    "sha256": "6e78cd24447c675b5843a31a4150172b09053a8e4b7bf741505aed027a9b8e14"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "6da49666ae5c7ab174f4bc78f149b5d464f3a85e009958ed73b7496988a30cd2",
+  "oracles": [
+    {
+      "expected": {
+        "box_box_penetrating_mm": -3.0,
+        "box_box_separated_mm": 5.0,
+        "sphere_cylinder_end_mm": 1.0,
+        "sphere_cylinder_inside_mm": -5.0,
+        "sphere_cylinder_side_mm": 2.0,
+        "sphere_half_space_penetrating_mm": -1.0,
+        "sphere_half_space_separated_mm": 1.0,
+        "sphere_rotated_box_inside_mm": -2.1005050633883346,
+        "sphere_rotated_box_outside_mm": 1.857864376269049,
+        "sphere_sphere_penetrating_mm": -2.0,
+        "sphere_sphere_separated_mm": 5.0
+      },
+      "id": "oracle:narrow_phase_signed_distance/analytic_pairs",
+      "inputs": {
+        "box_a_half_extents_mm": [
+          10.0,
+          20.0,
+          30.0
+        ],
+        "box_b_half_extents_mm": [
+          5.0,
+          5.0,
+          5.0
+        ],
+        "cylinder_half_width_mm": 4.0,
+        "cylinder_radius_mm": 9.0,
+        "kind": "analytic_pairs",
+        "note": "五族解析构型，每族分离支与穿透支各一条。**`sphere_rotated_box_inside_mm`是本案例最要紧的一格**：点(14,0,0)对转过45°的半宽10的盒在**体内**（沿轴到顶点是14.142），最近面是侧面不是顶点——把'沿轴到顶点'当成'到表面'是旋转凸体上最容易犯的一个错，写这个案例时第一版真错过。",
+        "rotated_box_half_extent_mm": 10.0,
+        "sphere_radii_mm": [
+          3.0,
+          4.0
+        ]
+      },
+      "tolerances": {
+        "box_box_penetrating_mm": {
+          "abs": 1e-12,
+          "reason": "**不写零容差**，理由是本案例自己量出来的两条：① `segment_segment_distance_mm`开方用``x ** 0.5``而不是`math.sqrt`，而``**``走libm的``pow``、IEEE不要求它正确舍入（本机20万个正数里277个差1 ulp）；② CPython 3.12起`sum()`对float走Neumaier补偿求和，与手写的``a + b + c``不逐位相同（本机20万组三维点积里44972组不同）。坐标量级50 mm上两条合起来给到约1.4e-14 mm，1e-12留约两个量级。**两条都没有被'修'**：改前者会破掉'既有球/胶囊窄相逐位不变'那条判据。",
+          "rel": 0.0
+        },
+        "box_box_separated_mm": {
+          "abs": 1e-12,
+          "reason": "**不写零容差**，理由是本案例自己量出来的两条：① `segment_segment_distance_mm`开方用``x ** 0.5``而不是`math.sqrt`，而``**``走libm的``pow``、IEEE不要求它正确舍入（本机20万个正数里277个差1 ulp）；② CPython 3.12起`sum()`对float走Neumaier补偿求和，与手写的``a + b + c``不逐位相同（本机20万组三维点积里44972组不同）。坐标量级50 mm上两条合起来给到约1.4e-14 mm，1e-12留约两个量级。**两条都没有被'修'**：改前者会破掉'既有球/胶囊窄相逐位不变'那条判据。",
+          "rel": 0.0
+        },
+        "sphere_cylinder_end_mm": {
+          "abs": 1e-12,
+          "reason": "**不写零容差**，理由是本案例自己量出来的两条：① `segment_segment_distance_mm`开方用``x ** 0.5``而不是`math.sqrt`，而``**``走libm的``pow``、IEEE不要求它正确舍入（本机20万个正数里277个差1 ulp）；② CPython 3.12起`sum()`对float走Neumaier补偿求和，与手写的``a + b + c``不逐位相同（本机20万组三维点积里44972组不同）。坐标量级50 mm上两条合起来给到约1.4e-14 mm，1e-12留约两个量级。**两条都没有被'修'**：改前者会破掉'既有球/胶囊窄相逐位不变'那条判据。",
+          "rel": 0.0
+        },
+        "sphere_cylinder_inside_mm": {
+          "abs": 1e-12,
+          "reason": "**不写零容差**，理由是本案例自己量出来的两条：① `segment_segment_distance_mm`开方用``x ** 0.5``而不是`math.sqrt`，而``**``走libm的``pow``、IEEE不要求它正确舍入（本机20万个正数里277个差1 ulp）；② CPython 3.12起`sum()`对float走Neumaier补偿求和，与手写的``a + b + c``不逐位相同（本机20万组三维点积里44972组不同）。坐标量级50 mm上两条合起来给到约1.4e-14 mm，1e-12留约两个量级。**两条都没有被'修'**：改前者会破掉'既有球/胶囊窄相逐位不变'那条判据。",
+          "rel": 0.0
+        },
+        "sphere_cylinder_side_mm": {
+          "abs": 1e-12,
+          "reason": "**不写零容差**，理由是本案例自己量出来的两条：① `segment_segment_distance_mm`开方用``x ** 0.5``而不是`math.sqrt`，而``**``走libm的``pow``、IEEE不要求它正确舍入（本机20万个正数里277个差1 ulp）；② CPython 3.12起`sum()`对float走Neumaier补偿求和，与手写的``a + b + c``不逐位相同（本机20万组三维点积里44972组不同）。坐标量级50 mm上两条合起来给到约1.4e-14 mm，1e-12留约两个量级。**两条都没有被'修'**：改前者会破掉'既有球/胶囊窄相逐位不变'那条判据。",
+          "rel": 0.0
+        },
+        "sphere_half_space_penetrating_mm": {
+          "abs": 1e-12,
+          "reason": "**不写零容差**，理由是本案例自己量出来的两条：① `segment_segment_distance_mm`开方用``x ** 0.5``而不是`math.sqrt`，而``**``走libm的``pow``、IEEE不要求它正确舍入（本机20万个正数里277个差1 ulp）；② CPython 3.12起`sum()`对float走Neumaier补偿求和，与手写的``a + b + c``不逐位相同（本机20万组三维点积里44972组不同）。坐标量级50 mm上两条合起来给到约1.4e-14 mm，1e-12留约两个量级。**两条都没有被'修'**：改前者会破掉'既有球/胶囊窄相逐位不变'那条判据。",
+          "rel": 0.0
+        },
+        "sphere_half_space_separated_mm": {
+          "abs": 1e-12,
+          "reason": "**不写零容差**，理由是本案例自己量出来的两条：① `segment_segment_distance_mm`开方用``x ** 0.5``而不是`math.sqrt`，而``**``走libm的``pow``、IEEE不要求它正确舍入（本机20万个正数里277个差1 ulp）；② CPython 3.12起`sum()`对float走Neumaier补偿求和，与手写的``a + b + c``不逐位相同（本机20万组三维点积里44972组不同）。坐标量级50 mm上两条合起来给到约1.4e-14 mm，1e-12留约两个量级。**两条都没有被'修'**：改前者会破掉'既有球/胶囊窄相逐位不变'那条判据。",
+          "rel": 0.0
+        },
+        "sphere_rotated_box_inside_mm": {
+          "abs": 1e-12,
+          "reason": "**不写零容差**，理由是本案例自己量出来的两条：① `segment_segment_distance_mm`开方用``x ** 0.5``而不是`math.sqrt`，而``**``走libm的``pow``、IEEE不要求它正确舍入（本机20万个正数里277个差1 ulp）；② CPython 3.12起`sum()`对float走Neumaier补偿求和，与手写的``a + b + c``不逐位相同（本机20万组三维点积里44972组不同）。坐标量级50 mm上两条合起来给到约1.4e-14 mm，1e-12留约两个量级。**两条都没有被'修'**：改前者会破掉'既有球/胶囊窄相逐位不变'那条判据。",
+          "rel": 0.0
+        },
+        "sphere_rotated_box_outside_mm": {
+          "abs": 1e-12,
+          "reason": "**不写零容差**，理由是本案例自己量出来的两条：① `segment_segment_distance_mm`开方用``x ** 0.5``而不是`math.sqrt`，而``**``走libm的``pow``、IEEE不要求它正确舍入（本机20万个正数里277个差1 ulp）；② CPython 3.12起`sum()`对float走Neumaier补偿求和，与手写的``a + b + c``不逐位相同（本机20万组三维点积里44972组不同）。坐标量级50 mm上两条合起来给到约1.4e-14 mm，1e-12留约两个量级。**两条都没有被'修'**：改前者会破掉'既有球/胶囊窄相逐位不变'那条判据。",
+          "rel": 0.0
+        },
+        "sphere_sphere_penetrating_mm": {
+          "abs": 1e-12,
+          "reason": "**不写零容差**，理由是本案例自己量出来的两条：① `segment_segment_distance_mm`开方用``x ** 0.5``而不是`math.sqrt`，而``**``走libm的``pow``、IEEE不要求它正确舍入（本机20万个正数里277个差1 ulp）；② CPython 3.12起`sum()`对float走Neumaier补偿求和，与手写的``a + b + c``不逐位相同（本机20万组三维点积里44972组不同）。坐标量级50 mm上两条合起来给到约1.4e-14 mm，1e-12留约两个量级。**两条都没有被'修'**：改前者会破掉'既有球/胶囊窄相逐位不变'那条判据。",
+          "rel": 0.0
+        },
+        "sphere_sphere_separated_mm": {
+          "abs": 1e-12,
+          "reason": "**不写零容差**，理由是本案例自己量出来的两条：① `segment_segment_distance_mm`开方用``x ** 0.5``而不是`math.sqrt`，而``**``走libm的``pow``、IEEE不要求它正确舍入（本机20万个正数里277个差1 ulp）；② CPython 3.12起`sum()`对float走Neumaier补偿求和，与手写的``a + b + c``不逐位相同（本机20万组三维点积里44972组不同）。坐标量级50 mm上两条合起来给到约1.4e-14 mm，1e-12留约两个量级。**两条都没有被'修'**：改前者会破掉'既有球/胶囊窄相逐位不变'那条判据。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "bias_estimate_h_0p5_mm": 0.0,
+        "bias_estimate_h_1_mm": 0.0,
+        "bias_estimate_h_2_mm": 0.0,
+        "separation_h_0p5_mm": 2.5,
+        "separation_h_1_mm": 2.5,
+        "separation_h_2_mm": 2.5
+      },
+      "id": "oracle:narrow_phase_signed_distance/plane_field",
+      "inputs": {
+        "kind": "plane_field",
+        "note": "仿射场：与``h``无关的精确重构，偏差估计恒为0。",
+        "probe_z_mm": 2.5,
+        "spacings_mm": [
+          2.0,
+          1.0,
+          0.5
+        ]
+      },
+      "tolerances": {
+        "bias_estimate_h_0p5_mm": {
+          "abs": 1e-15,
+          "reason": "**本案例唯一一条接近零容差的判据**，理由是代数事实不是精度自信：``φ``仿射 ⟹ ``∇²φ ≡ 0`` ⟹ ``(h²/6)·tr(∇²φ)``恒为零。实测三档分别是7.401e-17 / 1.850e-17 / **0.0**——不写死0是因为Hessian那三条对角线各自是64项加权和，它们抵消到的是舍入量级而不是恒等的0。",
+          "rel": 0.0
+        },
+        "bias_estimate_h_1_mm": {
+          "abs": 1e-15,
+          "reason": "**本案例唯一一条接近零容差的判据**，理由是代数事实不是精度自信：``φ``仿射 ⟹ ``∇²φ ≡ 0`` ⟹ ``(h²/6)·tr(∇²φ)``恒为零。实测三档分别是7.401e-17 / 1.850e-17 / **0.0**——不写死0是因为Hessian那三条对角线各自是64项加权和，它们抵消到的是舍入量级而不是恒等的0。",
+          "rel": 0.0
+        },
+        "bias_estimate_h_2_mm": {
+          "abs": 1e-15,
+          "reason": "**本案例唯一一条接近零容差的判据**，理由是代数事实不是精度自信：``φ``仿射 ⟹ ``∇²φ ≡ 0`` ⟹ ``(h²/6)·tr(∇²φ)``恒为零。实测三档分别是7.401e-17 / 1.850e-17 / **0.0**——不写死0是因为Hessian那三条对角线各自是64项加权和，它们抵消到的是舍入量级而不是恒等的0。",
+          "rel": 0.0
+        },
+        "separation_h_0p5_mm": {
+          "abs": 1e-13,
+          "reason": "**仿射函数被三次B样条精确重构**（一阶矩为零），于是场与闭式解的是同一个方程，差别只有求和次序带来的舍入。实测三档``h``的最差偏差是4.441e-16 mm（2 ulp）。1e-13留约两个量级——**但不写零**：两条路的求和次序不同，逐位相等是没验过的、也不该被承诺的性质。",
+          "rel": 0.0
+        },
+        "separation_h_1_mm": {
+          "abs": 1e-13,
+          "reason": "**仿射函数被三次B样条精确重构**（一阶矩为零），于是场与闭式解的是同一个方程，差别只有求和次序带来的舍入。实测三档``h``的最差偏差是4.441e-16 mm（2 ulp）。1e-13留约两个量级——**但不写零**：两条路的求和次序不同，逐位相等是没验过的、也不该被承诺的性质。",
+          "rel": 0.0
+        },
+        "separation_h_2_mm": {
+          "abs": 1e-13,
+          "reason": "**仿射函数被三次B样条精确重构**（一阶矩为零），于是场与闭式解的是同一个方程，差别只有求和次序带来的舍入。实测三档``h``的最差偏差是4.441e-16 mm（2 ulp）。1e-13留约两个量级——**但不写零**：两条路的求和次序不同，逐位相等是没验过的、也不该被承诺的性质。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "bias_estimate_h_0p25_mm": 0.0018115942028985507,
+        "bias_estimate_h_0p5_mm": 0.007246376811594203,
+        "bias_estimate_h_1_mm": 0.028985507246376812
+      },
+      "id": "oracle:narrow_phase_signed_distance/convex_sphere_field_bias",
+      "inputs": {
+        "kind": "convex_sphere_field_bias",
+        "note": "凸障碍：``∇²(ρ − R) = 2/ρ`` ⟹ 偏差主项``+h²/(3ρ)``，**正的＝场报出来的距离比真值大＝偏松**，与0085第三节同向。",
+        "obstacle_radius_mm": 10.0,
+        "probe_rho_mm": 11.5,
+        "spacings_mm": [
+          1.0,
+          0.5,
+          0.25
+        ]
+      },
+      "tolerances": {
+        "bias_estimate_h_0p25_mm": {
+          "abs": 0.0,
+          "reason": "闭式给的是**主项**``(h²/6)·∇²φ``，实测值还带一个``O(h⁴)``的余项。实测相对偏差随``h``二阶缩小（球那一族1.889e-3 / 4.709e-4 / 1.180e-4），5e-3覆盖最粗那一档并留一档。**不按绝对判**：绝对容差会让粗档松、细档紧，量不出'主项抓对了没有'。",
+          "rel": 0.005
+        },
+        "bias_estimate_h_0p5_mm": {
+          "abs": 0.0,
+          "reason": "闭式给的是**主项**``(h²/6)·∇²φ``，实测值还带一个``O(h⁴)``的余项。实测相对偏差随``h``二阶缩小（球那一族1.889e-3 / 4.709e-4 / 1.180e-4），5e-3覆盖最粗那一档并留一档。**不按绝对判**：绝对容差会让粗档松、细档紧，量不出'主项抓对了没有'。",
+          "rel": 0.005
+        },
+        "bias_estimate_h_1_mm": {
+          "abs": 0.0,
+          "reason": "闭式给的是**主项**``(h²/6)·∇²φ``，实测值还带一个``O(h⁴)``的余项。实测相对偏差随``h``二阶缩小（球那一族1.889e-3 / 4.709e-4 / 1.180e-4），5e-3覆盖最粗那一档并留一档。**不按绝对判**：绝对容差会让粗档松、细档紧，量不出'主项抓对了没有'。",
+          "rel": 0.005
+        }
+      }
+    },
+    {
+      "expected": {
+        "bias_estimate_h_0p25_mm": -0.000992063492063492,
+        "bias_estimate_h_0p5_mm": -0.003968253968253968
+      },
+      "id": "oracle:narrow_phase_signed_distance/concave_bore_field_bias",
+      "inputs": {
+        "bore_radius_mm": 12.0,
+        "kind": "concave_bore_field_bias",
+        "note": "**本案例最值钱的一格**：圆柱孔（实体是圆柱的补集，非凸）``φ = R − ρ`` ⟹ ``∇²φ = −1/ρ`` ⟹ 偏差主项``−h²/(6ρ)``，**负的＝场报出来的距离比真值小＝偏紧**。0074第二节第4条只说了'系统性偏保守或偏松'、0085第三节把凸那一侧钉到'偏松'，这一格把凹那一侧钉到'偏紧'。",
+        "probe_rho_mm": 10.5,
+        "spacings_mm": [
+          0.5,
+          0.25
+        ]
+      },
+      "tolerances": {
+        "bias_estimate_h_0p25_mm": {
+          "abs": 0.0,
+          "reason": "闭式给的是**主项**``(h²/6)·∇²φ``，实测值还带一个``O(h⁴)``的余项。实测相对偏差随``h``二阶缩小（球那一族1.889e-3 / 4.709e-4 / 1.180e-4），5e-3覆盖最粗那一档并留一档。**不按绝对判**：绝对容差会让粗档松、细档紧，量不出'主项抓对了没有'。",
+          "rel": 0.005
+        },
+        "bias_estimate_h_0p5_mm": {
+          "abs": 0.0,
+          "reason": "闭式给的是**主项**``(h²/6)·∇²φ``，实测值还带一个``O(h⁴)``的余项。实测相对偏差随``h``二阶缩小（球那一族1.889e-3 / 4.709e-4 / 1.180e-4），5e-3覆盖最粗那一档并留一档。**不按绝对判**：绝对容差会让粗档松、细档紧，量不出'主项抓对了没有'。",
+          "rel": 0.005
+        }
+      }
+    },
+    {
+      "expected": {
+        "order_ratio_coarse": 4.0,
+        "order_ratio_fine": 4.0
+      },
+      "id": "oracle:narrow_phase_signed_distance/nonconvex_torus_order",
+      "inputs": {
+        "kind": "nonconvex_torus_order",
+        "major_radius_mm": 12.0,
+        "minor_radius_mm": 3.5,
+        "note": "非凸环面：场值误差随``h``二阶。它量的不是偏差（那两格由球与孔管），是'非凸不给SDF带来额外代价'（0074第二节第2条）的可测出口。",
+        "spacings_mm": [
+          0.8,
+          0.4,
+          0.2
+        ]
+      },
+      "tolerances": {
+        "order_ratio_coarse": {
+          "abs": 0.0,
+          "reason": "**收敛比是区间不是恒等于4**（`cases/harmonic_oscillator`那条同源：4是渐近值）。1e-1相对 = ``[3.6, 4.4]``，比本仓其余二阶门的``[3.9, 4.1]``宽一档——**理由要说清楚**：这里量的是**四个探针上的max范数**，而max范数对'哪个点最差'敏感（0085第9.3节腿A记过同一形状：max比3.2411而mean比3.8299）。实测4.0459 / 4.0127，离窗口边界还有一档余量。",
+          "rel": 0.1
+        },
+        "order_ratio_fine": {
+          "abs": 0.0,
+          "reason": "**收敛比是区间不是恒等于4**（`cases/harmonic_oscillator`那条同源：4是渐近值）。1e-1相对 = ``[3.6, 4.4]``，比本仓其余二阶门的``[3.9, 4.1]``宽一档——**理由要说清楚**：这里量的是**四个探针上的max范数**，而max范数对'哪个点最差'敏感（0085第9.3节腿A记过同一形状：max比3.2411而mean比3.8299）。实测4.0459 / 4.0127，离窗口边界还有一档余量。",
+          "rel": 0.1
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
