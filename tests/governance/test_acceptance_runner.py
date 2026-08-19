@@ -24,7 +24,17 @@ def _result(code: int, elapsed: float = 1.0) -> accept.CommandResult:
 
 
 def test_timed_profiles_have_fixed_budgets():
-    assert accept.BUDGETS == {"quick": 30.0, "full": 120.0}
+    """预算是轴6规则1的冻结值——**改它必须走决策记录**，本门是那条纪律的执行体。
+
+    改过一次：**2026-08-18 full档 120 → 180**（决策0089，所有者裁决）。
+    当时master同机三次实测106.8/107.7/106.8，余量只剩11%；而合入前那一棵树是87.7秒，
+    两组数同机同分区同核数直接可比——**这一次是套件真的在长，不是宿主污染**。
+
+    **这道门红了不是坏事**：它红的那一刻正是"有人在动一个冻结值"，
+    该做的是去写决策记录、把代价写下来，然后回来改这一行——**不是把这一行删掉**。
+    """
+
+    assert accept.BUDGETS == {"quick": 30.0, "full": 180.0}
 
 
 def test_quick_commands_are_a_subset_of_full():
