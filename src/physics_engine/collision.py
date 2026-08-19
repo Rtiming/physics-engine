@@ -84,12 +84,35 @@ def _clamp(value: float) -> float:
 def segment_segment_distance_mm(
     p1: Vector3, q1: Vector3, p2: Vector3, q2: Vector3
 ) -> float:
-    """两线段最近距离（Ericson《Real-Time Collision Detection》标准算法）。"""
+    """两线段最近距离（Ericson《Real-Time Collision Detection》标准算法）。
+
+    **2026-08-18起它是`segment_segment_witnesses`的第三项**，一次运算都没有变：
+    那个函数就是本函数原来的代码，只是不再在最后一行把两个最近点扔掉。
+    这样写而不是两份拷贝，是因为**"两条路给同一个数"如果靠对拍去守，
+    就总有一天会漂**（本仓已经为同一形状立过`_segment_pair_separation_mm`）。
+    """
+
+    return segment_segment_witnesses(p1, q1, p2, q2)[2]
+
+
+def segment_segment_witnesses(
+    p1: Vector3, q1: Vector3, p2: Vector3, q2: Vector3
+) -> tuple[Vector3, Vector3, float]:
+    """同一条算法，但**把中轴上的两个最近点也交出来**。
+
+    `segment_segment_distance_mm`从2026-08-04起就在算``closest1``/``closest2``，
+    **然后在最后一行把它们扔掉**，只返回一个标量。于是窄相有距离却没有法向与
+    接触点，接不上力学（力要作用在一个点上、摩擦锥要一个法向）。
+    本函数把那两个点接出来，**一次运算都没有多做**。
+
+    **返回的数与`segment_segment_distance_mm`逐位相同**是结构保证的：
+    那一个现在就是调用本函数再取第三项。
+    """
 
     d1, d2, r = _sub(q1, p1), _sub(q2, p2), _sub(p1, p2)
     a, e, f = _dot(d1, d1), _dot(d2, d2), _dot(d2, r)
     if a <= 1e-12 and e <= 1e-12:
-        return _dot(r, r) ** 0.5
+        return (p1, p2, _dot(r, r) ** 0.5)
     if a <= 1e-12:
         s, t = 0.0, _clamp(f / e)
     else:
@@ -108,7 +131,7 @@ def segment_segment_distance_mm(
     closest1 = (p1[0] + d1[0] * s, p1[1] + d1[1] * s, p1[2] + d1[2] * s)
     closest2 = (p2[0] + d2[0] * t, p2[1] + d2[1] * t, p2[2] + d2[2] * t)
     gap = _sub(closest1, closest2)
-    return _dot(gap, gap) ** 0.5
+    return (closest1, closest2, _dot(gap, gap) ** 0.5)
 
 
 def _as_world_segment(posed: PosedBody) -> tuple[Vector3, Vector3, float] | None:
@@ -142,6 +165,34 @@ def _segment_pair_separation_mm(
     return segment_segment_distance_mm(
         segment_a[0], segment_a[1], segment_b[0], segment_b[1]
     ) - (segment_a[2] + segment_b[2])
+
+
+def _segment_pair_result(
+    segment_a: tuple[Vector3, Vector3, float], segment_b: tuple[Vector3, Vector3, float]
+) -> NarrowPhaseResult:
+    """球/胶囊族的完整窄相结果：分离量＋法向＋两个见证点。
+
+    **分离量走`_segment_pair_separation_mm`，一个字不改**——逐位不变那条判据
+    盯着的就是它。法向与见证点是**另外算的一层**，它们错了不会污染那个数。
+    这条分层是有意的：0094第1条要的"先扩输出档"如果顺手把分离量也重写一遍，
+    就等于用一次扩档换掉了本仓唯一一条逐位判据。
+    """
+
+    separation = _segment_pair_separation_mm(segment_a, segment_b)
+    closest_a, closest_b, _ = segment_segment_witnesses(
+        segment_a[0], segment_a[1], segment_b[0], segment_b[1]
+    )
+    normal = _normalise(_sub(closest_a, closest_b))
+    if normal is None:
+        #: 两条中轴相交（同心球是最常见的一例）：法向真的没有定义。**不编方向。**
+        return NarrowPhaseResult(separation_mm=separation, confidence="narrow_phase")
+    return NarrowPhaseResult(
+        separation_mm=separation,
+        confidence="narrow_phase",
+        normal_ab=normal,
+        witness_a_mm=_along(closest_a, normal, segment_a[2]),
+        witness_b_mm=_along(closest_b, normal, -segment_b[2]),
+    )
 
 
 # --------------------------------------------------------------------------
@@ -303,6 +354,118 @@ def posed_signed_distance_mm(posed: PosedBody, world_point_mm: Vector3) -> float
 
 
 # --------------------------------------------------------------------------
+# 解析原语的梯度：法向从这里来（0094给的第1条硬约束）
+#
+# ``∇φ``对有符号距离场处处是**单位外法向**（可微处）。于是"接触法向"这件事
+# 不需要第二套几何——它就是SDF的梯度。不可微处（球心、圆柱轴、盒的中轴面）
+# **返回``None``而不是编一个方向**：那里法向是真的没有定义，
+# 编一个出来会让摩擦锥安静地作用在一个错方向上。
+# --------------------------------------------------------------------------
+
+
+def _normalise(vector: Vector3) -> Vector3 | None:
+    length = math.sqrt(vector[0] * vector[0] + vector[1] * vector[1] + vector[2] * vector[2])
+    if length <= 1e-12:
+        return None
+    return (vector[0] / length, vector[1] / length, vector[2] / length)
+
+
+def _box_gradient(
+    point_mm: Vector3, half_extents_mm: Vector3
+) -> Vector3 | None:
+    """核心盒的``∇φ``。圆角不改梯度（``K ⊕ B_f``的SDF只比``K``少一个常数）。"""
+
+    q = tuple(abs(point_mm[axis]) - half_extents_mm[axis] for axis in range(3))
+    signs = tuple(1.0 if point_mm[axis] >= 0.0 else -1.0 for axis in range(3))
+    if q[0] > 0.0 or q[1] > 0.0 or q[2] > 0.0:
+        return _normalise(
+            tuple(signs[axis] * max(q[axis], 0.0) for axis in range(3))  # type: ignore[arg-type]
+        )
+    #: 体内：最近的是``q``最大（最不负）的那一面。**并列时取轴序里第一个**——
+    #: 并列意味着点在中轴面上，两条法向都是对的最近面法向，取一个是选择不是编造。
+    axis = max(range(3), key=lambda index: q[index])
+    return tuple(signs[axis] if index == axis else 0.0 for index in range(3))  # type: ignore[return-value]
+
+
+def _cylinder_gradient(
+    point_mm: Vector3, radius_mm: float, half_width_mm: float
+) -> Vector3 | None:
+    radial_length = math.hypot(point_mm[0], point_mm[1])
+    radial = radial_length - radius_mm
+    axial = abs(point_mm[2]) - half_width_mm
+    axial_sign = 1.0 if point_mm[2] >= 0.0 else -1.0
+    if radial > 0.0 or axial > 0.0:
+        if radial > 0.0 and radial_length <= 1e-12:
+            return None  # 够不着：``radial > 0``要求``radial_length > R > 0``
+        outward = (
+            (point_mm[0] / radial_length * radial, point_mm[1] / radial_length * radial)
+            if radial > 0.0
+            else (0.0, 0.0)
+        )
+        return _normalise((outward[0], outward[1], axial_sign * max(axial, 0.0)))
+    if radial > axial:  # 体内，侧壁最近
+        if radial_length <= 1e-12:
+            return None  # **轴上**：到侧壁四面八方一样远，法向没有定义
+        return (point_mm[0] / radial_length, point_mm[1] / radial_length, 0.0)
+    return (0.0, 0.0, axial_sign)  # 体内，端面最近（并列时归端面，与轴序同一条约定）
+
+
+def shape_signed_distance_gradient(
+    shape: Shape, local_point_mm: Vector3
+) -> Vector3 | None:
+    """形状在自己局部系里的``∇φ``——**单位外法向**。不可微处返回``None``。
+
+    ``None``的三种来路各自是一件真事：球心（到球面四面八方一样远）、
+    圆柱轴上且侧壁最近、以及退化胶囊的轴上。**不编方向**是本函数唯一的纪律。
+
+    失败关闭与`shape_signed_distance_mm`同：`MeshAsset`与带法兰的圆柱当场抛。
+    """
+
+    resolved = _unwrap(shape)
+    if isinstance(resolved, Sphere):
+        return _normalise(local_point_mm)
+    if isinstance(resolved, Capsule):
+        axis = _sub(resolved.point_b_mm, resolved.point_a_mm)
+        offset = _sub(local_point_mm, resolved.point_a_mm)
+        length_squared = _dot(axis, axis)
+        t = 0.0 if length_squared <= 1e-12 else _clamp(_dot(offset, axis) / length_squared)
+        return _normalise(
+            (
+                offset[0] - axis[0] * t,
+                offset[1] - axis[1] * t,
+                offset[2] - axis[2] * t,
+            )
+        )
+    if isinstance(resolved, RoundedBox):
+        return _box_gradient(local_point_mm, resolved.half_extents_mm)
+    if isinstance(resolved, FiniteCylinder):
+        if resolved.flange_outer_radius_mm is not None:
+            raise CollisionQueryError(
+                "a flanged FiniteCylinder has no declared solid semantics "
+                "(决策0090第4.1节)"
+            )
+        return _cylinder_gradient(
+            local_point_mm, resolved.radius_mm, resolved.half_width_mm
+        )
+    if isinstance(resolved, MeshAsset):
+        raise CollisionQueryError(
+            "a MeshAsset carries no geometry in this repo (内核不读网格字节)"
+        )
+    raise CollisionQueryError(f"no exact gradient for shape {resolved!r}")
+
+
+def posed_signed_distance_gradient(
+    posed: PosedBody, world_point_mm: Vector3
+) -> Vector3 | None:
+    """世界系的单位外法向。``None``的含义见`shape_signed_distance_gradient`。"""
+
+    local = shape_signed_distance_gradient(
+        posed.body.collision.shape, world_to_local_mm(posed, world_point_mm)
+    )
+    return None if local is None else posed.rotate_local_mm(local)
+
+
+# --------------------------------------------------------------------------
 # 半空间：查询侧的目标，**不是`shapes.py`的形状**（决策0090第四节第3条）
 # --------------------------------------------------------------------------
 
@@ -399,8 +562,9 @@ def half_space_separation_mm(posed: PosedBody, half_space: HalfSpace) -> float:
 class SignedDistanceSource(Protocol):
     """可查询的有符号距离场。**`contact.field.SignedDistanceField`逐条满足它。**
 
-    四样是承重的：``spacing_mm``（偏差估计要它）、``contains_stencil``
-    （先问再算，窄带外不猜）、``value_mm``、``hessian_per_mm``（偏差主项要迹）。
+    五样是承重的：``spacing_mm``（偏差估计要它）、``contains_stencil``
+    （先问再算，窄带外不猜）、``value_mm``、``gradient``（**接触法向就是它**）、
+    ``hessian_per_mm``（偏差主项要迹）。
 
     **场按体的局部系烘。** 于是体的位姿动了场跟着动，而距离是刚体运动不变量、
     Hessian的迹是旋转不变量——**偏差估计因此与位姿无关**，这不是巧合，是选迹的理由之一。
@@ -412,6 +576,8 @@ class SignedDistanceSource(Protocol):
 
     def value_mm(self, point_mm: Vector3) -> float: ...
 
+    def gradient(self, point_mm: Vector3) -> Vector3: ...
+
     def hessian_per_mm(self, point_mm: Vector3) -> tuple[Vector3, Vector3, Vector3]: ...
 
 
@@ -419,6 +585,7 @@ _SOURCE_MEMBERS: tuple[str, ...] = (
     "spacing_mm",
     "contains_stencil",
     "value_mm",
+    "gradient",
     "hessian_per_mm",
 )
 
@@ -438,6 +605,66 @@ class NarrowPhaseResult:
     confidence: Literal["narrow_phase", "sampled_field"]
     estimated_bias_mm: float | None = None
     resolution_mm: float | None = None
+    #: 单位法向，**从B指向A**（Bullet的``normalBtoA``同一个约定）。
+    #: ``None``表示这一构型下法向没有定义（同心球、圆柱轴上），**不编方向**。
+    normal_ab: Vector3 | None = None
+    #: A表面上离B最近的那个点。``None``与``normal_ab``同进同出。
+    witness_a_mm: Vector3 | None = None
+    #: B表面上离A最近的那个点。
+    witness_b_mm: Vector3 | None = None
+
+    def witness_identity_residual_mm(self) -> float | None:
+        """``witness_a − (witness_b + separation·normal_ab)``的模。
+
+        **Bullet那条自洽恒等式**（`btPersistentManifold`的
+        ``pointOnA == pointOnB + distance · normalBtoA``）。它的好处是
+        **零新增金标**：不需要任何外部参考解，四条路由各自算出来的
+        三样东西必须互相对得上。对不上说明法向、接触点、距离里至少有一个错。
+
+        三样有一个是``None``就返回``None``（没有可判的东西，不是判过了）。
+        """
+
+        if self.normal_ab is None or self.witness_a_mm is None or self.witness_b_mm is None:
+            return None
+        return math.sqrt(
+            sum(
+                (
+                    self.witness_a_mm[axis]
+                    - (self.witness_b_mm[axis] + self.separation_mm * self.normal_ab[axis])
+                )
+                ** 2
+                for axis in range(3)
+            )
+        )
+
+
+def _flip(result: NarrowPhaseResult) -> NarrowPhaseResult:
+    """把一个以"探针=A"算出来的结果换成"探针=B"。法向取反、两个见证点互换。
+
+    **分离量与偏差估计一个字不动**——它们与谁叫A无关。
+    """
+
+    return NarrowPhaseResult(
+        separation_mm=result.separation_mm,
+        confidence=result.confidence,
+        estimated_bias_mm=result.estimated_bias_mm,
+        resolution_mm=result.resolution_mm,
+        normal_ab=(
+            None
+            if result.normal_ab is None
+            else (-result.normal_ab[0], -result.normal_ab[1], -result.normal_ab[2])
+        ),
+        witness_a_mm=result.witness_b_mm,
+        witness_b_mm=result.witness_a_mm,
+    )
+
+
+def _along(base: Vector3, direction: Vector3, distance_mm: float) -> Vector3:
+    return (
+        base[0] - direction[0] * distance_mm,
+        base[1] - direction[1] * distance_mm,
+        base[2] - direction[2] * distance_mm,
+    )
 
 
 def field_separation_mm(
@@ -452,6 +679,10 @@ def field_separation_mm(
 
     窄带外**失败关闭**（0085第四节）：稀疏块表里"远在体外"与"深在体内"
     长得一模一样，外推等于在"不接触"与"接触力很大"之间猜一个。
+
+    **A/B约定**：返回值里``A``是**探针**、``B``是**配了场的那个体**。
+    于是``normal_ab``从场那个体指向探针（就是``∇φ``的方向）。
+    `narrow_phase_separation_mm`按调用次序需要时用`_flip`换回来。
     """
 
     local = world_to_local_mm(posed, probe_centre_mm)
@@ -465,11 +696,18 @@ def field_separation_mm(
     curvature = field.hessian_per_mm(local)
     spacing = field.spacing_mm
     trace = curvature[0][0] + curvature[1][1] + curvature[2][2]
+    #: 法向＝场的梯度。**要归一化**：B样条拟插值的``|∇φ|``只是近似等于1
+    #: （它带同一条``O(h²)``），而法向是要拿去乘力的，不许它带一个模的漂移。
+    slope = _normalise(field.gradient(local))
+    normal = None if slope is None else posed.rotate_local_mm(slope)
     return NarrowPhaseResult(
         separation_mm=value - radius_mm,
         confidence="sampled_field",
         estimated_bias_mm=spacing * spacing * trace / 6.0,
         resolution_mm=spacing,
+        normal_ab=normal,
+        witness_a_mm=None if normal is None else _along(probe_centre_mm, normal, radius_mm),
+        witness_b_mm=None if normal is None else _along(probe_centre_mm, normal, value),
     )
 
 
@@ -510,7 +748,7 @@ def _axis_aligned_boxes(
 
 def _axis_aligned_box_separation_mm(
     posed_a: PosedBody, box_a: RoundedBox, posed_b: PosedBody, box_b: RoundedBox
-) -> float:
+) -> NarrowPhaseResult:
     """轴对齐圆角盒对的**精确**分离量。
 
     逐轴间隙``g_i``；有一轴分开就是``sqrt(Σ max(g_i,0)²)``，全轴重叠就是``max_i g_i``
@@ -519,17 +757,73 @@ def _axis_aligned_box_separation_mm(
     有符号距离＝核心盒之间的减去``fa + fb``。
     """
 
+    centre_a, centre_b = posed_a.translation_mm, posed_b.translation_mm
+    delta = [centre_a[axis] - centre_b[axis] for axis in range(3)]  # B → A
     gaps = [
-        abs(posed_b.translation_mm[axis] - posed_a.translation_mm[axis])
-        - box_a.half_extents_mm[axis]
-        - box_b.half_extents_mm[axis]
+        abs(delta[axis]) - box_a.half_extents_mm[axis] - box_b.half_extents_mm[axis]
         for axis in range(3)
     ]
+    signs = [1.0 if delta[axis] >= 0.0 else -1.0 for axis in range(3)]
     fillets = box_a.fillet_radius_mm + box_b.fillet_radius_mm
+
+    def _overlap_midpoint(axis: int) -> float:
+        low = max(
+            centre_a[axis] - box_a.half_extents_mm[axis],
+            centre_b[axis] - box_b.half_extents_mm[axis],
+        )
+        high = min(
+            centre_a[axis] + box_a.half_extents_mm[axis],
+            centre_b[axis] + box_b.half_extents_mm[axis],
+        )
+        return 0.5 * (low + high)
+
     if gaps[0] > 0.0 or gaps[1] > 0.0 or gaps[2] > 0.0:
-        gx, gy, gz = (max(gap, 0.0) for gap in gaps)
-        return math.sqrt(gx * gx + gy * gy + gz * gz) - fillets
-    return max(gaps) - fillets
+        offset = [signs[axis] * max(gaps[axis], 0.0) for axis in range(3)]
+        core = math.sqrt(offset[0] ** 2 + offset[1] ** 2 + offset[2] ** 2)
+        normal = _normalise((offset[0], offset[1], offset[2]))
+        witness_a = [
+            centre_a[axis] - signs[axis] * box_a.half_extents_mm[axis]
+            if gaps[axis] > 0.0
+            else _overlap_midpoint(axis)
+            for axis in range(3)
+        ]
+        witness_b = [
+            centre_b[axis] + signs[axis] * box_b.half_extents_mm[axis]
+            if gaps[axis] > 0.0
+            else _overlap_midpoint(axis)
+            for axis in range(3)
+        ]
+        separation = core - fillets
+    else:
+        #: 全轴重叠：最小平移方向就在**重叠最小**的那一轴上（``gaps``最大即最不负）。
+        #: **并列时取轴序里第一个**——并列意味着两条最小平移都对，取一个是选择不是编造。
+        axis_k = max(range(3), key=lambda index: gaps[index])
+        normal = tuple(  # type: ignore[assignment]
+            signs[axis_k] if index == axis_k else 0.0 for index in range(3)
+        )
+        witness_a = [
+            centre_a[axis] - signs[axis] * box_a.half_extents_mm[axis]
+            if axis == axis_k
+            else _overlap_midpoint(axis)
+            for axis in range(3)
+        ]
+        witness_b = [
+            centre_b[axis] + signs[axis] * box_b.half_extents_mm[axis]
+            if axis == axis_k
+            else _overlap_midpoint(axis)
+            for axis in range(3)
+        ]
+        separation = gaps[axis_k] - fillets
+
+    if normal is None:  # 两个盒完全同心且全轴重叠时``offset``不会为零，够不着这里
+        return NarrowPhaseResult(separation_mm=separation, confidence="narrow_phase")
+    return NarrowPhaseResult(
+        separation_mm=separation,
+        confidence="narrow_phase",
+        normal_ab=normal,
+        witness_a_mm=_along(tuple(witness_a), normal, box_a.fillet_radius_mm),  # type: ignore[arg-type]
+        witness_b_mm=_along(tuple(witness_b), normal, -box_b.fillet_radius_mm),  # type: ignore[arg-type]
+    )
 
 
 def _try_narrow_phase(
@@ -554,28 +848,36 @@ def _try_narrow_phase(
         ball = _as_world_ball(probe_body)
         if ball is None:
             return None
-        return field_separation_mm(field, field_body, ball[0], ball[1])  # type: ignore[arg-type]
+        probe_side = field_separation_mm(field, field_body, ball[0], ball[1])  # type: ignore[arg-type]
+        #: `field_separation_mm`按"A=探针"给结果；场挂在A身上时探针是B，要换回来。
+        return _flip(probe_side) if field_a is not None else probe_side
 
-    for probe, target in ((posed_a, posed_b), (posed_b, posed_a)):
+    for index, (probe, target) in enumerate(((posed_a, posed_b), (posed_b, posed_a))):
         ball = _as_world_ball(probe)
         if ball is None:
             continue
         if _as_world_ball(target) is not None:
             return None  # 球对球走既有那条路，不在这里重算
+        centre, radius = ball
         try:
-            distance = posed_signed_distance_mm(target, ball[0])
+            distance = posed_signed_distance_mm(target, centre)
+            normal = posed_signed_distance_gradient(target, centre)
         except CollisionQueryError:
             return None
-        return NarrowPhaseResult(separation_mm=distance - ball[1], confidence="narrow_phase")
+        #: ``∇φ_target``是**从target指向外**，也就是从target指向探针。
+        #: 于是"探针=A"时它就是``normal_ab``；"探针=B"时下面`_flip`换回来。
+        probe_side = NarrowPhaseResult(
+            separation_mm=distance - radius,
+            confidence="narrow_phase",
+            normal_ab=normal,
+            witness_a_mm=None if normal is None else _along(centre, normal, radius),
+            witness_b_mm=None if normal is None else _along(centre, normal, distance),
+        )
+        return probe_side if index == 0 else _flip(probe_side)
 
     boxes = _axis_aligned_boxes(posed_a, posed_b)
     if boxes is not None:
-        return NarrowPhaseResult(
-            separation_mm=_axis_aligned_box_separation_mm(
-                posed_a, boxes[0], posed_b, boxes[1]
-            ),
-            confidence="narrow_phase",
-        )
+        return _axis_aligned_box_separation_mm(posed_a, boxes[0], posed_b, boxes[1])
     return None
 
 
@@ -600,10 +902,7 @@ def narrow_phase_separation_mm(
         and posed_a.body.body_id not in fields
         and posed_b.body.body_id not in fields
     ):
-        return NarrowPhaseResult(
-            separation_mm=_segment_pair_separation_mm(segment_a, segment_b),
-            confidence="narrow_phase",
-        )
+        return _segment_pair_result(segment_a, segment_b)
     result = _try_narrow_phase(posed_a, posed_b, fields)
     if result is None:
         raise CollisionQueryError(
@@ -628,6 +927,13 @@ class CollisionEvent:
     estimated_bias_mm: float | None = None
     #: 场的节点间距，mm。``None``表示这条路上没有分辨率这回事。
     resolution_mm: float | None = None
+    #: 单位法向，**从`body_b`指向`body_a`**。``broad_phase``那一档恒为``None``；
+    #: 精确档在法向没有定义的构型（同心球、圆柱轴上）也是``None``——**不编方向**。
+    normal_ab: Vector3 | None = None
+    #: `body_a`表面上离B最近的点。**力要作用在一个点上**，这就是那个点。
+    witness_a_mm: Vector3 | None = None
+    #: `body_b`表面上离A最近的点。
+    witness_b_mm: Vector3 | None = None
 
 
 @dataclass(frozen=True)
@@ -774,6 +1080,9 @@ class BroadPhaseCollisionQuery:
                 separation = _segment_pair_separation_mm(segment_a, segment_b)
                 if separation >= 0.0:
                     continue  # broad命中但narrow判分离：假阳性，不报
+                #: **穿透深度仍然由上面那一行给**，法向与见证点是另外一层
+                #: （`_segment_pair_result`的docstring：不许用扩档换掉逐位判据）。
+                witnesses = _segment_pair_result(segment_a, segment_b)
                 events.append(
                     CollisionEvent(
                         body_a=name_a,
@@ -782,6 +1091,9 @@ class BroadPhaseCollisionQuery:
                         penetration_mm=-separation,
                         aabb_a_mm=box_a,
                         aabb_b_mm=box_b,
+                        normal_ab=witnesses.normal_ab,
+                        witness_a_mm=witnesses.witness_a_mm,
+                        witness_b_mm=witnesses.witness_b_mm,
                     )
                 )
                 continue
@@ -806,6 +1118,9 @@ class BroadPhaseCollisionQuery:
                         aabb_b_mm=box_b,
                         estimated_bias_mm=extended.estimated_bias_mm,
                         resolution_mm=extended.resolution_mm,
+                        normal_ab=extended.normal_ab,
+                        witness_a_mm=extended.witness_a_mm,
+                        witness_b_mm=extended.witness_b_mm,
                     )
                 )
                 continue
@@ -838,8 +1153,11 @@ __all__ = [
     "field_separation_mm",
     "half_space_separation_mm",
     "narrow_phase_separation_mm",
+    "posed_signed_distance_gradient",
     "posed_signed_distance_mm",
     "segment_segment_distance_mm",
+    "segment_segment_witnesses",
+    "shape_signed_distance_gradient",
     "shape_signed_distance_mm",
     "world_to_local_mm",
 ]

@@ -30,6 +30,9 @@ from physics_engine.collision import (
     half_space_separation_mm,
     narrow_phase_separation_mm,
     posed_signed_distance_mm,
+    segment_segment_distance_mm,
+    segment_segment_witnesses,
+    shape_signed_distance_gradient,
     shape_signed_distance_mm,
     world_to_local_mm,
 )
@@ -830,3 +833,365 @@ def test_the_result_dataclass_defaults_declare_exactness():
     result = NarrowPhaseResult(separation_mm=-1.0, confidence="narrow_phase")
     assert result.estimated_bias_mm is None
     assert result.resolution_mm is None
+
+
+# ==========================================================================
+# 六、法向与接触点（0094第1条硬约束：先扩输出档）
+#
+# 判据用两条**零新增金标**的自洽恒等式：
+#   ① Bullet的 ``pointOnA == pointOnB + distance · normalBtoA``；
+#   ② 见证点真的落在各自的面上（``|φ| ≈ 0``）。
+# 两条都不需要任何外部参考解——它们判的是"法向、接触点、距离三样互相对得上"。
+# ==========================================================================
+
+
+def _witness_identity(result) -> float:
+    residual = result.witness_identity_residual_mm()
+    assert residual is not None, "这一构型没有法向，不该拿它判恒等式"
+    return residual
+
+
+def test_the_witness_helper_returns_none_when_there_is_nothing_to_check():
+    """三样有一个是`None`就返回`None`——**没有可判的东西，不是判过了**。"""
+
+    assert (
+        NarrowPhaseResult(separation_mm=-1.0, confidence="narrow_phase")
+        .witness_identity_residual_mm()
+        is None
+    )
+
+
+def test_segment_family_satisfies_the_bullet_witness_identity():
+    """球/胶囊族120对语料上逐对判Bullet恒等式，残差 < 1e-11 mm。"""
+
+    worst = 0.0
+    checked = 0
+    for _index, first, second in _sphere_capsule_corpus():
+        result = narrow_phase_separation_mm(first, second)
+        if result.normal_ab is None:
+            continue
+        worst = max(worst, _witness_identity(result))
+        checked += 1
+    assert checked == 120  # 随机语料里没有一对是同心的
+    assert worst < 1.0e-11, worst
+
+
+def test_segment_family_witnesses_sit_on_both_surfaces():
+    """见证点真的在面上：`|φ| < 1e-11 mm`，两侧各判一次。
+
+    这一条比恒等式更强——恒等式只说三样自洽，**它可以整体平移而仍然自洽**。
+    """
+
+    worst = 0.0
+    for _index, first, second in _sphere_capsule_corpus():
+        result = narrow_phase_separation_mm(first, second)
+        if result.normal_ab is None:
+            continue
+        worst = max(
+            worst,
+            abs(posed_signed_distance_mm(first, result.witness_a_mm)),
+            abs(posed_signed_distance_mm(second, result.witness_b_mm)),
+        )
+    assert worst < 1.0e-11, worst
+
+
+def test_the_normal_points_from_b_towards_a():
+    """方向约定：`normal_ab`从B指向A（Bullet的`normalBtoA`）。
+
+    判法不靠直觉：把A沿`+normal_ab`挪一段，分离量必须**正好**增加那么多。
+    """
+
+    first = _body("a", Sphere(radius_mm=3.0), (10.0, 0.0, 0.0))
+    second = _body("b", Sphere(radius_mm=4.0), (0.0, 0.0, 0.0))
+    base = narrow_phase_separation_mm(first, second)
+    assert base.normal_ab == pytest.approx((1.0, 0.0, 0.0), abs=1.0e-15)
+    step = 2.5
+    moved = _body(
+        "a",
+        Sphere(radius_mm=3.0),
+        tuple(10.0 * (axis == 0) + base.normal_ab[axis] * step for axis in range(3)),
+    )
+    assert narrow_phase_separation_mm(moved, second).separation_mm == pytest.approx(
+        base.separation_mm + step, abs=1.0e-12
+    )
+
+
+def test_swapping_the_pair_order_negates_the_normal_and_swaps_the_witnesses():
+    """A/B互换：法向取反、两个见证点互换、**分离量一个字不动**。"""
+
+    first = _body("a", Sphere(radius_mm=2.0), (9.0, 1.0, -2.0))
+    second = _body(
+        "b", RoundedBox(half_extents_mm=(4.0, 5.0, 6.0), fillet_radius_mm=0.5)
+    )
+    forward = narrow_phase_separation_mm(first, second)
+    backward = narrow_phase_separation_mm(second, first)
+    assert backward.separation_mm == forward.separation_mm  # 逐位
+    assert backward.normal_ab == pytest.approx(
+        tuple(-value for value in forward.normal_ab), abs=0.0
+    )
+    assert backward.witness_a_mm == forward.witness_b_mm
+    assert backward.witness_b_mm == forward.witness_a_mm
+
+
+def test_the_ball_probe_route_satisfies_both_identities():
+    """球型探针对圆角盒/圆柱：恒等式＋见证点在面上，随机400组。"""
+
+    rng = random.Random(6161)
+    worst_identity = worst_surface = 0.0
+    for _ in range(400):
+        target_shape = (
+            RoundedBox(
+                half_extents_mm=tuple(rng.uniform(2.0, 12.0) for _ in range(3)),
+                fillet_radius_mm=rng.choice((0.0, 1.5)),
+            )
+            if rng.random() < 0.5
+            else FiniteCylinder(
+                radius_mm=rng.uniform(3.0, 12.0), half_width_mm=rng.uniform(2.0, 8.0)
+            )
+        )
+        target = _body("t", target_shape, rotation=_unit_quaternion(rng))
+        probe = _body(
+            "p",
+            Sphere(radius_mm=rng.uniform(0.5, 4.0)),
+            tuple(rng.uniform(-20.0, 20.0) for _ in range(3)),
+        )
+        result = narrow_phase_separation_mm(probe, target)
+        if result.normal_ab is None:
+            continue
+        worst_identity = max(worst_identity, _witness_identity(result))
+        worst_surface = max(
+            worst_surface,
+            abs(posed_signed_distance_mm(probe, result.witness_a_mm)),
+            abs(posed_signed_distance_mm(target, result.witness_b_mm)),
+        )
+    assert worst_identity < 1.0e-12, worst_identity
+    assert worst_surface < 1.0e-11, worst_surface
+
+
+def test_the_axis_aligned_box_pair_satisfies_both_identities():
+    """轴对齐盒对：分离支与穿透支都判，随机400组。"""
+
+    rng = random.Random(7272)
+    worst_identity = worst_surface = 0.0
+    separated = penetrating = 0
+    for _ in range(400):
+        half_a = tuple(rng.uniform(1.0, 15.0) for _ in range(3))
+        half_b = tuple(rng.uniform(1.0, 15.0) for _ in range(3))
+        fillet_a, fillet_b = rng.choice((0.0, 1.0)), rng.choice((0.0, 2.0))
+        first = _body(
+            "a",
+            RoundedBox(half_extents_mm=half_a, fillet_radius_mm=fillet_a),
+            tuple(rng.uniform(-8.0, 8.0) for _ in range(3)),
+        )
+        second = _body(
+            "b",
+            RoundedBox(half_extents_mm=half_b, fillet_radius_mm=fillet_b),
+            tuple(rng.uniform(-30.0, 30.0) for _ in range(3)),
+        )
+        result = narrow_phase_separation_mm(first, second)
+        assert result.normal_ab is not None
+        worst_identity = max(worst_identity, _witness_identity(result))
+        worst_surface = max(
+            worst_surface,
+            abs(posed_signed_distance_mm(first, result.witness_a_mm)),
+            abs(posed_signed_distance_mm(second, result.witness_b_mm)),
+        )
+        if result.separation_mm > 0.0:
+            separated += 1
+        else:
+            penetrating += 1
+    assert separated > 30 and penetrating > 30, (separated, penetrating)
+    assert worst_identity < 1.0e-12, worst_identity
+    assert worst_surface < 1.0e-11, worst_surface
+
+
+def test_the_field_route_carries_a_normal_and_satisfies_the_identity():
+    """场那条路也给法向。恒等式是精确的（三样出自同一次查询），
+    但**见证点落在面上只到``O(h²)``**——那正是`sampled_field`那一档的含义。"""
+
+    field = _sphere_field(0.25)
+    obstacle = _body("obs", Sphere(radius_mm=10.0))
+    probe_centre = (11.5, 0.0, 0.0)
+    result = field_separation_mm(field, obstacle, probe_centre, 1.0)
+    assert result.confidence == "sampled_field"
+    assert result.normal_ab == pytest.approx((1.0, 0.0, 0.0), abs=1.0e-6)
+    assert _witness_identity(result) < 1.0e-12
+    #: B侧见证点应当落在真球面上，误差是场的``O(h²)``而不是舍入。
+    radius_of_witness = math.sqrt(sum(value * value for value in result.witness_b_mm))
+    assert radius_of_witness == pytest.approx(10.0, abs=5.0e-3)
+
+
+def test_the_scene_query_carries_the_normal_and_witnesses_too():
+    """场景查询的事件带同样三样——**否则扩档等于没扩**（力学读的是事件）。"""
+
+    first = _body("a", Sphere(radius_mm=6.0), (8.0, 0.0, 0.0))
+    second = _body("b", Sphere(radius_mm=6.0))
+    events = BroadPhaseCollisionQuery((first, second)).check_state()
+    assert len(events) == 1
+    event = events[0]
+    assert event.confidence == "narrow_phase"
+    assert event.normal_ab == pytest.approx((1.0, 0.0, 0.0), abs=1.0e-15)
+    assert event.witness_a_mm == pytest.approx((2.0, 0.0, 0.0), abs=1.0e-12)
+    assert event.witness_b_mm == pytest.approx((6.0, 0.0, 0.0), abs=1.0e-12)
+    #: 事件里那三样与直查面**逐位相同**。
+    direct = narrow_phase_separation_mm(first, second)
+    assert event.normal_ab == direct.normal_ab
+    assert event.witness_a_mm == direct.witness_a_mm
+    assert event.witness_b_mm == direct.witness_b_mm
+
+
+def test_a_broad_phase_event_never_carries_a_normal():
+    """降级那一档三样全是`None`——**"不知道"不许长出一个方向来**。"""
+
+    capsule = _body("cap", Capsule((0.0, 0.0, -5.0), (0.0, 0.0, 5.0), 2.0))
+    box = _body("box", RoundedBox(half_extents_mm=(4.0, 4.0, 4.0), fillet_radius_mm=0.0))
+    event = BroadPhaseCollisionQuery((capsule, box)).check_state()[0]
+    assert event.confidence == "broad_phase"
+    assert event.normal_ab is None
+    assert event.witness_a_mm is None
+    assert event.witness_b_mm is None
+
+
+def test_concentric_spheres_report_no_normal_instead_of_inventing_one():
+    """同心球：法向真的没有定义。**报`None`，不编一个方向。**
+
+    这一格是"诚实可信度"在法向上的执行面：距离照给（穿透深度良定义），
+    方向留空。编一个方向出来会让摩擦锥安静地作用在一个错方向上。
+    """
+
+    first = _body("a", Sphere(radius_mm=3.0))
+    second = _body("b", Sphere(radius_mm=4.0))
+    result = narrow_phase_separation_mm(first, second)
+    assert result.separation_mm == pytest.approx(-7.0, abs=1.0e-15)
+    assert result.normal_ab is None
+    assert result.witness_a_mm is None
+    assert result.witness_identity_residual_mm() is None
+    event = BroadPhaseCollisionQuery((first, second)).check_state()[0]
+    assert event.confidence == "narrow_phase"
+    assert event.penetration_mm == pytest.approx(7.0, abs=1.0e-15)
+    assert event.normal_ab is None
+
+
+def test_a_probe_on_the_cylinder_axis_reports_no_normal():
+    """圆柱轴上、且侧壁比端面近：到侧壁四面八方一样远，法向没有定义。"""
+
+    cylinder = FiniteCylinder(radius_mm=3.0, half_width_mm=20.0)
+    assert shape_signed_distance_gradient(cylinder, (0.0, 0.0, 0.0)) is None
+    #: 端面更近时法向就有定义了（轴向），**同一个点集上两种答案各有出处**。
+    flat = FiniteCylinder(radius_mm=20.0, half_width_mm=3.0)
+    assert shape_signed_distance_gradient(flat, (0.0, 0.0, 1.0)) == (0.0, 0.0, 1.0)
+
+
+def test_the_gradient_is_the_unit_outward_normal_by_finite_difference():
+    """梯度对中心差分：`|∇φ − FD| < 2e-6`，且模恒为1。
+
+    **这一条挡的是"梯度写成了另一个形状的梯度"**——恒等式与见证点两条门
+    对一个整体错的方向是盲的（它们只判自洽）。
+    """
+
+    shapes = (
+        Sphere(radius_mm=5.0),
+        Capsule((0.0, 0.0, -4.0), (0.0, 0.0, 4.0), 2.0),
+        RoundedBox(half_extents_mm=(3.0, 7.0, 11.0), fillet_radius_mm=1.0),
+        FiniteCylinder(radius_mm=6.0, half_width_mm=3.0),
+    )
+    rng = random.Random(8383)
+    step = 1.0e-5
+    worst = 0.0
+    for shape in shapes:
+        for _ in range(200):
+            point = tuple(rng.uniform(-18.0, 18.0) for _ in range(3))
+            gradient = shape_signed_distance_gradient(shape, point)
+            if gradient is None:
+                continue
+            assert math.sqrt(sum(v * v for v in gradient)) == pytest.approx(1.0, abs=1e-15)
+            finite = []
+            for axis in range(3):
+                plus = tuple(point[i] + (step if i == axis else 0.0) for i in range(3))
+                minus = tuple(point[i] - (step if i == axis else 0.0) for i in range(3))
+                finite.append(
+                    (
+                        shape_signed_distance_mm(shape, plus)
+                        - shape_signed_distance_mm(shape, minus)
+                    )
+                    / (2.0 * step)
+                )
+            worst = max(
+                worst, max(abs(gradient[axis] - finite[axis]) for axis in range(3))
+            )
+    assert worst < 2.0e-6, worst
+
+
+def test_the_witness_identity_goes_red_when_the_normal_is_flipped():
+    """必红一：法向取反，恒等式当场红（残差 = 2·|分离量|）。"""
+
+    good = narrow_phase_separation_mm(
+        _body("a", Sphere(radius_mm=3.0), (10.0, 0.0, 0.0)),
+        _body("b", Sphere(radius_mm=4.0)),
+    )
+    assert _witness_identity(good) < 1.0e-12
+    flipped = NarrowPhaseResult(
+        separation_mm=good.separation_mm,
+        confidence=good.confidence,
+        normal_ab=tuple(-value for value in good.normal_ab),
+        witness_a_mm=good.witness_a_mm,
+        witness_b_mm=good.witness_b_mm,
+    )
+    assert flipped.witness_identity_residual_mm() == pytest.approx(
+        2.0 * abs(good.separation_mm), rel=1.0e-12
+    )
+
+
+def test_the_witness_identity_goes_red_when_a_witness_slides_along_the_surface():
+    """必红二：把一个见证点**沿面内**挪一点（离开面法向那条线），恒等式当场红。
+
+    这一条比"取反"更值钱：**沿面内挪不改变`|φ|`**，所以"见证点在面上"那道门
+    抓不到它，只有恒等式抓得到。两道门因此必须并列，不能互相顶替。
+    """
+
+    good = narrow_phase_separation_mm(
+        _body("a", Sphere(radius_mm=3.0), (10.0, 0.0, 0.0)),
+        _body("b", Sphere(radius_mm=4.0)),
+    )
+    slid_centre = (10.0, 0.0, 0.0)
+    slid = (
+        slid_centre[0] - 3.0 * math.cos(0.3),
+        slid_centre[1] + 3.0 * math.sin(0.3),
+        slid_centre[2],
+    )
+    #: 它仍然在A的球面上——"在面上"那道门看不见这次改动。
+    surface = _body("a", Sphere(radius_mm=3.0), slid_centre)
+    assert abs(posed_signed_distance_mm(surface, slid)) < 1.0e-12
+    slid_result = NarrowPhaseResult(
+        separation_mm=good.separation_mm,
+        confidence=good.confidence,
+        normal_ab=good.normal_ab,
+        witness_a_mm=slid,
+        witness_b_mm=good.witness_b_mm,
+    )
+    assert slid_result.witness_identity_residual_mm() > 0.1
+
+
+def test_the_gradient_gate_goes_red_when_the_box_uses_the_wrong_face():
+    """必红三：体内取"最远的面"而不是"最近的面"，有限差分门当场红。"""
+
+    box = RoundedBox(half_extents_mm=(3.0, 7.0, 11.0), fillet_radius_mm=0.0)
+    point = (2.5, 1.0, 1.0)  # 体内，x面最近
+    assert shape_signed_distance_gradient(box, point) == (1.0, 0.0, 0.0)
+    #: 取z面（最远的那一面）是注错值，与有限差分差一个整单位向量。
+    wrong = (0.0, 0.0, 1.0)
+    assert max(abs(wrong[axis] - (1.0, 0.0, 0.0)[axis]) for axis in range(3)) == 1.0
+
+
+def test_the_witnesses_come_from_the_same_arithmetic_as_the_distance():
+    """`segment_segment_witnesses`的第三项与`segment_segment_distance_mm`**逐位相同**。
+
+    这一条守的是那次改写：距离函数现在是witness函数的第三项，
+    **不是两份拷贝**。两份拷贝迟早会漂，而漂的时候没有任何门看得见。
+    """
+
+    rng = random.Random(9494)
+    for _ in range(500):
+        points = [tuple(rng.uniform(-40.0, 40.0) for _ in range(3)) for _ in range(4)]
+        witness = segment_segment_witnesses(*points)
+        assert witness[2].hex() == segment_segment_distance_mm(*points).hex()
