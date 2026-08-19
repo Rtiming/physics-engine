@@ -5,12 +5,12 @@
   "facet_version": "0.1",
   "generator": {
     "algorithm_id": "algorithm:oracle/winding_line_endtoend",
-    "algorithm_version": "1.0.0",
+    "algorithm_version": "1.2.0",
     "path_relative": "cases/winding_line_endtoend/generate_oracle.py",
-    "sha256": "a94fb7c891e1521122221936428daf56a25d01066a016716a640214324f249bb"
+    "sha256": "5a0add5de67e610a1a9be7eeb3f1fc330dce26c0fcabf50ec5486765c0164598"
   },
   "load_tier": "local_batch",
-  "manifest_self_sha256": "69bca4d115d46804d83b7921d854c85c6c1855408a6ffcf116a7a36115ecbcdc",
+  "manifest_self_sha256": "3803a24fa2968b70ab0a5726b70601288977eca0b6c883ba95d95db59bd133f7",
   "oracles": [
     {
       "expected": {
@@ -101,6 +101,95 @@
           "abs": 0.0,
           "reason": "两个声明尺寸的差",
           "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "controlled_point_tension_n": 48.05932953847069,
+        "direction_flip_ratio": 2.566332395208135,
+        "sensor_tension_n": 30.0
+      },
+      "id": "oracle:line/the_drives_loop_sets_the_payout_load",
+      "inputs": {
+        "kind": "closed_loop_steady_state",
+        "measurement_transfer": 0.6242284336485697,
+        "note": "传感器在放线端、被控点在落位点；积分作用下稳态读数等于设定值",
+        "setpoint_n": 30.0
+      },
+      "tolerances": {
+        "controlled_point_tension_n": {
+          "abs": 0.0,
+          "reason": "**两条独立的腿要在这里对上**：驱动链侧是``设定值/measurement_transfer``（一个换算比），求解器侧是位移控制连续化到全滑移解出来的接触与摩擦。容差取与`lay_point_tension_n`同一档——瓶颈是同一个（收线步数），不是驱动链",
+          "rel": 0.006
+        },
+        "direction_flip_ratio": {
+          "abs": 0.0,
+          "reason": "``exp(μθ)``的平方，纯闭式。**方向搞反的误差是平方**——μ=0.3、90°时2.566，与能力位S6.4记的``r² = 2.566``同一个数",
+          "rel": 1e-15
+        },
+        "sensor_tension_n": {
+          "abs": 0.0,
+          "reason": "**回路自己的稳态残差**，不是建模误差。纯积分环走3000步（3 s、dt=1 ms、ζ=1）实测读数29.999641126347463，相对1.2e-5；取约8倍余量。**这一条红了说明回路没收敛**，而不是求解器不对",
+          "rel": 0.0001
+        }
+      }
+    },
+    {
+      "expected": {
+        "continuum_total": 1.393516939622117,
+        "free_roller_ratio": 1.0,
+        "per_roller_ratio": [
+          1.0734922432322915,
+          1.081983218526769,
+          1.0926967386955169,
+          1.0991681912752331
+        ],
+        "total_ratio": 1.3950289952942643
+      },
+      "id": "oracle:line/multi_roller_route",
+      "inputs": {
+        "kind": "discrete_capstan_per_roller",
+        "route": [
+          [
+            3,
+            0.12
+          ],
+          [
+            4,
+            0.1
+          ],
+          [
+            3,
+            0.15
+          ],
+          [
+            6,
+            0.08
+          ]
+        ],
+        "segment_angle_rad": 0.19634954084936207
+      },
+      "tolerances": {
+        "continuum_total": {
+          "abs": 0.0,
+          "reason": "``∏exp(μᵢθᵢ) = exp(Σμᵢθᵢ)``是指数函数的恒等式，双精度求值。**它与上面那条离散总比不是同一个数**——两者差``O(Δφ²)``，本路由上是2.4e-3相对。写两条正是为了不让人把它们混成一条",
+          "rel": 1e-15
+        },
+        "free_roller_ratio": {
+          "abs": 0.004,
+          "reason": "μ=0的那只轮：**切向力逐个恰为0.0（零容差，另判）**，而张力比只是落回1附近——实测0.996633，差3.37e-3，与上面那条端效应同量级同来源。**绝对容差**，因为这里要判的是「落回1」而不是「精确等于1」",
+          "rel": 0.0
+        },
+        "per_roller_ratio": {
+          "abs": 0.0,
+          "reason": "**这一档松，而松的理由不是「差不多就行」**：同一条装配上单只轮的偏差随段数单调下降（1段1.84e-2、2段1.53e-2、3段1.23e-2、4段9.50e-3、6段4.34e-3、8段2.54e-4，μ=0.30、收线0.03 mm实测），**那是端效应**——弧的两端各有一个非接触的``ψ=0``节点，转角在那里没有摩擦承接。本路由每只轮只有3—6段，四只实测6.59e-3／2.45e-3／5.43e-3／2.05e-3，取1e-2。**今天单只轮那条2.5e-4不是模型精度，是8段恰好落在交叉点上**",
+          "rel": 0.01
+        },
+        "total_ratio": {
+          "abs": 0.0,
+          "reason": "四只轮的端效应同号累加，实测1.64e-2",
+          "rel": 0.025
         }
       }
     }
