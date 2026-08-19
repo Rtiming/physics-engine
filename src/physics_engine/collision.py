@@ -151,9 +151,21 @@ def _segment_pair_separation_mm(
 
 
 def _sphere_signed_distance_mm(point_mm: Vector3, radius_mm: float) -> float:
-    """``|x| − R``，球心在局部原点。"""
+    """``|x| − R``，球心在局部原点。
 
-    return math.sqrt(sum(component * component for component in point_mm)) - radius_mm
+    **求和写成显式的三项相加，不用`sum()`**：CPython 3.12起`sum()`对float走
+    Neumaier补偿求和，与手写的``a + b + c``**不逐位相同**（本机实测20万组里
+    4.5万组不同）。本仓到处在写逐位判据，这个差别必须被知道而不是被撞上。
+    """
+
+    return (
+        math.sqrt(
+            point_mm[0] * point_mm[0]
+            + point_mm[1] * point_mm[1]
+            + point_mm[2] * point_mm[2]
+        )
+        - radius_mm
+    )
 
 
 def _capsule_signed_distance_mm(
@@ -182,9 +194,12 @@ def _rounded_box_signed_distance_mm(
     恰好是``K``的减去``f``**（体外体内都成立）。所以圆角只是末尾一次减法。
     """
 
-    q = tuple(abs(point_mm[axis]) - half_extents_mm[axis] for axis in range(3))
-    outside = math.sqrt(sum(max(component, 0.0) ** 2 for component in q))
-    inside = min(max(q[0], q[1], q[2]), 0.0)
+    qx = abs(point_mm[0]) - half_extents_mm[0]
+    qy = abs(point_mm[1]) - half_extents_mm[1]
+    qz = abs(point_mm[2]) - half_extents_mm[2]
+    ox, oy, oz = max(qx, 0.0), max(qy, 0.0), max(qz, 0.0)
+    outside = math.sqrt(ox * ox + oy * oy + oz * oz)
+    inside = min(max(qx, qy, qz), 0.0)
     return outside + inside - fillet_radius_mm
 
 
@@ -330,9 +345,12 @@ def _lowest_support_mm(shape: Shape, direction: Vector3) -> float:
             - resolved.radius_mm
         )
     if isinstance(resolved, RoundedBox):
+        extents = resolved.half_extents_mm
         return (
-            -sum(
-                resolved.half_extents_mm[axis] * abs(direction[axis]) for axis in range(3)
+            -(
+                extents[0] * abs(direction[0])
+                + extents[1] * abs(direction[1])
+                + extents[2] * abs(direction[2])
             )
             - resolved.fillet_radius_mm
         )
@@ -497,15 +515,16 @@ def _axis_aligned_box_separation_mm(
     有符号距离＝核心盒之间的减去``fa + fb``。
     """
 
-    gaps = []
-    for axis in range(3):
-        centre_gap = abs(posed_b.translation_mm[axis] - posed_a.translation_mm[axis])
-        gaps.append(
-            centre_gap - box_a.half_extents_mm[axis] - box_b.half_extents_mm[axis]
-        )
+    gaps = [
+        abs(posed_b.translation_mm[axis] - posed_a.translation_mm[axis])
+        - box_a.half_extents_mm[axis]
+        - box_b.half_extents_mm[axis]
+        for axis in range(3)
+    ]
     fillets = box_a.fillet_radius_mm + box_b.fillet_radius_mm
-    if any(gap > 0.0 for gap in gaps):
-        return math.sqrt(sum(max(gap, 0.0) ** 2 for gap in gaps)) - fillets
+    if gaps[0] > 0.0 or gaps[1] > 0.0 or gaps[2] > 0.0:
+        gx, gy, gz = (max(gap, 0.0) for gap in gaps)
+        return math.sqrt(gx * gx + gy * gy + gz * gz) - fillets
     return max(gaps) - fillets
 
 
