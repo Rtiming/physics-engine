@@ -41,11 +41,28 @@ S5.4的`missing`原文：**"十几匝不是一次装配出来的，是一匝一�
 
 ## 本模块不做什么
 
-* **不做匝数与半径生长**：那是`drives.SpoolTension`的``turns``；
+* **不做匝数与半径生长**：那是`drives.SpoolTension`的``turns``。
+  **2026-08-18（决策0093）补上了那根接线**：`winding.WindingFront`吃一个
+  `FeedFront`，把"喂进来了几段"换成"盘上几匝、半径多大"，
+  而`drives`要的正是那个匝数。**本模块一个字节没动**——
+  接线住在`winding`那一侧，因为它要的是卷绕的堆积律，不是喂料的布局；
 * **不做自接触**：新喂的一匝压在已绕的匝上是S5.2，要网格/连续体窄相；
 * **不做材料注入**（WDS `research/05`第三节称"当前最大的单项缺口"的那一条）：
   那是**带材从轮面上流过**、边界随材料移动，与本模块"往前接长度"不是一回事。
   本模块是**拉格朗日**的：每个节点始终是同一块材料。
+  **0093复核过这一条并且没有改它**：欧拉式材料注入是一次**新裁决**
+  （要裁"节点是不是物质点"，而0050／0062两条承重条款都建立在"是"上面），
+  不是一次接线。裁不动就留空——登记成GAP，触发条件在0093第五节。
+
+## 材料守恒记在**整数段**上（决策0093）
+
+``fed_material_length_mm``给的是浮点长度，而``(k−1)·h``与``(k−2)·h + h``
+在浮点上**不是同一个数**（``h = 0.1``、``k = 4``时差一个ulp）。
+于是"送进去多少＝盘上多了多少"这条守恒**不写在长度上**，
+写在``fed_segment_count``给的整数段数上——`winding.WindingFront`那一侧
+判的是``喂进来的段 == 跨距里的段 + 盘上的段``，整数、零容差、
+与浮点求和次序无关。实测：``h = 0.1``时1392个喂料档里**373档**
+浮点长度逐位不守恒，而整数恒等式**处处**成立。
 """
 
 from __future__ import annotations
@@ -168,6 +185,17 @@ class FeedFront:
             for node in range(fed_count, self.node_budget)
             for axis in range(3)
         )
+
+    def fed_segment_count(self, fed_count: int) -> int:
+        """已经离开料卷的**段数**``fed_count − 1``——**整数**。
+
+        它与`fed_material_length_mm`是同一件事的两种记法，
+        而**守恒记在这一种上**（见模块文档末节）：段数是整数，
+        长度是段数乘静止段长，于是守恒不依赖``rest_length_mm``的二进制形状。
+        """
+
+        self.assert_fed_count(fed_count)
+        return fed_count - 1
 
     def fed_material_length_mm(self, fed_count: int) -> float:
         """已喂进来的材料长度``(fed_count − 1)·rest_length``。
