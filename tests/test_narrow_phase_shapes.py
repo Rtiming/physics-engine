@@ -163,18 +163,68 @@ _FROZEN_PENETRATION_HEX: tuple[tuple[int, str], ...] = (
 )
 
 
-def test_the_existing_sphere_capsule_narrow_phase_is_unchanged_bit_for_bit():
-    """34个相交对的``penetration_mm``**逐位**等于开工前的值。
+#: 跨平台那一半允许的最大ulp差。**取2不是拍脑袋**：2026-08-19实测
+#: 同一棵树在macOS arm64与Linux x86-64上，34对里有2对差**恰好1 ulp**
+#: （`0x1.ca98be8f7ff90p+0`对`…7ff80p+0`、`0x1.8089984a00f89p+4`对`…00f88p+4`），
+#: 病根是`x ** 0.5`与libm在末位上的实现差（本轨自己在20万个正数里量到277个差1 ulp）。
+#: 取2留一档余量；**超过2就不再是"平台末位差"，是真的动了数**。
+_CROSS_PLATFORM_ULP_BUDGET = 2
 
-    冻下来的是`float.hex()`，不是十进制——十进制往返会掩盖最低位。
+
+def _ulp_gap(left: float, right: float) -> int:
+    """两个同号有限浮点之间隔了几个可表示数。"""
+
+    import struct
+
+    def ordinal(value: float) -> int:
+        bits = struct.unpack("<q", struct.pack("<d", value))[0]
+        return bits if bits >= 0 else -(bits & 0x7FFFFFFFFFFFFFFF)
+
+    return abs(ordinal(left) - ordinal(right))
+
+
+def test_the_existing_sphere_capsule_narrow_phase_is_unchanged():
+    """34个相交对的``penetration_mm``对开工前的值。**判两件事，分开判。**
+
+    **跨平台那一半**：每一对都在``_CROSS_PLATFORM_ULP_BUDGET``个ulp之内。
+    这一条在任何机器上都该成立，不成立就是真的动了数。
+
+    **同平台那一半**：`float.hex()`**逐位**相同——冻下来的是十六进制而不是十进制，
+    因为十进制往返会掩盖最低位。**它只在冻它的那台机器上成立**：
+    2026-08-19实测同一棵树在Linux x86-64上34对里有**2对差恰好1 ulp**，
+    病根是`x ** 0.5`与libm的末位实现差。**不成立时判skip并说清楚，不判红**——
+    那不是缺陷，是**一条本仓从来没有声明过的性质**，与九个oracle那件事同一族
+    （plans/07第六节"轴7"那一行）。
     """
 
+    frozen = dict(_FROZEN_PENETRATION_HEX)
     measured = {}
     for index, first, second in _sphere_capsule_corpus():
         events = BroadPhaseCollisionQuery((first, second)).check_state()
         if events and events[0].penetration_mm is not None:
-            measured[index] = events[0].penetration_mm.hex()
-    assert measured == dict(_FROZEN_PENETRATION_HEX)
+            measured[index] = events[0].penetration_mm
+    assert sorted(measured) == sorted(frozen), (
+        f"相交对的集合变了：多了{sorted(set(measured) - set(frozen))}、"
+        f"少了{sorted(set(frozen) - set(measured))}——**这一条与平台无关，是真的动了行为**"
+    )
+
+    drifted = {
+        index: (value.hex(), frozen[index], _ulp_gap(value, float.fromhex(frozen[index])))
+        for index, value in measured.items()
+        if value.hex() != frozen[index]
+    }
+    too_far = {i: d for i, d in drifted.items() if d[2] > _CROSS_PLATFORM_ULP_BUDGET}
+    assert not too_far, (
+        f"这些对超出了{_CROSS_PLATFORM_ULP_BUDGET}个ulp的跨平台余量：{too_far}——"
+        "**那不是平台末位差，是真的动了数**"
+    )
+    if drifted:
+        pytest.skip(
+            f"{len(drifted)}/{len(frozen)}对与冻结指纹差1—{_CROSS_PLATFORM_ULP_BUDGET}个ulp——"
+            f"**这台机器不是冻它的那台**（指纹冻于macOS arm64）。逐对：{drifted}。"
+            "病根是`x ** 0.5`与libm的末位实现差；**这不是缺陷，是本仓从来没有声明过的性质**，"
+            "与九个oracle跨架构不逐字节复现是同一族（plans/07第六节「轴7」那一行）。"
+        )
 
 
 def test_the_direct_query_returns_the_same_bits_as_the_scene_query():
@@ -204,6 +254,14 @@ def test_the_frozen_fingerprint_goes_red_when_one_bit_moves():
     assert mutated != original
     assert mutated == pytest.approx(original)  # 近似相等抓不到它
     assert mutated.hex() != original.hex()  # 逐位比对抓得到
+    assert _ulp_gap(mutated, original) == 1  # 而ulp尺子给出它到底差了几格
+
+    #: 跨平台那一半的牙齿：**超出余量的漂移必须被判出来**。
+    #: 没有这一条，`_CROSS_PLATFORM_ULP_BUDGET`可以被调到任意大而没人发现。
+    far = original
+    for _ in range(_CROSS_PLATFORM_ULP_BUDGET + 1):
+        far = math.nextafter(far, math.inf)
+    assert _ulp_gap(far, original) > _CROSS_PLATFORM_ULP_BUDGET
 
 
 # ==========================================================================

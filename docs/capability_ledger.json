@@ -185,7 +185,7 @@
           "exercises_physics": false,
           "evidence": [
             "case:narrow_phase_signed_distance",
-            "test:tests/test_narrow_phase_shapes.py::test_the_existing_sphere_capsule_narrow_phase_is_unchanged_bit_for_bit",
+            "test:tests/test_narrow_phase_shapes.py::test_the_existing_sphere_capsule_narrow_phase_is_unchanged",
             "test:tests/test_narrow_phase_shapes.py::test_sphere_sphere_matches_the_closed_form_pointwise",
             "test:tests/test_narrow_phase_shapes.py::test_the_frozen_fingerprint_goes_red_when_one_bit_moves"
           ],
