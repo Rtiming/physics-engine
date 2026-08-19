@@ -23,6 +23,15 @@
 
 场景⑥七位里S6.3/S6.4/S6.5/S6.6都是partial，全done才算端到端完成。
 **本案例让S6.7从todo进partial，主分母仍是0/6**——这不是谦虚，是清单的算法。
+
+## 2026-08-18（决策0088轨丁）：放线端那个30 N不再是写死的
+
+丁1把S6.3的欠账第一句接上了：``drives``的张力回路跑到稳态，
+它的输出经`PointLoad`真的加载在带材上，与导向轮的罚接触一起进
+`solve_equilibrium`。判的是**两条独立的腿在落位点合拢**——
+驱动链那条只有一个换算比、求解器那条只有接触与摩擦，两条不共享任何一行代码。
+
+**原有的七条门一个字未动**，新加的四条（三道正门＋一道必须红）在文件末尾。
 """
 
 from __future__ import annotations
@@ -40,7 +49,13 @@ from physics_engine.contact import (
     advance_contacts_quasistatic,
     build_contact_layout,
 )
-from physics_engine.drives import capstan_transfer_ratio
+from physics_engine.drives import (
+    MagneticParticleClutch,
+    PidController,
+    SpoolTension,
+    TensionLoop,
+    capstan_transfer_ratio,
+)
 from physics_engine.energies import (
     AxialStretch,
     EnergyContext,
@@ -70,6 +85,25 @@ HALF_CLEARANCE_MM = CHANNEL_HALF_WIDTH_MM - TAPE_HALF_WIDTH_MM
 
 FREE_SEGMENTS = 2
 PAYOUT_TENSION_N = 30.0
+
+#: 丁1：驱动链的三件（决策0088）。参数与`tests/test_drives.py`逐字相同——
+#: POC-050基型外推的23256 N·mm/A与50000 N·mm、假设的0.05 s磁滞
+#: （0062第二节裁决2那张"只有现场实测能补"的清单）。
+CLUTCH = MagneticParticleClutch(
+    torque_per_ampere_nmm=23256.0, rated_torque_nmm=50000.0, lag_s=0.05
+)
+SPOOL = SpoolTension(barrel_radius_mm=60.0, tape_thickness_mm=0.1)
+#: 闭环增益``K = k_M/R``（N/A）与临界阻尼下的``Ki = 1/(4ζ²τK)``。
+LOOP_GAIN_N_PER_A = 23256.0 / 60.0
+LOOP_INTEGRAL_GAIN = 1.0 / (4.0 * 1.0 * 1.0 * 0.05 * LOOP_GAIN_N_PER_A)
+LOOP_DT_S = 1.0e-3
+LOOP_STEPS = 3000
+#: **传感器在放线端、被控点在落位点**，中间隔着这一只轮的包角。
+#: ``measurement_transfer = T_传感器/T_被控点 = exp(−μθ)``。
+#: 没有默认值是`TensionLoop`有意为之的：写``1.0``等于声明"中间一个包角都没有"。
+MEASUREMENT_TRANSFER = 1.0 / capstan_transfer_ratio(
+    friction_coefficient=FRICTION, wrap_angle_rad=WRAP_RAD
+)
 #: 收线距离与步数：**0.02 mm / 480步**是实测选出来的。0.05 mm起内层牛顿
 #: 在同一构型里走不完（判别翻转叠加大位移），0.02 mm在480步时比值1.604693、
 #: 相对绞盘闭式1.695e-3。
@@ -131,7 +165,11 @@ def _geometry(traverse_mm: float):
     return points, wrap_start, wrap_end, len(points) - 1, chord
 
 
-def _assemble(traverse_mm: float):
+def _assemble(
+    traverse_mm: float,
+    payout_tension_n: float = PAYOUT_TENSION_N,
+    extra_terms: tuple = (),
+):
     points, wrap_start, wrap_end, lay, chord = _geometry(traverse_mm)
     nodes = len(points)
     contact_nodes = list(range(wrap_start + 1, wrap_end + 1))
@@ -145,7 +183,7 @@ def _assemble(traverse_mm: float):
         node_masses_kg=(1.0e-9,) * nodes,
         gravity_mm_s2=(0.0, 0.0, 0.0),
     )
-    rest = chord / (1.0 + PAYOUT_TENSION_N / EA_N)
+    rest = chord / (1.0 + payout_tension_n / EA_N)
     stretch = AxialStretch(
         edges=tuple((i, i + 1, rest, EA_N) for i in range(nodes - 1))
     )
@@ -170,9 +208,14 @@ def _assemble(traverse_mm: float):
         )
     )
     #: 放线端的张力：沿入口切线向外拉。**这是离合器给的力边界条件。**
-    pull = (0.0, -PAYOUT_TENSION_N, 0.0)
+    #: 丁1之后它可以由`drives.TensionLoop`的稳态输出给（见本文件末两条门），
+    #: 而本函数**看不出区别**——它拿到的就只是一个数。那正是分辨力那条门要判的。
+    pull = (0.0, -payout_tension_n, 0.0)
+    #: ``extra_terms``只为**必须红**那一条存在（见本文件末）：它让"接线时顺手
+    #: 多加了一项"这件事可以被真的做出来一次，于是逐位门证明得了自己会红。
+    #: 默认``()``时元组拼接是恒等式，**默认路径逐位不变**。
     registry = EnergyRegistry(
-        terms=(stretch, roller, flanges, PointLoad(loads=((0, pull),)))
+        terms=(stretch, roller, flanges, PointLoad(loads=((0, pull),))) + extra_terms
     )
     vector = list(layout.initial_vector(tuple(c for p in points for c in p)))
     for node in contact_nodes:
@@ -188,9 +231,17 @@ def _assemble(traverse_mm: float):
             contact_nodes, tuple(vector), frozenset(fixed), lay, chord)
 
 
-def _run(traverse_mm: float = 0.0, steps: int = WIND_STEPS, wind_mm: float = WIND_MM):
+def _run(
+    traverse_mm: float = 0.0,
+    steps: int = WIND_STEPS,
+    wind_mm: float = WIND_MM,
+    payout_tension_n: float = PAYOUT_TENSION_N,
+    extra_terms: tuple = (),
+):
     (layout, context, registry, stretch, roller, flanges,
-     contact_nodes, vector, fixed, lay, chord) = _assemble(traverse_mm)
+     contact_nodes, vector, fixed, lay, chord) = _assemble(
+        traverse_mm, payout_tension_n, extra_terms
+    )
     settled = solve_equilibrium(
         registry, context, layout.layout, vector,
         fixed_indices=fixed, residual_tol_n=1.0e-7, max_iterations=300,
@@ -403,4 +454,209 @@ def test_the_traversed_channel_is_why_the_flange_direction_became_explicit():
     assert explicit.rub_force_n(state)[1] == pytest.approx(2.5 * PENALTY_N_PER_MM)
     assert inferred.rub_force_n(state) == (0.0, 0.0), (
         "旧写法在横动过原点的槽上不再给零——那本门记的病根就要重写"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 丁1：张力真的进求解器（决策0088，兑现S6.3的``missing``第一句）
+# ---------------------------------------------------------------------------
+
+
+def _tension_loop(measurement_transfer: float = MEASUREMENT_TRANSFER) -> TensionLoop:
+    """真机形状的张力回路：磁粉离合器 ＋ 卷径换算 ＋ 纯积分PID。
+
+    **纯积分**（``Kp = Kd = 0``）是有意的：它精确是一个二阶系统，
+    稳态无静差可以论证而不是观测（`tests/test_drives.py`那一族门的口径）。
+    ``sensor=None``也是有意的——量化台阶会让稳态停在台阶上，
+    那条误差本身有它自己的门（S6.4），**在这里它只会污染分辨力那一条**。
+    """
+
+    return TensionLoop(
+        clutch=CLUTCH,
+        spool=SPOOL,
+        controller=PidController(
+            proportional=0.0,
+            integral_gain=LOOP_INTEGRAL_GAIN,
+            derivative=0.0,
+            integral_limit=1.0e6,
+        ),
+        setpoint_n=PAYOUT_TENSION_N,
+        dt_s=LOOP_DT_S,
+        delay_line=None,
+        sensor=None,
+        measurement_transfer=measurement_transfer,
+    )
+
+
+def _settled_loop(measurement_transfer: float = MEASUREMENT_TRANSFER) -> TensionLoop:
+    """跑到稳态的回路。**返回的是回路本身**，落位点张力是它的`tension_n`。"""
+
+    settled, _ = _tension_loop(measurement_transfer).run(LOOP_STEPS)
+    return settled
+
+
+def _payout_load_from_drives(loop: TensionLoop) -> float:
+    """回路 → 放线端的力边界条件。
+
+    回路的`tension_n`是**被控点**（落位点）的张力；传感器装在放线端，
+    于是放线端的张力是``T_被控点 · measurement_transfer``。
+    **这一步是本片全部的"接线"**：从这里往后，求解器拿到的只是一个数。
+    """
+
+    return loop.tension_n * loop.measurement_transfer
+
+
+@pytest.fixture(scope="module")
+def drives_driven():
+    """放线端外载**由张力回路给**的那一次运行。"""
+
+    loop = _settled_loop()
+    payout = _payout_load_from_drives(loop)
+    return loop, payout, _run(0.0, payout_tension_n=payout)
+
+
+@pytest.mark.batch
+def test_the_payout_load_comes_from_the_drives_loop_and_the_two_legs_agree(drives_driven):
+    """**S6.3的``missing``第一句在这里被兑现**：`drives`产出的力经`PointLoad`
+    真的加载在带材上，并与导向轮的罚接触和库仑摩擦一起进`solve_equilibrium`。
+
+    ## 判的是两条独立的腿对不对得上，不是"跑通了"
+
+    * **驱动链那条腿**：电流→扭矩（线性段＋饱和＋零阶保持磁滞）→``T = M/R(n)``，
+      再经``measurement_transfer``把被控点张力换算到传感器位置。
+      它全程**没有一个几何量**，只有一个换算比；
+    * **求解器那条腿**：把放线端那个力加上去，让8个接触在收线的连续化里
+      同时滑移到摩擦锥上，落位点的轴力是解出来的。
+
+    两条给出同一个落位点张力，而它们**不共享任何一行代码**。
+    一条腿把``exp``写成``exp(−·)``、或者把``T = M/R``写成``T = M·R``，
+    这条门当场红。
+
+    ## 实测（2026-08-18）
+
+    | 量 | 值 |
+    |---|---|
+    | 回路稳态读数（传感器＝放线端） | 29.999641126347463 N |
+    | 回路自己算的被控点张力 | 48.05875685149555 N |
+    | 求解器解出的落位点轴力 | 见断言，相对闭式1.7e-3 |
+    """
+
+    loop, payout, (step, stretch, *_) = drives_driven
+    entry = _oracle("oracle:line/the_drives_loop_sets_the_payout_load")
+    #: 一、回路真的收敛到设定值——**它红了说明回路没收敛，不是求解器不对**。
+    assert payout == pytest.approx(
+        entry.expected["sensor_tension_n"],
+        rel=entry.tolerances["sensor_tension_n"].rel_tol,
+    )
+    #: 二、回路自己算的被控点张力＝设定值·exp(μθ)。**纯驱动链，无几何。**
+    assert loop.tension_n == pytest.approx(
+        entry.expected["controlled_point_tension_n"],
+        rel=entry.tolerances["sensor_tension_n"].rel_tol,
+    )
+    #: 三、求解器解出来的落位点轴力与上一条对上。**两条腿在这里合拢。**
+    tensions = stretch.axial_force_n(step.state)
+    assert tensions[0] == pytest.approx(payout, rel=1.0e-9), (
+        "第一段轴力必须恰是外载——它是边界条件不是解出来的量"
+    )
+    assert tensions[-1] == pytest.approx(
+        loop.tension_n,
+        rel=entry.tolerances["controlled_point_tension_n"].rel_tol,
+    )
+    assert tensions[-1] == pytest.approx(
+        entry.expected["controlled_point_tension_n"],
+        rel=entry.tolerances["controlled_point_tension_n"].rel_tol,
+    )
+
+
+@pytest.mark.batch
+def test_dropping_the_drives_path_and_handing_over_the_same_number_is_bit_for_bit(
+    drives_driven,
+):
+    """**分辨力**：把`drives`那一路整个拿掉、直接把同一个浮点数当力边界条件，
+    整条状态向量**逐位相同**（`float.hex()`，不是`pytest.approx`）。
+
+    ## 这条门证明什么、不证明什么
+
+    **证明**：`drives`接进来的**只有那一个数**。它没有顺手往registry里塞第二个
+    能量项、没有改动任何一个节点的自由度划分、没有改任何一段的自然长度以外的东西。
+    一个"顺手把离合器扭矩也当成一个力矩加上去"的实现在这里当场红。
+
+    **不证明**：那个数本身对不对。那是上一条门的活。
+    **两条门必须都在**——只有这一条等于验了个恒等式，只有上一条则放得过
+    "在装配里偷偷再加一项"这类错误。
+
+    ## 为什么判`float.hex()`
+
+    0068吃过``-0.0 == 0.0``为真而`canonical_bytes`不同那一课（0072第1.2节引）。
+    "逐位"这个词在本仓只有一个意思，就是IEEE-754位型相同。
+    """
+
+    _, payout, (step, *_) = drives_driven
+    plain = _run(0.0, payout_tension_n=payout)[0]
+    assert [value.hex() for value in plain.state.vector] == [
+        value.hex() for value in step.state.vector
+    ], "同一个数、两条路，状态向量却不逐位相同——`drives`那一路带进来的不只是那个力"
+
+
+@pytest.mark.batch
+def test_flipping_the_measurement_transfer_squares_the_error():
+    """**必须红的那一半**：传递比方向搞反时误差是**平方**——``exp(2μθ) = 2.566``。
+
+    ``measurement_transfer = T_传感器/T_被控点``。传感器在放线端、
+    被控点在落位点时它是``exp(−μθ)``；写成``exp(+μθ)``就等于声明
+    "传感器在落位点、被控点在放线端"，而回路会照着这条错误声明去调。
+
+    这条不用跑求解器（回路的稳态是闭式），**所以它是秒级的**。
+    它守的是S6.4能力位那句"方向搞反误差是平方（r² = 2.566）"——
+    那句话在0062里只是一段说明，从这里起它是一道门。
+    """
+
+    entry = _oracle("oracle:line/the_drives_loop_sets_the_payout_load")
+    right = _settled_loop().tension_n
+    flipped = _settled_loop(1.0 / MEASUREMENT_TRANSFER).tension_n
+    assert right / flipped == pytest.approx(
+        entry.expected["direction_flip_ratio"], rel=1.0e-4
+    ), "方向搞反的比值不是exp(2μθ)——传递比不再是T_传感器/T_被控点了"
+    #: 顺带钉住"这个数就是2.566"，免得闭式与实现一起漂。
+    assert entry.expected["direction_flip_ratio"] == pytest.approx(2.5663, rel=1.0e-4)
+
+
+@pytest.mark.batch
+def test_one_extra_load_on_the_payout_node_makes_the_bit_for_bit_gate_red(drives_driven):
+    """**上一条逐位门的"必须红"**：接线时顺手多加一项，它就当场红。
+
+    多加的那一项**只有放线端外载的万分之一**（3.0 mN）。取这么小是有意的：
+    逐位门要证明的是它连一份小到看不出来的多余载荷都拦得住，而不是只拦得住灾难。
+
+    ## 起草这条门时撞到的两件事，两件都留下
+
+    **一、`EnergyRegistry`本来就不收同名项。** 第一版的额外项用了`PointLoad`
+    的默认名，registry当场拒：``duplicate energy term names: ['point_load']``。
+    于是"顺手再加一个`PointLoad`"这个最直白的错法根本走不到求解器——
+    要犯这个错，得先绕过一道已经存在的门。**那条护栏记在这里。**
+
+    **二、这条链路的准静态连续化对收线步数不是单调的。** 起草时为了省时间
+    把步数压到4，结果：干净的4步**过**、加了扰动的4步**不收敛**；
+    再试干净的20步**也不收敛**、60步又过。**4过、20红、60过、480过**——
+    非单调。所以本门老老实实用与被验运行相同的480步。
+    这条已作为GAP登记在决策0088第五节。
+    """
+
+    _, payout, (clean, *_) = drives_driven
+    surplus = payout * 1.0e-4
+    dirty, dirty_stretch, *_ = _run(
+        0.0, payout_tension_n=payout,
+        extra_terms=(
+            PointLoad(
+                name="point_load/one_ten_thousandth_too_much",
+                loads=((0, (0.0, -surplus, 0.0)),),
+            ),
+        ),
+    )
+    assert [v.hex() for v in clean.state.vector] != [
+        v.hex() for v in dirty.state.vector
+    ], "多加了一项而逐位门没红——那道门是空的"
+    #: 顺带钉住"多出来的正是那一份"：第一段轴力从``payout``变成``payout + surplus``。
+    assert dirty_stretch.axial_force_n(dirty.state)[0] == pytest.approx(
+        payout + surplus, rel=1.0e-9
     )

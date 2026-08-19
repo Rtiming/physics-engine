@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """放线—导向—张力—收线端到端的金标生成器——**闭式，独立于被验内核**。
 
-本案例把四件事装到一条链路上跑一次：放线端的张力（离合器给的力边界条件）、
+本案例把四件事装到一条链路上跑一次：放线端的张力（**由张力回路算出来的**力边界条件）、
 导向轮上的罚接触与库仑摩擦、收线端的位移控制（卷走带材）、
 以及排线横动把带材边缘顶上法兰内环面。
 
-## 四条闭式
+## 六条闭式（前四条是2026-08-17第一版，后两条是丁1加的）
 
 ### 一、放线端张力恰为设定值
 
@@ -38,9 +38,34 @@
 **这条说的是"蹭边力正比于张力"**——张力调高，蹭边就更狠。
 它是小角近似，`sin θ ≈ θ`的误差是``O((δ/L)²)``；δ=1.5 mm、L=9.8 mm时约1.2%。
 
+### 五、放线端的张力**由驱动链算出来**（2026-08-18，决策0088丁1）
+
+本案例第一版把放线端张力写成一个字面量``30.0``。S6.3的欠账原话是
+"`drives`产出的是一个力的数值，**尚无案例让它经`PointLoad`真的加载在带材上
+并与接触联立**"。丁1接的就是这条线：张力回路跑到稳态，它的输出经`PointLoad`
+进`solve_equilibrium`，与导向轮的罚接触和库仑摩擦一起解。
+
+闭式是回路自己的稳态，**与求解器无关**：积分作用下稳态读数等于设定值，于是
+
+    T_传感器 = 设定值
+    T_被控点 = 设定值 / measurement_transfer = 设定值 · exp(μθ)
+
+``measurement_transfer = exp(−μθ)``是"传感器在放线端、被控点在落位点"这个
+构型的声明。**这条闭式与第二条是两条独立的腿**：一条是驱动链自己的记账
+（一个换算比），一条是求解器解出来的接触与摩擦。两条必须给出同一个落位点张力，
+而它们之间不共享任何一行代码。
+
+### 六、传递比方向搞反时误差是**平方**
+
+把``measurement_transfer``写成``exp(+μθ)``（"传感器在落位点、被控点在放线端"）
+时，被控点张力算出来是``设定值·exp(−μθ)``，与正确值差``exp(2μθ)``倍。
+μ=0.3、θ=90°时是**2.566**。这个数与S6.4能力位记的``r² = 2.566``是同一个。
+
 ## 生成器不做什么
 
 不调`solve_equilibrium`、不调任何接触项、不引任何引擎的力学模块。
+**`drives`那一路也不引**：第五条闭式是手写的``设定值·exp(μθ)``，
+金标里不出现`TensionLoop`。
 """
 
 from __future__ import annotations
@@ -56,7 +81,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from physics_engine.oracles import file_sha256, write_manifest  # noqa: E402
 
 ALGORITHM_ID = "algorithm:oracle/winding_line_endtoend"
-ALGORITHM_VERSION = "1.0.0"
+ALGORITHM_VERSION = "1.1.0"
 
 #: 真机导轮（`winding-machine/HARDWARE_TOPOLOGY.md`，2026-07-07现场确认）：
 #: 外径100 mm ⟹ 半径50 mm；有效宽度17 mm ⟹ 槽半宽8.5 mm。
@@ -68,7 +93,8 @@ TAPE_HALF_WIDTH_MM = 2.0
 WRAP_RAD = math.pi / 2.0
 FRICTION = 0.30
 WRAP_SEGMENTS = 8
-#: 放线端张力：真机张力区间10—30 N的上端。
+#: 放线端张力：真机张力区间10—30 N的上端。**它同时是张力回路的设定值**——
+#: 丁1之后这个数不再直接当力边界条件用，而是回路的``setpoint_n``。
 PAYOUT_TENSION_N = 30.0
 
 
@@ -159,6 +185,50 @@ def main() -> int:
                 },
                 "overshoot_at_eight_mm": {
                     "abs": 0.0, "rel": 1.0e-15, "reason": "同上",
+                },
+            },
+        },
+        {
+            "id": "oracle:line/the_drives_loop_sets_the_payout_load",
+            "inputs": {
+                "kind": "closed_loop_steady_state",
+                "setpoint_n": PAYOUT_TENSION_N,
+                "measurement_transfer": 1.0 / capstan,
+                "note": (
+                    "传感器在放线端、被控点在落位点；积分作用下稳态读数等于设定值"
+                ),
+            },
+            "expected": {
+                "sensor_tension_n": PAYOUT_TENSION_N,
+                "controlled_point_tension_n": PAYOUT_TENSION_N * capstan,
+                "direction_flip_ratio": capstan * capstan,
+            },
+            "tolerances": {
+                "sensor_tension_n": {
+                    "abs": 0.0, "rel": 1.0e-4,
+                    "reason": (
+                        "**回路自己的稳态残差**，不是建模误差。纯积分环走3000步"
+                        "（3 s、dt=1 ms、ζ=1）实测读数29.999641126347463，"
+                        "相对1.2e-5；取约8倍余量。**这一条红了说明回路没收敛**，"
+                        "而不是求解器不对"
+                    ),
+                },
+                "controlled_point_tension_n": {
+                    "abs": 0.0, "rel": 6.0e-3,
+                    "reason": (
+                        "**两条独立的腿要在这里对上**：驱动链侧是"
+                        "``设定值/measurement_transfer``（一个换算比），"
+                        "求解器侧是位移控制连续化到全滑移解出来的接触与摩擦。"
+                        "容差取与`lay_point_tension_n`同一档——瓶颈是同一个"
+                        "（收线步数），不是驱动链"
+                    ),
+                },
+                "direction_flip_ratio": {
+                    "abs": 0.0, "rel": 1.0e-15,
+                    "reason": (
+                        "``exp(μθ)``的平方，纯闭式。**方向搞反的误差是平方**——"
+                        "μ=0.3、90°时2.566，与能力位S6.4记的``r² = 2.566``同一个数"
+                    ),
                 },
             },
         },

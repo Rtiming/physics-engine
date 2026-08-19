@@ -5,12 +5,12 @@
   "facet_version": "0.1",
   "generator": {
     "algorithm_id": "algorithm:oracle/winding_line_endtoend",
-    "algorithm_version": "1.0.0",
+    "algorithm_version": "1.1.0",
     "path_relative": "cases/winding_line_endtoend/generate_oracle.py",
-    "sha256": "a94fb7c891e1521122221936428daf56a25d01066a016716a640214324f249bb"
+    "sha256": "6ad8233a55edc48f1c39fa7287aa2734a0a68bcec91d4e93714439a0880af6b0"
   },
   "load_tier": "local_batch",
-  "manifest_self_sha256": "69bca4d115d46804d83b7921d854c85c6c1855408a6ffcf116a7a36115ecbcdc",
+  "manifest_self_sha256": "f7492229986981ae765bd2b3384316bb123ada80d1336a389860e488d4b45f4a",
   "oracles": [
     {
       "expected": {
@@ -101,6 +101,37 @@
           "abs": 0.0,
           "reason": "两个声明尺寸的差",
           "rel": 1e-15
+        }
+      }
+    },
+    {
+      "expected": {
+        "controlled_point_tension_n": 48.05932953847069,
+        "direction_flip_ratio": 2.566332395208135,
+        "sensor_tension_n": 30.0
+      },
+      "id": "oracle:line/the_drives_loop_sets_the_payout_load",
+      "inputs": {
+        "kind": "closed_loop_steady_state",
+        "measurement_transfer": 0.6242284336485697,
+        "note": "传感器在放线端、被控点在落位点；积分作用下稳态读数等于设定值",
+        "setpoint_n": 30.0
+      },
+      "tolerances": {
+        "controlled_point_tension_n": {
+          "abs": 0.0,
+          "reason": "**两条独立的腿要在这里对上**：驱动链侧是``设定值/measurement_transfer``（一个换算比），求解器侧是位移控制连续化到全滑移解出来的接触与摩擦。容差取与`lay_point_tension_n`同一档——瓶颈是同一个（收线步数），不是驱动链",
+          "rel": 0.006
+        },
+        "direction_flip_ratio": {
+          "abs": 0.0,
+          "reason": "``exp(μθ)``的平方，纯闭式。**方向搞反的误差是平方**——μ=0.3、90°时2.566，与能力位S6.4记的``r² = 2.566``同一个数",
+          "rel": 1e-15
+        },
+        "sensor_tension_n": {
+          "abs": 0.0,
+          "reason": "**回路自己的稳态残差**，不是建模误差。纯积分环走3000步（3 s、dt=1 ms、ζ=1）实测读数29.999641126347463，相对1.2e-5；取约8倍余量。**这一条红了说明回路没收敛**，而不是求解器不对",
+          "rel": 0.0001
         }
       }
     }
