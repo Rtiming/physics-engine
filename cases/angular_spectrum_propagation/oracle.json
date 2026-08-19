@@ -1,0 +1,329 @@
+{
+  "arrays": {},
+  "case_id": "case/angular_spectrum_propagation",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/angular_spectrum_propagation",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/angular_spectrum_propagation/generate_oracle.py",
+    "sha256": "812dc1015417d72020d3c93ad6f655869d15a13dae9f74cda35d33711e96a6d1"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "e5f805ba53b82bf23f6e83e9c3b6f0ef537bdc4f6dd371760dc013dec4921ab0",
+  "oracles": [
+    {
+      "expected": {
+        "evanescent_eigenvalue_components": [
+          [
+            0.27733186954199096,
+            0.0
+          ],
+          [
+            0.08526016278848961,
+            0.0
+          ],
+          [
+            0.013271253304655952,
+            0.0
+          ],
+          [
+            0.0024080476989158067,
+            0.0
+          ]
+        ],
+        "paraxial_eigenvalue_gap": [
+          0.0,
+          0.0003916081599694616,
+          0.03817581365340361,
+          0.7104103313072194,
+          0.7857990798039157,
+          0.926294405646837,
+          1.0116360331422831,
+          1.0004591923739439
+        ],
+        "propagating_eigenvalue_components": [
+          [
+            -0.423798162464939,
+            0.9057566546768183
+          ],
+          [
+            -0.38755061641327243,
+            0.921848425565555
+          ],
+          [
+            -0.046011029579680215,
+            0.9989409317657465
+          ],
+          [
+            0.9552134300762569,
+            0.29591773012435696
+          ]
+        ]
+      },
+      "id": "oracle:angular_spectrum/plane_wave_eigenvalues",
+      "inputs": {
+        "complex_component_order": [
+          "real",
+          "imaginary"
+        ],
+        "count": 32,
+        "distance_m": 2.0227560050568898e-07,
+        "evanescent_bins": [
+          6,
+          8,
+          12,
+          16
+        ],
+        "kind": "closed_form_exact_transfer_function",
+        "pitch_m": 1e-07,
+        "propagating_bins": [
+          0,
+          1,
+          3,
+          5
+        ],
+        "wavelength_m": 6.328e-07
+      },
+      "tolerances": {
+        "evanescent_eigenvalue_components": {
+          "abs": 1.6e-14,
+          "reason": "倏逝分量按``exp(-k z sqrt(q-1))``衰减——**不丢也不涨**。虚部恒为0（衰减因子是实的），实部从0.2773降到0.0024。容差与上一行同源同值：走的是同一条变换路径。**傍轴传递函数在这四个bin上的模恒为1**，即它给不出这一行的任何一个数",
+          "rel": 0.0
+        },
+        "paraxial_eigenvalue_gap": {
+          "abs": 1e-14,
+          "reason": "精确本征值与**傍轴**本征值之差的模，逐bin。它冻的是「这条判据分得开精确与傍轴」这件事本身：``lambda f = 0.1978``处差3.9161e-4、``0.9888``处差7.1041e-1、倏逝的四个bin上差7.8580e-1到1.0116。**半群、能量守恒、``z->0``退化三条门对精确与傍轴一视同仁**，只有本条oracle所依赖的那条判据分得开。容差按两个模长相减的浮点误差取（各约几个eps）",
+          "rel": 0.0
+        },
+        "propagating_eigenvalue_components": {
+          "abs": 1.6e-14,
+          "reason": "平面波是角谱传播的**本征函数**，本征值是闭式``exp(i k z sqrt(1 - (lambda f)^2))``。被验路径是长度32的正逆变换各一次（各约``log2(32)=5``级蝶形）再逐点相除，误差模型``2 * 16 * 32 * eps = 2.3e-13``；实测最坏3.5253e-15（余量4.5倍）。**判绝对不判相对**：本征值的实部虚部各自会过零，过零点上相对误差没有意义",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "paraxial_power_ratio_would_be": 1.0,
+        "power_ratio_after_propagation": 0.8955268675319369
+      },
+      "id": "oracle:angular_spectrum/evanescent_power_loss",
+      "inputs": {
+        "count": 32,
+        "distance_m": 2.0227560050568898e-07,
+        "edge_offset_in_pitches": 0.25,
+        "kind": "parseval_in_the_frequency_domain",
+        "note": "间距100纳米、波长632.8纳米，32格里只有11格是传播的，其余是倏逝的",
+        "pitch_m": 1e-07,
+        "propagating_bin_count": 11,
+        "rows": 1,
+        "slit_columns": [
+          0,
+          1,
+          2,
+          31
+        ],
+        "slit_samples": 4,
+        "wavelength_m": 6.328e-07
+      },
+      "tolerances": {
+        "paraxial_power_ratio_would_be": {
+          "abs": 0.0,
+          "reason": "**零容差，而且是结构性的**：傍轴传递函数的指数是纯虚的，``|H| = 1``逐bin成立，于是同一条Parseval求和的分子分母**逐项相同**，比值恒等于1.0。它与上一行的差（1.0 - 0.8955 = 0.1045）就是「傍轴给不出角谱」这句话的量。本行**不是**被验实现的输出，是被验实现必须与之不同的那个数——conformance那边用它构造必红",
+          "rel": 0.0
+        },
+        "power_ratio_after_propagation": {
+          "abs": 1e-14,
+          "reason": "**本案例最硬的一条角谱独有判据，而且它只是一个数。**含倏逝内容的场传过去会掉能量：精确传递函数在倏逝bin上``|H| = exp(-k z sqrt(q-1)) < 1``。金标由**频域Parseval**算（``sum |H|^2 |S|^2 / sum |S|^2``，`S`是定义式直接求和），被验实现是在**实空间**逐点求``|U|^2``再乘``dx dy``——两条路只共用Parseval恒等式本身。实测偏差2.2204e-16（余量45倍）",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "aperture_lit_column_count": 8.0,
+        "aperture_lit_row_count": 4.0,
+        "aperture_sample_count": 32.0,
+        "field_components": [
+          [
+            0.6850161897638083,
+            -0.9215061728632229
+          ],
+          [
+            0.6850161897638082,
+            -0.9215061728632229
+          ],
+          [
+            0.2290193157194292,
+            -0.45121074976242914
+          ],
+          [
+            -0.03920854821054144,
+            0.18684230567847782
+          ],
+          [
+            0.6850161897638091,
+            -0.921506172863222
+          ],
+          [
+            0.4105439148935171,
+            -0.6101178093371168
+          ],
+          [
+            0.08401320376397099,
+            0.048065686715099545
+          ],
+          [
+            -0.031602705515106175,
+            0.002550367232204802
+          ],
+          [
+            -4.739375972659388e-06,
+            -3.776365143544347e-07
+          ],
+          [
+            0.4067289211127056,
+            -0.6359698328473463
+          ],
+          [
+            0.21529540776254427,
+            0.01169273631600887
+          ],
+          [
+            0.17354640116351497,
+            0.07973674680075364
+          ]
+        ]
+      },
+      "id": "oracle:angular_spectrum/rectangular_hole_field",
+      "inputs": {
+        "aperture_samples_x": 8,
+        "aperture_samples_y": 4,
+        "complex_component_order": [
+          "real",
+          "imaginary"
+        ],
+        "count": 32,
+        "distance_m": 0.0006321112515802782,
+        "edge_offset_in_pitches": 0.25,
+        "kind": "direct_two_dimensional_summation",
+        "pitch_m": 5e-06,
+        "samples": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            4
+          ],
+          [
+            0,
+            8
+          ],
+          [
+            1,
+            0
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            4,
+            4
+          ],
+          [
+            8,
+            8
+          ],
+          [
+            16,
+            16
+          ],
+          [
+            31,
+            31
+          ],
+          [
+            30,
+            5
+          ],
+          [
+            5,
+            30
+          ]
+        ],
+        "wavelength_m": 6.328e-07
+      },
+      "tolerances": {
+        "aperture_lit_column_count": {
+          "abs": 0.0,
+          "reason": "亮列恰好8。与上一行成对：两个数**不相等**，于是行列搞混的实现在这里当场露（方形孔看不出来）",
+          "rel": 0.0
+        },
+        "aperture_lit_row_count": {
+          "abs": 0.0,
+          "reason": "**这一行是「孔」与「缝」的分别**：亮行恰好4（不是全部32）。仓里此前每一处`rectangular_aperture`调用的``half_width_y_m``都取``1e9 * pitch``，亮满所有行——那是缝，能力位S4.6的label里「矩孔」那一格因此长期是空的",
+          "rel": 0.0
+        },
+        "aperture_sample_count": {
+          "abs": 0.0,
+          "reason": "孔内采样数是整数，零容差。它锁的是**采样孔宽**——边界落在采样点上时这个数会整差一格（0086第5.1节实测踩过：期望32个采样、实得31个），而图样照样漂亮",
+          "rel": 0.0
+        },
+        "field_components": {
+          "abs": 8e-15,
+          "reason": "二维直接求和 对 基2蝶形（**MFT-FFT等价**在角谱那一支上的兑现；`double_slit_propagated`冻的是夫琅禾费那一支）。两侧的浮点误差：正变换32项累加、乘一次传递函数、逆变换1024项累加再除``N^2``，合起来约``30 eps = 6.7e-15``；实测最坏9.9920e-16（余量8.0倍）。冻的采样点**跨四个象限**——角谱的坐标是FFT次序，只冻左上角那一块的话把负频率折回正侧的实现照样全绿",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "power_ratio_after_propagation": 1.0,
+        "semigroup_max_deviation": 0.0,
+        "zero_distance_deviation_from_the_incident_field": 0.0,
+        "zero_distance_deviation_from_the_pure_round_trip": 0.0
+      },
+      "id": "oracle:angular_spectrum/self_consistency",
+      "inputs": {
+        "count": 32,
+        "distance_m": 0.0006321112515802782,
+        "kind": "transfer_function_self_consistency",
+        "note": "三条恒等式：z->0退化、半群、能量守恒。它们对精确角谱与傍轴形制**一视同仁**——分不开两者，所以本案例另有前两条oracle",
+        "pitch_m": 5e-06,
+        "transfer_function_max_distance_m": 0.0012642225031605564,
+        "wavelength_m": 6.328e-07
+      },
+      "tolerances": {
+        "power_ratio_after_propagation": {
+          "abs": 1e-14,
+          "reason": "网格甲的间距是波长的7.9倍，**所有bin都在光锥内**（``max |lambda f| = lambda/(2 dx) = 0.063``），于是``|H| = 1``逐bin成立、能量精确守恒。实测偏差1.1102e-16（余量90倍）。**与第二条oracle成对**：那里21/32的bin是倏逝的、比值0.8955；这里0/32是倏逝的、比值1。同一个传播器、两个物理构型",
+          "rel": 0.0
+        },
+        "semigroup_max_deviation": {
+          "abs": 4e-15,
+          "reason": "传两次``z/2``与传一次``z``是同一个结果——**角谱有半群性质，而单次FFT的菲涅耳形制没有**（两段的输出网格不同）。误差模型``64 eps * 峰值振幅 = 64 * eps * 1.148 = 1.6e-14``；实测3.1402e-16（余量13倍）。**这条依赖平台的三角函数幅角约化**：本例的``k z = 6.28e3``弧度，比0086那条门的``1e5``小一个多数量级，所以本案例对平台的敏感度低于`tests/`里那一条；它红了仍然先查平台不要先放宽",
+          "rel": 0.0
+        },
+        "zero_distance_deviation_from_the_incident_field": {
+          "abs": 1e-15,
+          "reason": "``ifft2(fft2(U0))``对`U0`的最大偏差。期望是精确的0（往返是恒等），容差按``16 eps max|U0| = 3.6e-15``的误差模型取1e-15（掩模``max|U0| = 1``，实测2.0024e-16，余量5.0倍）",
+          "rel": 0.0
+        },
+        "zero_distance_deviation_from_the_pure_round_trip": {
+          "abs": 0.0,
+          "reason": "``z = 0``时传递函数**逐位等于1**，于是结果与``ifft2(fft2(U0))``是同一串浮点数。**零容差不是乐观**：传递函数里多算一步（例如把``exp(0)``写成别的什么）当场露。实测最大偏差返回`0.0`",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
