@@ -458,10 +458,10 @@ def ifft2(field: ComplexField2D) -> ComplexField2D:
 __all__ = [
     "COMPLEX_COMPONENT_COUNT",
     "COMPLEX_COMPONENT_ORDER",
+    "ComplexField2D",
     "FORWARD_TRANSFORM_SIGN",
     "INVERSE_SCALES_BY_RECIPROCAL_COUNT",
     "INVERSE_TRANSFORM_SIGN",
-    "ComplexField2D",
     "complex_from_components",
     "complex_to_components",
     "fft",
