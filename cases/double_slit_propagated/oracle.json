@@ -1,0 +1,207 @@
+{
+  "arrays": {},
+  "case_id": "case/double_slit_propagated",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/double_slit_propagated",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/double_slit_propagated/generate_oracle.py",
+    "sha256": "f601b72070e24bc1ac8c03d715526a2fc8a4ccb3f6f75f7379471ac53a77839b"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "a2a30dd92e1177a109dc94743e5d60eaf8570ae6d794d0e6542a0bf67b2667cd",
+  "oracles": [
+    {
+      "expected": {
+        "aperture_sample_count": 8.0,
+        "relative_amplitude_components": [
+          [
+            4.105210168066386e-17,
+            -1.699420903123627e-17
+          ],
+          [
+            -0.5017964257952494,
+            -0.8371967581614039
+          ],
+          [
+            -5.721737686321946e-17,
+            3.92555301309307e-17
+          ],
+          [
+            -0.3467599613305962,
+            -0.8371526015321274
+          ],
+          [
+            4.9904645725492605e-17,
+            6.808426491668868e-17
+          ],
+          [
+            0.7192742770866736,
+            0.3401913972665303
+          ],
+          [
+            0.24999999999982833,
+            -0.6035533905933448
+          ],
+          [
+            0.4202606028650905,
+            -0.25189451149269837
+          ],
+          [
+            -0.22499405578394086,
+            0.22499405578426718
+          ],
+          [
+            0.050805300372699126,
+            0.14199130239143523
+          ],
+          [
+            2.775557561566212e-17,
+            2.9185872797124796e-17
+          ]
+        ]
+      },
+      "id": "oracle:double_slit/relative_amplitude_table",
+      "inputs": {
+        "aperture_positions": [
+          -17,
+          -16,
+          -15,
+          -14,
+          15,
+          16,
+          17,
+          18
+        ],
+        "bins": [
+          4,
+          8,
+          12,
+          16,
+          20,
+          24,
+          32,
+          40,
+          48,
+          56,
+          64
+        ],
+        "columns": 256,
+        "complex_component_order": [
+          "real",
+          "imaginary"
+        ],
+        "edge_offset_in_pitches": 0.25,
+        "kind": "direct_summation_over_aperture_samples",
+        "pitch_m": 1e-05,
+        "rows": 8,
+        "screen_distance_m": 2.0,
+        "separation_samples": 32,
+        "slit_samples": 4,
+        "wavelength_m": 6.328e-07
+      },
+      "tolerances": {
+        "aperture_sample_count": {
+          "abs": 0.0,
+          "reason": "孔内采样数是整数，零容差。它锁的是**采样缝宽**——边界落在采样点上时这个数会整差一格（实测踩过：期望32个采样、实得31个），而图样照样是漂亮的sinc平方",
+          "rel": 0.0
+        },
+        "relative_amplitude_components": {
+          "abs": 4e-15,
+          "reason": "定义式直接求和 对 基2蝶形。两侧各自的浮点误差：直接求和是8项累加（~8 eps），蝶形是log2(256)=8级（~8 eps），比值再除一次；观察面二次相位两侧同一条闭式但幅角不同。合起来~30 eps=6.7e-15的量级，实测最坏2.7756e-16（余量14.4倍）。**判绝对不判相对**：条纹极小处比值近零，相对误差没有意义",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "envelope_first_zero_sine": 0.015819999999999997,
+        "fringe_sines": [
+          0.0,
+          0.0019774999999999997,
+          0.003954999999999999,
+          0.005932499999999999,
+          0.007909999999999999,
+          0.009887499999999999,
+          0.011864999999999999
+        ],
+        "missing_order_intensity": 0.0,
+        "normalised_intensity": [
+          1.0,
+          0.9526980648168515,
+          0.8210669490340056,
+          0.6330856724527111,
+          0.4267766952966368,
+          0.24006981924067444,
+          0.10124465027636102
+        ]
+      },
+      "id": "oracle:double_slit/fringes_and_missing_order",
+      "inputs": {
+        "direct_summation_residual_at_missing_order": 4.0276384503660295e-17,
+        "fringe_bin_step": 8,
+        "kind": "closed_form_fringe_positions",
+        "missing_order": 8,
+        "missing_order_bin": 64,
+        "orders": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "slit_separation_m": 0.00032,
+        "slit_width_m": 4e-05
+      },
+      "tolerances": {
+        "envelope_first_zero_sine": {
+          "abs": 0.0,
+          "reason": "包络首零在``sin(theta) = lambda / w``，`w`是**缝宽**不是中心距。把两者搞反的实现在前6级条纹上全绿，只有缺级与这一条会红",
+          "rel": 4e-16
+        },
+        "fringe_sines": {
+          "abs": 0.0,
+          "reason": "条纹极大在``sin(theta) = m lambda / d``。观察面坐标是``k lambda z /(N dx)``，在``k = m N / P``处约掉z与N，**恒等地**落回``m lambda /(P dx)``——这是一条单位边界的往返，理论偏差为0，容差只留2 eps给两侧不同的乘除次序。实测最坏1.7347e-18，落在第6级上（余量2.7倍）",
+          "rel": 4e-16
+        },
+        "missing_order_intensity": {
+          "abs": 0.0,
+          "reason": "``d/w = 8``时第8级条纹极大恰好压在单缝包络的第一个零点上。**零容差不是乐观是结构性的**：缝宽4是2的幂、该bin是``N/4``，蝶形最后一级配对的两项相位差恰为pi（精确取负），IEEE下逐位抵消，实测返回`0.0`。直接求和那一侧的残值是4.028e-17，两条路都到地板。这条一旦不为0，说明变换的结构变了",
+          "rel": 0.0
+        },
+        "normalised_intensity": {
+          "abs": 4e-15,
+          "reason": "强度是复振幅比的模平方，误差是振幅误差的2倍（|z|^2的相对误差=2倍|z|的），而振幅比的量级<=1，所以与上一条同量级。实测最坏2.2204e-16（余量18.0倍）",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "power_ratio_after_propagation": 1.0,
+        "round_trip_max_deviation": 0.0
+      },
+      "id": "oracle:double_slit/flux_and_reversibility",
+      "inputs": {
+        "kind": "transform_layer_self_consistency",
+        "note": "research/05第2.3节光学族第13条的三件套里的另两件：通量守恒与往返可逆（MFT-FFT等价是上面第一条oracle）"
+      },
+      "tolerances": {
+        "power_ratio_after_propagation": {
+          "abs": 1e-14,
+          "reason": "菲涅耳单次FFT的前因子``dx dy/(i lambda z)``与观察面间距``lambda z/(N dx)``在总能量上恰好互相抵消，所以比值的期望是精确的1。误差只来自Parseval的浮点累积（实测6.0e-16，余量17倍）。**这条是前因子唯一的捕手**：前因子写错时归一化图样一个字都不变",
+          "rel": 0.0
+        },
+        "round_trip_max_deviation": {
+          "abs": 1e-15,
+          "reason": "``ifft2(fft2(U0))``对`U0`的最大偏差。期望是精确的0（往返是恒等），容差按``16 eps max|U0|=3.6e-15``的误差模型取1e-15（掩模的max|U0|=1，实测1.4016e-16，余量7.1倍）",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
