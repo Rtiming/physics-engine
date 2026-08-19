@@ -1,0 +1,93 @@
+{
+  "geometry": {
+    "centre_mm": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "kind": "analytic sphere",
+    "radius_mm": 10.0
+  },
+  "leg_a_and_b_approximation_and_sign": {
+    "levels": [
+      {
+        "max_abs_deviation_mm": 0.6573056176552954,
+        "mean_abs_deviation_mm": 0.43752617681957573,
+        "min_signed_deviation_mm": 0.0350845263766974,
+        "sign_mismatch_outside_the_deviation_band": 0,
+        "subdivisions": 1,
+        "triangle_count": 80,
+        "winding_at_the_centre": 0.9976482419143182,
+        "winding_sign_mismatch_outside_the_deviation_band": 0
+      },
+      {
+        "max_abs_deviation_mm": 0.17633579484504192,
+        "mean_abs_deviation_mm": 0.1141402275009323,
+        "min_signed_deviation_mm": 0.006163557505874273,
+        "sign_mismatch_outside_the_deviation_band": 0,
+        "subdivisions": 2,
+        "triangle_count": 320,
+        "winding_at_the_centre": 1.0002326337142695,
+        "winding_sign_mismatch_outside_the_deviation_band": 0
+      },
+      {
+        "max_abs_deviation_mm": 0.04370731986325205,
+        "mean_abs_deviation_mm": 0.02928136824420187,
+        "min_signed_deviation_mm": 0.001258278282196379,
+        "sign_mismatch_outside_the_deviation_band": 0,
+        "subdivisions": 3,
+        "triangle_count": 1280,
+        "winding_at_the_centre": 1.001240921417745,
+        "winding_sign_mismatch_outside_the_deviation_band": 0
+      },
+      {
+        "max_abs_deviation_mm": 0.013485252536579617,
+        "mean_abs_deviation_mm": 0.007645552919453031,
+        "min_signed_deviation_mm": 8.897299896726274e-05,
+        "sign_mismatch_outside_the_deviation_band": 0,
+        "subdivisions": 4,
+        "triangle_count": 5120,
+        "winding_at_the_centre": 1.001059466058795,
+        "winding_sign_mismatch_outside_the_deviation_band": 0
+      }
+    ],
+    "max_abs_deviation_ratios": [
+      3.7275790671594153,
+      4.034468262907613,
+      3.2411198636950345
+    ],
+    "mean_abs_deviation_ratios": [
+      3.8332337896908606,
+      3.898049659053542,
+      3.8298561991114544
+    ],
+    "query_point_count": 400
+  },
+  "leg_c_dirty_mesh": {
+    "all_triangles_flipped": {
+      "max_abs_signed_distance_change_mm": 3.85783226697356e-07,
+      "sign_mismatch_outside_the_deviation_band": 0,
+      "winding_at_the_centre": -1.0012409973087357,
+      "winding_max_abs_sum_with_clean": 1.5178198164988999e-07
+    },
+    "decisive_point_count": 389,
+    "kernel_message": "mesh is not a closed oriented manifold, so the divergence theorem has no premise here: directed edge (0, 164) appears 2 times — 两个相邻三角绕向相反，或一条边被三个以上三角共用; directed edge (162, 0) appears 2 times — 两个相邻三角绕向相反，或一条边被三个以上三角共用; directed edge (164, 162) appears 2 times — 两个相邻三角绕向相反，或一条边被三个以上三角共用（另有3条）",
+    "kernel_refuses_the_dirty_mesh": true,
+    "max_abs_deviation_vs_clean_mesh_mm": 0.22703800984392938,
+    "sign_mismatch_outside_the_deviation_band": 0,
+    "subdivisions": 3,
+    "winding_sign_mismatch_outside_the_deviation_band": 0
+  },
+  "peer": {
+    "license": "MIT",
+    "numpy": "2.5.2",
+    "package": "point-cloud-utils",
+    "version": "0.34.0"
+  },
+  "schema": "tools/model/sdf_bake/sphere_probe.report",
+  "schema_version": "1.0",
+  "semantics": {
+    "signed_distance_to_mesh": "**符号不来自面法向**：把整张网格的三角全部反向，返回的有符号距离最大只变**3.86e-07 mm**、符号一个点都没翻，而缠绕数从+1.00124整体翻到-1.00124。**那3.86e-07不是零**——pcu的fast winding number是带层次近似的，所以这里写的是实测量而不是'逐位不变'；把它说成逐位不变就是冒充一个没验过的性质。这正是0074第5.1节选它的那条性质的直接证据——内外由体积判据定，不靠面法向投票。**代价要一起写**：调用方**无法**通过反转网格来反转场的符号。",
+    "triangle_soup_fast_winding_number": "**文档写反了**。0.34.0的docstring原话是'positive for outside and negative for inside'，而实测返回的是**广义缠绕数本身**：球心处1.00124、球外1.30e-05、球面外侧一点-8.34e-04。也就是内≈1、外≈0，判内外的阈值是**0.5**而不是符号。本仓一律按实测的约定用它——**同行库的文档不是金标，实测才是**（与cases/peer_fcl_distance那条'语义差异清单'同源）。"
+  }
+}
