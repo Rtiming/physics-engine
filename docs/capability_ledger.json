@@ -327,29 +327,43 @@
         {
           "id": "S4.4",
           "label": "二维复数场网格",
-          "status": "todo",
+          "status": "done",
           "exercises_physics": false,
-          "evidence": [],
-          "why": "S4.5—S4.7三位共同的前置，0031已声明为光学下一块。",
-          "missing": "复数怎么落盘**未裁**（0052第八节：它定的是全仓所有复数量的约定，而今天只有一个候选消费方）；场要不要登记面同样未裁。"
+          "evidence": [
+            "test:tests/test_optics_field.py::test_the_transform_matches_a_naive_dft_point_by_point",
+            "test:tests/test_optics_field.py::test_parseval_holds",
+            "test:tests/test_optics_field.py::test_the_inverse_recovers_the_input_to_machine_precision",
+            "test:tests/test_optics_field.py::test_a_non_power_of_two_length_fails_closed"
+          ],
+          "why": "0086落地：`optics/field.py`的二维复数场网格＋基2 Cooley-Tukey（1D/2D正逆），**纯Python零依赖**。七条判据的容差全部从误差模型算出、**且比值本身也被断言**（不许比实测松一个数量级）：逐点对拍朴素DFT最坏比值1.037、Parseval 1.570、往返3.266、线性性0.779、平移定理1.848、卷积定理1.449、二维可分离性0.359。**可分离性不是逐位相同**（64×64上只约4%元素逐位相等，浮点加法不结合），如实断言而不是写成零容差。`missing`里那两条未裁项都裁了：**非2幂失败关闭**（补零不是同一个问题的另一种算法而是另一个物理问题——频率栅距、窗口物理宽度、周期卷积折返边界全变；要补零得由调用方显式写下来，且有门断言它真的改了谱）；**复数落盘＝长度2的浮点数组、次序`(实部, 虚部)`**，极坐标形制被2000个随机复数的`float.hex()`逐字节对拍**证伪**（直角形制全部逐位相同、极坐标掉位过半，且零振幅处相位无定义）。"
         },
         {
           "id": "S4.5",
           "label": "场传播（角谱／菲涅耳／夫琅禾费，要FFT）",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": false,
-          "evidence": [],
-          "why": "plans/05对场景④的判词原文是「一般衍射零」——本仓今天所有光学量都是闭式代入，没有一个是传播出来的。",
-          "missing": "纯Python的Cooley-Tukey可写（约30行），但512²网格上会很慢——这正是0016加速档该出场的地方，而0052第七节实测`accel`档在能量装配之外只值1.00—1.02倍。"
+          "evidence": [
+            "case:double_slit_propagated",
+            "test:tests/test_optics_propagation.py::test_a_plane_wave_only_picks_up_the_closed_form_phase",
+            "test:tests/test_optics_propagation.py::test_two_half_steps_equal_one_whole_step",
+            "test:tests/test_optics_propagation.py::test_zero_distance_is_bit_for_bit_the_pure_round_trip"
+          ],
+          "why": "0086落地：角谱／菲涅耳／夫琅禾费三形制。判据里最有分辨力的两条是**平面波本征函数**（唯一能把精确角谱与傍轴分开的判据，实测比值3.09）与**能量守恒**（前因子唯一的捕手，角谱实测恰为0、菲涅耳3.33e-16）；另有`z→0`与`ifft2(fft2(U0))`**逐位相同**（零容差）、半群性质残差6.28e-16。**采样判据显式声明并两侧失败关闭**：`z_c = N·dx²/λ`既是角谱上界又是菲涅耳下界，越界报错指路——一个在混叠区静默给数的传播器是冒充。规模墙钟实测秒/(N²log₂N)只在1.49e-7—1.83e-7浮动，即实现真是`O(N² log N)`。",
+          "missing": "**角谱那一侧没有任何案例冻结金标**——平面波本征函数／倏逝波衰减／`z→0`逐位／半群四条今天只活在`tests/`里，而案例`double_slit_propagated`走的是夫琅禾费那一支。按本仓的分档，`tests/`里的门守的是实现、案例冻结的才是判据，**所以这一位是partial不是done**。另两条不改状态但要记：**没有加速档**，512²以上纯Python进本机批级（0016的加速档正该在这里出场，而0052第七节实测`accel`档在能量装配之外只值1.00—1.02倍）；**半群那条依赖平台的三角函数幅角约化**（本机libm做精确约化，相位`k·z ~ 1e5`弧度时残差仍停在eps量级），它在别的平台红的时候**先查平台，不要先放宽**。"
         },
         {
           "id": "S4.6",
           "label": "一般孔径的衍射（单缝／双缝／矩孔，由传播算出而非闭式代入）",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": false,
-          "evidence": [],
-          "why": "有它才谈得上「一般孔径」；菲涅耳数极限退化到艾里斑（S4.1）是它现成的自洽门。",
-          "missing": "要S4.4与S4.5。"
+          "evidence": [
+            "case:double_slit_propagated",
+            "test:tests/cases/test_double_slit_propagated.py::test_the_fast_transform_agrees_with_a_direct_summation_over_the_aperture",
+            "test:tests/test_optics_propagation.py::test_the_first_three_zeros_land_exactly_where_the_closed_form_says",
+            "test:tests/test_optics_propagation.py::test_the_fresnel_pattern_falls_onto_the_airy_closed_form_as_the_fresnel_number_drops"
+          ],
+          "why": "0086落地，**这一位的定义就是「由传播算出而非闭式代入」，本仓此前所有光学量都是闭式代入**。单缝：主极大在bin 0且是全局最大、前三个零点在bin 32/64/96且归一化强度**恰为0.0**（缝宽取2的幂⟹蝶形末级相位差恰为π，IEEE精确取负），`sinθ = mλ/w`偏差≤3.5e-18，剖面对连续`sinc²`固定物理缝宽加密网格实测阶2.474→2.106→**2.026**。双缝：前6级条纹极大落在`sinθ = mλ/d`上偏差≤1.7e-18，**第8级缺级实测恰为0.0**。矩孔与圆孔两个构件都在（`rectangular_aperture`／`circular_aperture`）。**菲涅耳数极限退化到艾里斑**这条现成的自洽门也做了，金标取`diffraction.py`已有的闭式。",
+          "missing": "**label里三件（单缝／双缝／矩孔）只做了两件——「矩孔」那一格没有被传播验过。**`rectangular_aperture`这个构件是有的，但仓里**每一处**调用它的地方`half_width_y_m`都取`1.0e9 × pitch`，即y方向占满窗口：**那是缝不是孔**，图样是一维`sinc²`而不是二维`sinc²×sinc²`。**这条是主代理合入时逐格核出来的，不是轨道自己报的**——形状与S3.7（label三件只做了第一件）和同行C档第7条（转述失真变成一个进位）完全相同，本仓2026-08-18已经栽过两次。**补法很轻**：给一个两个方向都有界的矩孔加一条传播判据（二维可分离，`sinc²(x)·sinc²(y)`，而可分离性本身在`optics/field`那边已经有门），条件到了随时可做。另：**圆孔那一档的误差是振荡的不是单调的**（阶梯边，Gauss圆问题那一类，实测「阶」0.040与2.892），所以那条门只断「都在上界内」与「加密到R=64真的更好」——**假装它是`O(h²)`会得到一条随机红的门，比没有门更坏**。这一条是边界不是缺陷。"
         },
         {
           "id": "S4.7",
@@ -720,11 +734,15 @@
       "family": "光学族",
       "label": "变换层自洽三件套",
       "criterion": "通量守恒／MFT-FFT等价／往返可逆",
-      "status": "todo",
+      "status": "partial",
       "exercises_physics": false,
-      "evidence": [],
-      "why": "三件套全是标量判据，等FFT真落地时才有真实约束（0052第八节）。",
-      "missing": "二维复数场 + FFT（S4.4与S4.5）。"
+      "evidence": [
+        "case:double_slit_propagated",
+        "test:tests/cases/test_double_slit_propagated.py::test_the_fast_transform_agrees_with_a_direct_summation_over_the_aperture",
+        "test:tests/cases/test_double_slit_propagated.py::test_the_transform_layer_conserves_flux_and_is_reversible"
+      ],
+      "why": "0086让三件套第一次有了真实约束（此前是「等FFT真落地」）。**通量守恒**：角谱实测恰为0、菲涅耳3.33e-16；**往返可逆**：1.4016e-16，另有`z→0`与`ifft2(fft2(U0))`**逐位相同**的零容差门；**MFT-FFT等价**：案例的复振幅对**定义式直接求和**的独立参照偏差2.7756e-16，而那份生成器只import`physics_engine.oracles`（写SHA与清单），**不共用旋转因子表、不import本仓的FFT**——主代理合入时逐行核过这一点，因为它正是这条判据成立与否的全部。",
+      "missing": "**「MFT」这个词在同行那里指的是Matrix Fourier Transform，它的看家本领是把输出面采样到****任意（非FFT栅格）分辨率**，而本仓今天的等价性只在**FFT自己的bin上**核过。所以严格说，做到的是「FFT对定义式的等价」，不是「MFT对FFT的等价」。**不自己给自己进位**：2026-08-18同行C档第7条就是因为「转述失真变成一个进位」当天被退回的，而research/05第92行那句三件套是一行摘要、没有标注出处也没有原文。触发条件：出现一次真的把输出面采样到非FFT栅格的实现与对拍时，这一位再判。"
     }
   ]
 }
