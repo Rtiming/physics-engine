@@ -443,12 +443,45 @@ def test_a_slightly_non_orthogonal_frame_is_refused(tmp_path):
 #: （Bullet仓297MB而物理库只占2.4%那条单向门是判例），所以真实中心线不进仓；
 #: 但"工具在真实字节上跑得动"这件事不能只靠合成三行来声称。
 #: 形制抄`tests/test_provenance.py`已有的`PE_REPLAY_CASE_RUNS`：**指了才跑，不指明示skip**。
+#:
+#: **2026-08-18修一个真缺陷**：这个变量此前在本文件里只接受**一份CSV**，
+#: 而`tests/cases/test_real_centerline_invariants.py`那一侧的skip理由写的是
+#: "a GCW centerline.csv **(or a directory of them)**"，并且它有一条判据**必须**吃目录
+#: （按内在几何归并后剩5份，那个数本身是判据）。
+#: 于是**同一个变量有两套互不兼容的约定，不存在一个值能让选择进入档全部跑过**：
+#: 指目录→本文件硬错（"缺少伴生文件"，而伴生文件其实在各自子目录里）；
+#: 指单文件→那一侧硬错。**两边都不是skip，是红**，
+#: 所以这条选择进入的通道**从来没有被整体跑过一次**。
+#:
+#: 改法取"两边都接受两种形态"：目录就取其下第一份`centerline.csv`（排序后，可复现）。
+#: **不取"本文件也要求目录"**——那会让只有一份导出的人无路可走。
 REAL_CENTERLINE = os.environ.get("PE_REAL_CENTERLINE_CSV")
+
+
+def resolve_real_centerline(value: str) -> Path:
+    """把`PE_REAL_CENTERLINE_CSV`解析成一份具体的CSV。
+
+    接受两种形态：一份`centerline.csv`，或一个**其下能递归找到**`centerline.csv`的目录。
+    目录形态取排序后的第一份——**排序是为了可复现**，同一棵树上两次跑必须选中同一份。
+    两种形态都取不到就抛，**抛的消息要说清楚看的是哪个路径**。
+    """
+
+    path = Path(value)
+    if path.is_file():
+        return path
+    if path.is_dir():
+        found = sorted(path.rglob("centerline.csv"))
+        if found:
+            return found[0]
+        raise AssertionError(
+            f"PE_REAL_CENTERLINE_CSV指向的目录里递归找不到centerline.csv：{path}"
+        )
+    raise AssertionError(f"PE_REAL_CENTERLINE_CSV既不是文件也不是目录：{path}")
 
 
 @pytest.mark.skipif(
     not REAL_CENTERLINE,
-    reason="set PE_REAL_CENTERLINE_CSV to a GCW centerline.csv (with its centerline.meta.json)",
+    reason="set PE_REAL_CENTERLINE_CSV to a GCW centerline.csv (or a directory of them); 伴生centerline.meta.json必须在同目录",
 )
 def test_a_real_gcw_centerline_reads_and_builds_kernel_stations():
     """真实语料端到端：GCW的导出 → 工具 → 内核`GrooveStation`，一条都不许掉。
@@ -460,7 +493,7 @@ def test_a_real_gcw_centerline_reads_and_builds_kernel_stations():
 
     from physics_engine.laydown import GrooveStation
 
-    path = Path(REAL_CENTERLINE)
+    path = resolve_real_centerline(REAL_CENTERLINE)
     record = centerline_csv.describe(path)
     stations = [GrooveStation(*station) for station in centerline_csv.read_stations(path)]
 
@@ -471,3 +504,48 @@ def test_a_real_gcw_centerline_reads_and_builds_kernel_stations():
     assert record["arc_step_max_mm"] < 10.0 * record["arc_step_min_mm"]
     #: 生产者自报的行数与工具数出来的必须一致；不一致说明有行被静默丢了。
     assert record["producer_reported_sample_count"] == record["station_count"]
+
+
+# ---------------------------------------------------------------------------
+# `PE_REAL_CENTERLINE_CSV`的两种形态：2026-08-18之前它们互不兼容
+# ---------------------------------------------------------------------------
+
+
+def test_the_env_var_accepts_both_a_file_and_a_directory(tmp_path: Path):
+    """两种形态都要解析得出来。
+
+    **修之前不存在一个值能让选择进入档全部跑过**：本文件那一侧要单文件、
+    `tests/cases/test_real_centerline_invariants.py`那一侧有一条判据要整批，
+    **两边给的都不是skip而是红**——于是这条通道从来没有被整体跑过一次。
+    """
+
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    first = tmp_path / "a" / "centerline.csv"
+    second = tmp_path / "b" / "centerline.csv"
+    first.write_text("x", encoding="utf-8")
+    second.write_text("y", encoding="utf-8")
+
+    assert resolve_real_centerline(str(first)) == first
+    #: 目录形态取**排序后的第一份**——排序是为了可复现：
+    #: 同一棵树上两次跑必须选中同一份，否则这条选择进入的通道自己就不确定。
+    assert resolve_real_centerline(str(tmp_path)) == first
+
+
+@pytest.mark.parametrize(
+    ("make", "because"),
+    [
+        (lambda root: root / "nope", "路径根本不存在"),
+        (lambda root: root, "目录里递归找不到centerline.csv"),
+    ],
+    ids=["路径不存在", "目录里没有CSV"],
+)
+def test_the_resolver_fails_closed_and_says_which_path(tmp_path: Path, make, because):
+    """**必须红**：两种取不到的形态各喂一次，且报错要说清楚看的是哪个路径。
+
+    一个只说"找不到"而不说看的是哪里的错误消息，会让下一个人以为是语料坏了。
+    """
+
+    target = make(tmp_path)
+    with pytest.raises(AssertionError, match=str(tmp_path.name)):
+        resolve_real_centerline(str(target))

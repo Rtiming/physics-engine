@@ -97,7 +97,14 @@ class Q3:
     def text(self) -> str:
         if self.b == 0:
             return str(self.a)
-        return f"({self.a}{self.b:+}√3)"
+        #: **不用`f"{self.b:+}"`**：`Fraction.__format__`要到**Python 3.13**才接受
+        #: "只有符号、没有呈现类型"这种格式串，而`pyproject.toml`声明的地板是`>=3.11`。
+        #: 2026-08-18实测：本机3.13跑得动，master的3.12.2当场`ValueError`——
+        #: 于是**这个生成器在本仓自己声明的地板上跑不动，而在此之前没有任何东西会红**
+        #: （案例判据走的是内核那条路、不走生成器那条路）。
+        #: 手写符号在3.11—3.13上给出同一串字符。
+        sign = "+" if self.b >= 0 else "-"
+        return f"({self.a}{sign}{abs(self.b)}√3)"
 
 
 def rational(value) -> Q3:
