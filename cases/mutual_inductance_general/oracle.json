@@ -1,0 +1,709 @@
+{
+  "arrays": {},
+  "case_id": "case/mutual_inductance_general",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/mutual_inductance_general",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/mutual_inductance_general/generate_oracle.py",
+    "sha256": "2373fe688df30b597562ef063010b2233d6defa49c779265ad551115b0684815"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "2227ab6e9ab153c10841b3e564730bccab28e2d1c52a1e09adcc3721d674afaa",
+  "oracles": [
+    {
+      "expected": {
+        "mutual_inductances_h": [
+          4.6482213239471696e-08,
+          5.648353610695754e-09,
+          2.449038995166904e-12,
+          4.6631416358617513e-08
+        ]
+      },
+      "id": "oracle:mutual_inductance_general/coaxial_degeneration",
+      "inputs": {
+        "configurations_r1_r2_d_m": [
+          [
+            0.05,
+            0.05,
+            0.03
+          ],
+          [
+            0.1,
+            0.02,
+            0.05
+          ],
+          [
+            0.01,
+            0.01,
+            0.2
+          ],
+          [
+            0.03,
+            0.03,
+            0.01
+          ]
+        ],
+        "cross_check_against_flux_integral": [
+          0.0,
+          4.3933896648397185e-16,
+          4.947615586402275e-16,
+          5.676383363124088e-16
+        ],
+        "cross_check_against_maxwell_closed_form": [
+          1.4236509923337364e-16,
+          1.1276366806421944e-14,
+          6.631619011494063e-12,
+          2.270553345249635e-15
+        ],
+        "kind": "reduced_neumann_single_integral_cross_checked_three_ways",
+        "segments": 96,
+        "vacuum_permeability_h_per_m": 1.25663706127e-06,
+        "why_the_closed_form_is_only_a_cross_check": "本生成器按教科书分组算方括号(2/k-k)K-(2/k)E，它在小k（=远场）下相消放大约1/k^4。(0.01,0.01,0.2)那一组k=0.0995，实测与另两条路差6.6e-12，与elliptic.py第三节那张表在k=0.1处的8.9e-12同量级。**所以金标走的是全正被积函数的约化Neumann单重积分**，闭式只当交叉验证"
+      },
+      "tolerances": {
+        "mutual_inductances_h": {
+          "abs": 0.0,
+          "reason": "一般位形的双重求积（N=96）对**共轴那一支的约化Neumann单重积分**（另经Maxwell闭式与Biot-Savart面积分两次交叉验证）——本案例最强的一条金标：共轴是一般位形的特例，而共轴那一支有解析约化。四组实测2.85e-16 / 0（逐位相同）/ 1.65e-15 / **5.68e-15**。最坏那一组是(0.03,0.03,0.01)，它的delta/h只有5.09，误差是**求积截断**；而(0.01,0.01,0.2)那组的kappa=5.1e2、误差1.65e-15，是**相消**——两种误差来源在同一张表上各占一组，这是选点时故意安排的。取1e-13是实测最坏的17.6倍，另留出kappa*eps=1.1e-13的相消上界。**这一条同时钉住`from_coaxial`那条接口**：共轴回路搬进一般位形若把轴向位置放错分量，本条当场红",
+          "rel": 1e-13
+        }
+      }
+    },
+    {
+      "expected": {
+        "log2_ratios_exceed_the_floor": true,
+        "log2_ratios_stay_in_a_band": true,
+        "relative_errors_fall_under_the_envelope": true
+      },
+      "id": "oracle:mutual_inductance_general/geometric_convergence",
+      "inputs": {
+        "configuration_r1_r2_d_m": [
+          0.03,
+          0.03,
+          0.01
+        ],
+        "exact_mutual_inductance_h": 4.6631416358617513e-08,
+        "kind": "midpoint_tangent_quadrature_converges_geometrically",
+        "log2_ratio_band_max": 1.1,
+        "log2_ratio_floor_per_eight_segments": 3.5,
+        "relative_error_envelope": [
+          2e-06,
+          1.3e-07,
+          8.4e-09,
+          5.5e-10,
+          2.5e-12
+        ],
+        "segment_counts": [
+          40,
+          48,
+          56,
+          64,
+          80
+        ]
+      },
+      "tolerances": {
+        "log2_ratios_exceed_the_floor": {
+          "abs": 0.0,
+          "reason": "布尔：每加密8段的`log2(误差比)`都>=3.5（跨16段的档位归一到8段）。实测3.9599/3.9399/3.9253/3.9093，即每加8段误差降15.4倍。**这一条是'折线弦离散'的捕手**：把中点切元换成多边形弦，误差就不在求积上而在几何上（多边形的周长与面积本身差O(1/N^2)），收敛退化成代数二阶。同一构型同一批档位实测0.5253/0.4449/0.3854/0.3220，与二阶理论值0.5261/0.4448/0.3853/0.3219逐位吻合，低于下限6.7倍；它在N=64处的相对误差是4.79e-4，而本实现是2.75e-10",
+          "rel": 0.0
+        },
+        "log2_ratios_stay_in_a_band": {
+          "abs": 0.0,
+          "reason": "布尔：同一批log2比的max/min <= 1.10（实测**1.0129**）。**几何收敛的指纹是比值不随加密而衰减**——`err ~ C exp(-c N)`时每加固定段数降固定倍数；代数阶p的方法这个比是`p log2((N+8)/N)`，一路衰减，折线弦那一版实测max/min=**1.6315**，过不了1.10。**上一条只判下限，本条判形态**：一个碰巧很准但仍是代数阶的实现能过上一条，过不了本条",
+          "rel": 0.0
+        },
+        "relative_errors_fall_under_the_envelope": {
+          "abs": 0.0,
+          "reason": "布尔：五档分段数（40/48/56/64/80）的相对误差逐档落在声明的包络内。包络取实测值的2倍：9.9624e-7 / 6.4019e-8 / 4.1713e-9 / 2.7457e-10 / 1.2163e-12。**为什么判包络而不判数本身**：这些误差是被验实现的属性，生成器要独立算出它们就得把同一套求积再写一遍——那是'抄两遍抄得一样'（轴7规则4明禁）。包络两侧都有意义：上界抓精度退化，而下一条的比值抓收敛形态",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "mutual_inductances_h": [
+          4.406525006791906e-09,
+          9.733617268667e-09,
+          4.7438860731906225e-09,
+          -5.00526338288596e-12,
+          6.44790491688435e-09
+        ],
+        "perpendicular_mutual_inductances_h": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "id": "oracle:mutual_inductance_general/general_position",
+      "inputs": {
+        "configurations": [
+          {
+            "centre_a_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "centre_b_m": [
+              0.0,
+              0.0,
+              0.08
+            ],
+            "name": "tilt_30_on_axis",
+            "normal_a": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "normal_b": [
+              0.0,
+              0.49999999999999994,
+              0.8660254037844387
+            ],
+            "radius_a_m": 0.05,
+            "radius_b_m": 0.03
+          },
+          {
+            "centre_a_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "centre_b_m": [
+              0.03,
+              0.02,
+              0.06
+            ],
+            "name": "offset_parallel",
+            "normal_a": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "normal_b": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "radius_a_m": 0.05,
+            "radius_b_m": 0.04
+          },
+          {
+            "centre_a_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "centre_b_m": [
+              0.025,
+              -0.015,
+              0.045
+            ],
+            "name": "tilt_60_offset",
+            "normal_a": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "normal_b": [
+              0.8660254037844386,
+              0.0,
+              0.5000000000000001
+            ],
+            "radius_a_m": 0.05,
+            "radius_b_m": 0.02
+          },
+          {
+            "centre_a_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "centre_b_m": [
+              0.2,
+              0.0,
+              0.0
+            ],
+            "name": "coplanar_side_by_side",
+            "normal_a": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "normal_b": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "radius_a_m": 0.01,
+            "radius_b_m": 0.02
+          },
+          {
+            "centre_a_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "centre_b_m": [
+              0.013,
+              -0.007,
+              0.044
+            ],
+            "name": "skew_normal_close",
+            "normal_a": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "normal_b": [
+              0.3,
+              -0.5,
+              0.81
+            ],
+            "radius_a_m": 0.05,
+            "radius_b_m": 0.021
+          }
+        ],
+        "flux_grid": [
+          192,
+          32,
+          64
+        ],
+        "flux_self_check_grid": [
+          128,
+          24,
+          48
+        ],
+        "kind": "biot_savart_field_flux_through_the_spanning_disc",
+        "perpendicular_by_flux_integral_h": -4.8733803722816225e-26,
+        "perpendicular_configuration": {
+          "centre_a_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "centre_b_m": [
+            0.0,
+            0.0,
+            0.07
+          ],
+          "normal_a": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "normal_b": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "radius_a_m": 0.05,
+          "radius_b_m": 0.03
+        },
+        "perpendicular_segment_pairs": [
+          [
+            64,
+            64
+          ],
+          [
+            96,
+            96
+          ],
+          [
+            128,
+            96
+          ],
+          [
+            37,
+            53
+          ]
+        ],
+        "segments": 96
+      },
+      "tolerances": {
+        "mutual_inductances_h": {
+          "abs": 0.0,
+          "reason": "Neumann双重求积（N=96）对**Biot-Savart场的圆盘面磁通**——两个不同的物理表述，不是同一积分的两种求积。实测最坏1.94e-15（共面并排那一组，kappa=5.0e2）、其余四组<=6.8e-16；参考侧自身两档自校验<=1.0e-15。取1e-12是实测最坏的515倍——**留这么宽是因为参考侧的GL节点由Newton迭代现算**，不同libm下末位会动，而这一层要判的是'一般位形算得对不对'，不是末位复现",
+          "rel": 1e-12
+        },
+        "perpendicular_mutual_inductances_h": {
+          "abs": 1e-24,
+          "reason": "**正交零磁通构型：M按对称性精确为零**（源场对z轴轴对称，而圆盘落在x=0平面上、B_x在该平面按镜像对称恒为零）。四组分段数实测|M| <= 7.3e-26，参考侧独立给出-4.9e-26。**判绝对不判相对**（零值没有相对尺度）。1e-24这个数是算出来的：该构型的sum|项|折算成M的量级是4.5e-9，乘eps得1.0e-24——即浮点能给出的最小非零残差。**它抓的是把M取了绝对值、或把方括号符号写反的实现**：那类实现在这里给出1e-11量级的数，红过头1e13倍",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "reciprocity_max_abs_difference_h": 0.0
+      },
+      "id": "oracle:mutual_inductance_general/reciprocity",
+      "inputs": {
+        "configurations": [
+          {
+            "centre_a_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "centre_b_m": [
+              0.013,
+              -0.007,
+              0.044
+            ],
+            "normal_a": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "normal_b": [
+              0.3,
+              -0.5,
+              0.81
+            ],
+            "radius_a_m": 0.05,
+            "radius_b_m": 0.021,
+            "segments_a": 96,
+            "segments_b": 61,
+            "turns_a": 1,
+            "turns_b": 1
+          },
+          {
+            "centre_a_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "centre_b_m": [
+              0.0,
+              0.0,
+              0.08
+            ],
+            "normal_a": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "normal_b": [
+              0.0,
+              0.49999999999999994,
+              0.8660254037844387
+            ],
+            "radius_a_m": 0.05,
+            "radius_b_m": 0.03,
+            "segments_a": 71,
+            "segments_b": 53,
+            "turns_a": 3,
+            "turns_b": 7
+          }
+        ],
+        "kind": "self_consistency_independent_of_any_reference_path"
+      },
+      "tolerances": {
+        "reciprocity_max_abs_difference_h": {
+          "abs": 0.0,
+          "reason": "`M(a,b)`与`M(b,a)`必须**逐位相同**，且两条回路的**分段数跟着交换**（96/61与71/53）。零容差是算出来的三步：① `t_i.t_j`与`t_j.t_i`是同一串乘法同一个加序；② `|p_i-p_j|`与`|p_j-p_i|`只差一次精确取反；③ **`math.fsum`精确求和后只舍一次，因此对项的置换不变**——两个方向的项是同一个多重集。前因子`arc_a*arc_b`与匝数`N_a*N_b`都可交换。**它抓的是角色写反那一类错**：把segments_a用在两条回路上、把centre_a当成两条的圆心、把arc_a当成两条的弧长——这些错保持量纲、量级与远场退化阶，只有互易性没了。若哪天改成`sum()`求和，本条也会红（置换不变性随之消失）",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "dipole_convergence_orders": [
+          1.9806190872206657,
+          1.9951116625145806,
+          1.9987751858778804,
+          1.999693625293218,
+          2.0165237401003093,
+          2.0040969389693615,
+          2.001022136481175,
+          2.000255403631241,
+          2.0103879780343323,
+          2.00266837844626,
+          2.0006716358954617,
+          2.000168194174157
+        ],
+        "dipole_mutual_inductances_h": [
+          9.869604399786248e-12,
+          1.233700549973281e-12,
+          1.5421256874666013e-13,
+          1.9276571093332516e-14,
+          2.4095713866665645e-15,
+          -4.934802199893124e-12,
+          -6.168502749866405e-13,
+          -7.710628437333006e-14,
+          -9.638285546666258e-15,
+          -1.2047856933332822e-15,
+          6.900149409329804e-12,
+          8.625186761662255e-13,
+          1.0781483452077819e-13,
+          1.3476854315097273e-14,
+          1.6846067893871592e-15
+        ],
+        "dipole_ratio_deviations": [
+          -0.018416360969779055,
+          -0.00466635809656224,
+          -0.0011705490272702068,
+          -0.00029288580444919443,
+          -7.323700227324093e-05,
+          0.014278420925232238,
+          0.0035289544114573967,
+          0.0008797367918087495,
+          0.0002197784317339302,
+          5.493488182373163e-05,
+          -0.0035586380964435227,
+          -0.0008832766290006733,
+          -0.0002204111122469099,
+          -5.5077131345449004e-05,
+          -1.3767677661258304e-05
+        ]
+      },
+      "id": "oracle:mutual_inductance_general/far_field_dipole",
+      "inputs": {
+        "families": [
+          {
+            "name": "coaxial",
+            "normal_b": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          {
+            "name": "coplanar",
+            "normal_b": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          {
+            "name": "tilt_60",
+            "normal_b": [
+              0.8660254037844386,
+              0.0,
+              0.5000000000000001
+            ]
+          }
+        ],
+        "kind": "degeneration_to_the_dipole_dipole_limit_in_three_orientations",
+        "radii_m": [
+          0.01,
+          0.02
+        ],
+        "segments": 96,
+        "separations_m": [
+          0.2,
+          0.4,
+          0.8,
+          1.6,
+          3.2
+        ]
+      },
+      "tolerances": {
+        "dipole_convergence_orders": {
+          "abs": 1e-05,
+          "reason": "相邻两档偏差之比取log2。理论值恰为2（偏差的首阶是`O((R/d)^2)`，d翻倍降4倍）。三族实测：共轴1.98062->1.99969、共面2.01652->2.00026、倾斜60度2.01039->2.00017，**都单调逼近2但都不等于2**（`harmonic_oscillator`那条纪律：收敛阶是测出来的不是断言的），所以这十二个数是逐个钉住的、不是断言成2。容差按最坏一档算：最小偏差1.376768e-5上叠加kappa*eps=2.9e-11的绝对扰动，log2偏移2.9e-11/1.38e-5/ln2=3.0e-6。取1e-5是3.3倍",
+          "rel": 0.0
+        },
+        "dipole_mutual_inductances_h": {
+          "abs": 0.0,
+          "reason": "一般位形偶极式`(mu0 A1 A2/(4 pi d^3))[3(n1.dh)(n2.dh)-n1.n2]`的两份独立抄写（内核一份、生成器一份）。分组不同，实测最坏差1 ulp（1.6e-16）。取1e-15是4.5倍。**共面并排那五个数是负的**——本条同时钉住符号，而方括号在那一族恰好是-1",
+          "rel": 1e-15
+        },
+        "dipole_ratio_deviations": {
+          "abs": 5e-12,
+          "reason": "偏差`M/M_dipole - 1`，三族取向各五档。两侧的M_dipole是同一式的两份抄写（上一条已钉到1 ulp），所以偏差之差约等于M本身的相对误差。**判绝对不判相对**：偏差从1.8e-2扫到1.4e-5跨三个数量级，相对容差会在小端把噪声当判据。1e-12这个尺度来自条件数：d=3.2m那档kappa=1.3e5，kappa*eps=2.9e-11——**这是本条最有信息量的一句**：远场判据的精度由相消而不是由求积决定，再加密分段数一点用都没有。取5e-12覆盖它",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "refusal_resolution_ratio": 1.5278874536821951,
+        "resolution_ratio": 4.074366543152521,
+        "resolved_pairing_is_accepted": true,
+        "self_pairing_refuses": true,
+        "unresolved_pairing_refuses": true
+      },
+      "id": "oracle:mutual_inductance_general/singularity_and_resolution",
+      "inputs": {
+        "closed_form_ratio": "delta/h = d N / (2 pi r)，等径同轴且两条回路同分段数时样本点按角对齐，最小样本距离恰为d",
+        "kind": "the_self_inductance_singularity_fails_closed",
+        "probe_r1_r2_d_m": [
+          0.05,
+          0.05,
+          0.02
+        ],
+        "probe_segments": 64,
+        "refusal_segments": 24
+      },
+      "tolerances": {
+        "refusal_resolution_ratio": {
+          "abs": 0.0,
+          "reason": "同上，分段数减半那一档：分辨比落到2以下，属拒跑区。**这个数必须被算出来而不是随口说'太近了'**——拒跑的边界是一个可复算的量，不是一句判断",
+          "rel": 1e-15
+        },
+        "resolution_ratio": {
+          "abs": 0.0,
+          "reason": "`delta/h = d N/(2 pi r)`。等径同轴、两条回路同分段数时样本点按角一一对齐，最小样本距离**恰为**d，所以这一格能被独立算出来而不必复述实现的采样。两侧都是几次乘除，差<=2eps；取1e-15是2.3倍。**它钉的是分辨比的定义**：分母若写成较细那条的弧长（而不是较粗那条），本条在两条回路分段数不同时会红",
+          "rel": 1e-15
+        },
+        "resolved_pairing_is_accepted": {
+          "abs": 0.0,
+          "reason": "布尔：分辨比>=2的同一构型必须**接受**。**门要有两侧**：只验拒跑的话，一个把什么都拒掉的实现全绿",
+          "rel": 0.0
+        },
+        "self_pairing_refuses": {
+          "abs": 0.0,
+          "reason": "布尔：把同一条回路传两次必须**失败关闭**。丝状回路的自感对数发散；离散之后它**不报错、只给一个随分段数变化的有限数**——那正是必须拒跑的理由。本仓不做GMD一类的正则化（要导线截面半径，那是S2.4那一格），GAP与触发条件写在决策0092",
+          "rel": 0.0
+        },
+        "unresolved_pairing_refuses": {
+          "abs": 0.0,
+          "reason": "布尔：分辨比<2的构型必须拒跑。该档（N=24、delta/h=1.528）把门拆掉后实测相对误差**5.78e-5**，而返回值有限、量级正确、符号正确——**没有拒跑这道门，没有任何东西看得出它错**。同一构型的N=16那一档是1.70e-3",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "millimetre_and_metre_declarations_agree": true,
+        "mutual_inductance_from_millimetres_h": 3.453345363537188e-09
+      },
+      "id": "oracle:mutual_inductance_general/unit_boundary",
+      "inputs": {
+        "centre_b_mm": [
+          10.0,
+          -20.0,
+          80.0
+        ],
+        "kind": "millimetre_declaration_must_agree_with_the_metre_one",
+        "normal_b": [
+          0.0,
+          0.49999999999999994,
+          0.8660254037844387
+        ],
+        "radius_a_mm": 50.0,
+        "radius_b_mm": 30.0,
+        "segments": 96
+      },
+      "tolerances": {
+        "millimetre_and_metre_declarations_agree": {
+          "abs": 0.0,
+          "reason": "布尔：同一几何用mm声明与用m声明给出**逐位相同**的M。零容差成立是因为50.0/1000恰是0.05的double表示。**法向不换算**（它是方向没有长度单位）——这一条同时钉住那件事：若实现把法向也除以1000，归一化之后结果碰巧照样对，于是'哪些量该换算'变成靠运气；本条用一个**分量量级差很大**的法向(0, 0.5, 0.866)让那种实现在别处露馅",
+          "rel": 0.0
+        },
+        "mutual_inductance_from_millimetres_h": {
+          "abs": 0.0,
+          "reason": "mm制声明的几何算出的互感，金标由米制的Biot-Savart面积分给出。**它钉的是换算的方向**：往返判据（mm->m->mm）只验可逆，验不出方向——乘1000再除1000同样可逆。方向反了差1e6倍。容差与一般位形那一层同源",
+          "rel": 1e-12
+        }
+      }
+    },
+    {
+      "expected": {
+        "bundle_reciprocity_max_abs_difference_h": 0.0,
+        "filament_limit_orders_bracket_two": true,
+        "mutual_inductance_at_the_finest_grid_h": 1.5397444393515213e-08,
+        "section_errors_fall_under_the_envelope": true,
+        "section_refinement_orders_bracket_two": true,
+        "turns_factor_is_bit_exact": true,
+        "zero_section_equals_the_centre_filament": true
+      },
+      "id": "oracle:mutual_inductance_general/section_bundle",
+      "inputs": {
+        "coil_a_radius_axial_radial_extent_axial_extent_m": [
+          0.05,
+          0.0,
+          0.01,
+          0.008
+        ],
+        "coil_b_radius_axial_radial_extent_axial_extent_m": [
+          0.03,
+          0.04,
+          0.006,
+          0.005
+        ],
+        "current_density_assumption": "截面上电流密度**均匀**（每根丝等份电流）。这是一个建模选择不是数值参数：直流成立、低频近似成立、高频（趋肤与邻近效应）不成立。S2.4只解开一半",
+        "filament_limit_grid": 2,
+        "filament_limit_scales": [
+          1.0,
+          0.5,
+          0.25,
+          0.125
+        ],
+        "kind": "four_dimensional_gauss_legendre_over_both_sections",
+        "order_bracket": [
+          1.9,
+          2.1
+        ],
+        "reciprocity_grids": [
+          4,
+          3
+        ],
+        "reciprocity_segments": [
+          48,
+          31
+        ],
+        "reference_nodes": 12,
+        "reference_self_check": 3.0084287443491965e-15,
+        "reference_self_check_nodes": 8,
+        "relative_error_envelope": [
+          0.0033,
+          0.00083,
+          0.00021
+        ],
+        "section_grids": [
+          1,
+          2,
+          4
+        ],
+        "segments": 24,
+        "turns": [
+          3,
+          7
+        ]
+      },
+      "tolerances": {
+        "bundle_reciprocity_max_abs_difference_h": {
+          "abs": 0.0,
+          "reason": "`M(A,B)`与`M(B,A)`**逐位相同**，且两条线圈的**截面细分(4与3)与分段数(48与31)都不同**。零容差是算出来的：丝对的值集合在交换时是同一个多重集（每一对本身逐位对称），`math.fsum`对置换不变，而`n_a*n_b`与`N_a*N_b`都是可交换的乘法。**截面细分不同这一点是故意的**：它是'角色写反'在本层的新形态",
+          "rel": 0.0
+        },
+        "filament_limit_orders_bracket_two": {
+          "abs": 0.0,
+          "reason": "布尔：截面按1/2/4/8缩小时，与中心细丝的偏差比取log2落在[1.9, 2.1]。实测2.00075 / 2.00022 / 2.00006。**首阶为零是因为截面对中心对称**——一阶项相消，这正是'取中心细丝当零阶近似'能有二阶精度的原因。**它抓的是截面网格摆歪**：若中点公式写成`i/n`而不是`(i+0.5)/n`，截面整体偏半格，一阶项不再相消，阶掉到1",
+          "rel": 0.0
+        },
+        "mutual_inductance_at_the_finest_grid_h": {
+          "abs": 0.0,
+          "reason": "grid=4的截面平均对**四维Gauss-Legendre参考**（每维12节点、核用Maxwell闭式，与被验侧求积法与核都不同；两档8/12节点自校验相对差<=1e-15）。**这条容差不是舍入而是声明的截断**：二维中点求积在grid=4上的相对误差实测1.03504e-4，容差取它的2倍。一条容差比舍入大九个数量级的判据要说清它在判什么——它判的是**装配**（丝对平均、权重、匝数因子、截面网格的位置），不是数值精度；数值精度由下面两条收敛判据判",
+          "rel": 0.00021
+        },
+        "section_errors_fall_under_the_envelope": {
+          "abs": 0.0,
+          "reason": "布尔：grid=1/2/4三档对四维GL参考的相对误差落在包络内。包络取实测的2倍：1.64463e-3 / 4.13424e-4 / 1.03504e-4。**grid=1那一档就是中心细丝**，所以这条同时说明了'把有截面的线圈当细丝算'要付多少代价：本构型1.6e-3",
+          "rel": 0.0
+        },
+        "section_refinement_orders_bracket_two": {
+          "abs": 0.0,
+          "reason": "布尔：相邻两档的log2误差比落在[1.9, 2.1]。实测1.99207 / 1.99794。**这一条与`geometric_convergence`那一层方向相反、必须分开读**：那里加密的是回路角向（解析周期被积函数，几何收敛、没有固定阶），这里加密的是截面（区间不周期，二维中点法就是代数二阶）。**同一块代码里两条收敛阶不同不是矛盾，是两件事**。实测N=24与N=32给出**同样的三个阶**，说明细丝求积没有污染这一层",
+          "rel": 0.0
+        },
+        "turns_factor_is_bit_exact": {
+          "abs": 0.0,
+          "reason": "布尔：`M(N_a,N_b)`与`(N_a*N_b)*M(1,1)`**逐位相同**。与`mutual_inductance_coaxial`那条同源，但在本层多守一件事：**匝数与截面细分是两个完全无关的数**，而把匝数当细分数（或反过来）是这块最容易犯的错——本条与上一条（细分4与3、匝数3与7）合起来把两者钉死",
+          "rel": 0.0
+        },
+        "zero_section_equals_the_centre_filament": {
+          "abs": 0.0,
+          "reason": "布尔：截面尺寸缩到0时，一束丝与中心那一根丝**逐位相同**。零容差是算出来的：n^2根丝的位置与半径全部相同，于是丝对的值也全部相同，`fsum(n^2个相同的值)/n^2`在double下精确复原那个值（n^2是2的幂时更是显然，本档n=4、n^2=16）。**它钉住`scaled_section(0)`这条退化路**",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
