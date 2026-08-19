@@ -46,7 +46,13 @@ SHORT="$(git rev-parse --short HEAD)"
 
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
-git bundle create "$STAGE/pe.bundle" HEAD 2>/dev/null
+# **带上`main`这个引用，不只是`HEAD`。** 与`run_accept_on_master.sh`第54—58行同一条：
+# 只打包`HEAD`时克隆出来没有`main`这个ref，而`tools/check_worktree_env.py`第④条断言
+# 要解析基线分支，解析不出来就红。那次实测的回执是**读起来像失败、实际全绿**——
+# 比没有回执更危险。那条在`run_accept_on_master.sh`里修过一次（提交5288bb5），
+# **这个通用入口是同一个形状的第二处，2026-08-18补**：它一样会被用来跑`accept.py`
+# 或任何要解析基线分支的命令，届时会重现同一份假失败的回执。
+git bundle create "$STAGE/pe.bundle" main HEAD 2>/dev/null
 rtime-sync push "$STAGE/pe.bundle" "$HOST:/tmp/pe-run-$SHORT-$RUN_TAG.bundle" >/dev/null
 echo "[master] 已送达 $SHORT"
 
