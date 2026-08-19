@@ -189,6 +189,29 @@ RESOLUTION_PROBE_SEGMENTS = 64
 #: 选它做拒跑档等于没验到门。这条差别是写判据时实测撞出来的。
 RESOLUTION_REFUSAL_SEGMENTS = 24
 
+#: 第八层：有截面的线圈（S2.4）。两条同轴矩形截面线圈，`(半径, 轴向位置, 径向全宽, 轴向全高)`。
+BUNDLE_COIL_A = (0.050, 0.000, 0.010, 0.008)
+BUNDLE_COIL_B = (0.030, 0.040, 0.006, 0.005)
+BUNDLE_SEGMENTS = 24
+#: 截面细分档位。**不取8**：grid=8是4096对细丝、实测一次1.1秒，
+#: 而它在收敛表上只是第四个点——interactive档买不起（案例页第五节记了那个数）。
+BUNDLE_GRIDS: tuple[int, ...] = (1, 2, 4)
+#: 各档相对误差的包络，取实测的2倍：1.64463e-3 / 4.13424e-4 / 1.03504e-4。
+BUNDLE_ENVELOPE: tuple[float, ...] = (3.3e-3, 8.3e-4, 2.1e-4)
+#: 收敛阶的区间。二维中点求积是**代数二阶**，实测1.99207 / 1.99794。
+BUNDLE_ORDER_BRACKET = (1.9, 2.1)
+#: 细丝极限：截面按比例缩小，偏差按s^2降。实测2.00075 / 2.00022 / 2.00006。
+BUNDLE_LIMIT_GRID = 2
+BUNDLE_LIMIT_SCALES: tuple[float, ...] = (1.0, 0.5, 0.25, 0.125)
+#: 四维Gauss-Legendre参考的节点数与自校验档（每维）。
+BUNDLE_REFERENCE_NODES = 12
+BUNDLE_REFERENCE_SELF_CHECK_NODES = 8
+BUNDLE_REFERENCE_FLOOR = 1.0e-13
+#: 互易与匝数档：两条线圈的截面细分与分段数**都不同**。
+BUNDLE_RECIPROCITY_GRIDS = (4, 3)
+BUNDLE_RECIPROCITY_SEGMENTS = (48, 31)
+BUNDLE_TURNS = (3, 7)
+
 #: 第七层：单位边界。mm制声明与米制声明必须给出逐位相同的M。
 UNIT_RADIUS_A_MM = 50.0
 UNIT_RADIUS_B_MM = 30.0
@@ -473,6 +496,51 @@ def dipole_general_h(
     return MU0_H_PER_M * area_a * area_b * angular / (4.0 * math.pi * distance**3)
 
 
+def section_averaged_maxwell_h(
+    radius_a: float,
+    axial_a: float,
+    radial_extent_a: float,
+    axial_extent_a: float,
+    radius_b: float,
+    axial_b: float,
+    radial_extent_b: float,
+    axial_extent_b: float,
+    nodes: int,
+) -> float:
+    """两条同轴矩形截面线圈的互感：**对两个截面各做二维Gauss-Legendre，核用Maxwell闭式**。
+
+    这是被验内核那一侧（截面二维中点求积 + Neumann双重求积）的**双重独立**：
+    求积法不同（GL对中点）、核不同（椭圆积分闭式对二维线积分求和）。
+
+    四维张量积`nodes^4`次核求值。这里的k落在0.8—0.9，
+    离小k那条相消区很远，所以闭式在**这一格**是可以当金标的
+    （与第一层不同——那里有一组k=0.0995的远场构型）。
+    """
+
+    abscissas, weights = legendre_nodes(nodes)
+    terms = []
+    for index_a, abscissa_a in enumerate(abscissas):
+        source_radius = radius_a + 0.5 * radial_extent_a * abscissa_a
+        for index_za, abscissa_za in enumerate(abscissas):
+            source_axial = axial_a + 0.5 * axial_extent_a * abscissa_za
+            weight_a = weights[index_a] * weights[index_za]
+            for index_b, abscissa_b in enumerate(abscissas):
+                target_radius = radius_b + 0.5 * radial_extent_b * abscissa_b
+                for index_zb, abscissa_zb in enumerate(abscissas):
+                    target_axial = axial_b + 0.5 * axial_extent_b * abscissa_zb
+                    weight = weight_a * weights[index_b] * weights[index_zb]
+                    terms.append(
+                        weight
+                        * maxwell_coaxial_mutual_h(
+                            source_radius,
+                            target_radius,
+                            abs(target_axial - source_axial),
+                        )
+                    )
+    # 四个方向各除以2（GL权重之和是2），即对两个截面取**平均**而不是积分。
+    return math.fsum(terms) / 16.0
+
+
 def far_field_placement(
     family: str, normal: tuple[float, float, float], separation: float
 ) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
@@ -565,6 +633,19 @@ def main() -> int:
     refusal_ratio = probe_separation * RESOLUTION_REFUSAL_SEGMENTS / (
         2.0 * math.pi * probe_radius
     )
+
+    # --- 第八层：有截面的线圈 ---
+    bundle_reference = section_averaged_maxwell_h(
+        *BUNDLE_COIL_A, *BUNDLE_COIL_B, BUNDLE_REFERENCE_NODES
+    )
+    bundle_reference_coarse = section_averaged_maxwell_h(
+        *BUNDLE_COIL_A, *BUNDLE_COIL_B, BUNDLE_REFERENCE_SELF_CHECK_NODES
+    )
+    bundle_self_check = abs(bundle_reference - bundle_reference_coarse) / abs(bundle_reference)
+    if bundle_self_check > BUNDLE_REFERENCE_FLOOR:
+        raise SystemExit(
+            f"四维GL参考未收敛：两档相对差{bundle_self_check!r} > {BUNDLE_REFERENCE_FLOOR!r}，不落盘"
+        )
 
     # --- 第七层：单位边界 ---
     unit_value = converged_flux_mutual_h(
@@ -897,6 +978,102 @@ def main() -> int:
             },
         },
     ]
+
+    oracles.append(
+        {
+            "id": "oracle:mutual_inductance_general/section_bundle",
+            "inputs": {
+                "kind": "four_dimensional_gauss_legendre_over_both_sections",
+                "coil_a_radius_axial_radial_extent_axial_extent_m": list(BUNDLE_COIL_A),
+                "coil_b_radius_axial_radial_extent_axial_extent_m": list(BUNDLE_COIL_B),
+                "segments": BUNDLE_SEGMENTS,
+                "section_grids": list(BUNDLE_GRIDS),
+                "relative_error_envelope": list(BUNDLE_ENVELOPE),
+                "order_bracket": list(BUNDLE_ORDER_BRACKET),
+                "filament_limit_grid": BUNDLE_LIMIT_GRID,
+                "filament_limit_scales": list(BUNDLE_LIMIT_SCALES),
+                "reference_nodes": BUNDLE_REFERENCE_NODES,
+                "reference_self_check_nodes": BUNDLE_REFERENCE_SELF_CHECK_NODES,
+                "reference_self_check": bundle_self_check,
+                "reciprocity_grids": list(BUNDLE_RECIPROCITY_GRIDS),
+                "reciprocity_segments": list(BUNDLE_RECIPROCITY_SEGMENTS),
+                "turns": list(BUNDLE_TURNS),
+                "current_density_assumption":
+                    "截面上电流密度**均匀**（每根丝等份电流）。这是一个建模选择不是数值参数："
+                    "直流成立、低频近似成立、高频（趋肤与邻近效应）不成立。S2.4只解开一半",
+            },
+            "expected": {
+                "mutual_inductance_at_the_finest_grid_h": bundle_reference,
+                "section_errors_fall_under_the_envelope": True,
+                "section_refinement_orders_bracket_two": True,
+                "filament_limit_orders_bracket_two": True,
+                "zero_section_equals_the_centre_filament": True,
+                "bundle_reciprocity_max_abs_difference_h": 0.0,
+                "turns_factor_is_bit_exact": True,
+            },
+            "tolerances": {
+                "mutual_inductance_at_the_finest_grid_h": {
+                    "abs": 0.0, "rel": 2.1e-4,
+                    "reason": "grid=4的截面平均对**四维Gauss-Legendre参考**"
+                              "（每维12节点、核用Maxwell闭式，与被验侧求积法与核都不同；"
+                              "两档8/12节点自校验相对差<=1e-15）。"
+                              "**这条容差不是舍入而是声明的截断**：二维中点求积在grid=4上的"
+                              "相对误差实测1.03504e-4，容差取它的2倍。"
+                              "一条容差比舍入大九个数量级的判据要说清它在判什么——"
+                              "它判的是**装配**（丝对平均、权重、匝数因子、截面网格的位置），"
+                              "不是数值精度；数值精度由下面两条收敛判据判",
+                },
+                "section_errors_fall_under_the_envelope": {
+                    "abs": 0.0, "rel": 0.0,
+                    "reason": "布尔：grid=1/2/4三档对四维GL参考的相对误差落在包络内。"
+                              "包络取实测的2倍：1.64463e-3 / 4.13424e-4 / 1.03504e-4。"
+                              "**grid=1那一档就是中心细丝**，所以这条同时说明了"
+                              "'把有截面的线圈当细丝算'要付多少代价：本构型1.6e-3",
+                },
+                "section_refinement_orders_bracket_two": {
+                    "abs": 0.0, "rel": 0.0,
+                    "reason": "布尔：相邻两档的log2误差比落在[1.9, 2.1]。实测1.99207 / 1.99794。"
+                              "**这一条与`geometric_convergence`那一层方向相反、必须分开读**："
+                              "那里加密的是回路角向（解析周期被积函数，几何收敛、没有固定阶），"
+                              "这里加密的是截面（区间不周期，二维中点法就是代数二阶）。"
+                              "**同一块代码里两条收敛阶不同不是矛盾，是两件事**。"
+                              "实测N=24与N=32给出**同样的三个阶**，说明细丝求积没有污染这一层",
+                },
+                "filament_limit_orders_bracket_two": {
+                    "abs": 0.0, "rel": 0.0,
+                    "reason": "布尔：截面按1/2/4/8缩小时，与中心细丝的偏差比取log2落在[1.9, 2.1]。"
+                              "实测2.00075 / 2.00022 / 2.00006。**首阶为零是因为截面对中心对称**"
+                              "——一阶项相消，这正是'取中心细丝当零阶近似'能有二阶精度的原因。"
+                              "**它抓的是截面网格摆歪**：若中点公式写成`i/n`而不是`(i+0.5)/n`，"
+                              "截面整体偏半格，一阶项不再相消，阶掉到1",
+                },
+                "zero_section_equals_the_centre_filament": {
+                    "abs": 0.0, "rel": 0.0,
+                    "reason": "布尔：截面尺寸缩到0时，一束丝与中心那一根丝**逐位相同**。"
+                              "零容差是算出来的：n^2根丝的位置与半径全部相同，"
+                              "于是丝对的值也全部相同，`fsum(n^2个相同的值)/n^2`"
+                              "在double下精确复原那个值（n^2是2的幂时更是显然，"
+                              "本档n=4、n^2=16）。**它钉住`scaled_section(0)`这条退化路**",
+                },
+                "bundle_reciprocity_max_abs_difference_h": {
+                    "abs": 0.0, "rel": 0.0,
+                    "reason": "`M(A,B)`与`M(B,A)`**逐位相同**，且两条线圈的**截面细分(4与3)与"
+                              "分段数(48与31)都不同**。零容差是算出来的：丝对的值集合在交换时"
+                              "是同一个多重集（每一对本身逐位对称），`math.fsum`对置换不变，"
+                              "而`n_a*n_b`与`N_a*N_b`都是可交换的乘法。"
+                              "**截面细分不同这一点是故意的**：它是'角色写反'在本层的新形态",
+                },
+                "turns_factor_is_bit_exact": {
+                    "abs": 0.0, "rel": 0.0,
+                    "reason": "布尔：`M(N_a,N_b)`与`(N_a*N_b)*M(1,1)`**逐位相同**。"
+                              "与`mutual_inductance_coaxial`那条同源，"
+                              "但在本层多守一件事：**匝数与截面细分是两个完全无关的数**，"
+                              "而把匝数当细分数（或反过来）是这块最容易犯的错——"
+                              "本条与上一条（细分4与3、匝数3与7）合起来把两者钉死",
+                },
+            },
+        }
+    )
 
     document = {
         "facet": "engine_oracle_manifest",

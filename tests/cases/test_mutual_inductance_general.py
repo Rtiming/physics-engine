@@ -16,6 +16,10 @@ from pathlib import Path
 import pytest
 
 from physics_engine.electromagnetics import CircularLoop, ElectromagneticsError
+from physics_engine.electromagnetics.bundle import (
+    RectangularSectionCoil,
+    bundle_mutual_inductance_h,
+)
 from physics_engine.electromagnetics.neumann import (
     PlacedCircularLoop,
     dipole_mutual_inductance_general_h,
@@ -33,6 +37,7 @@ RECIPROCITY = MANIFEST.oracle("oracle:mutual_inductance_general/reciprocity")
 FAR_FIELD = MANIFEST.oracle("oracle:mutual_inductance_general/far_field_dipole")
 SINGULARITY = MANIFEST.oracle("oracle:mutual_inductance_general/singularity_and_resolution")
 UNITS = MANIFEST.oracle("oracle:mutual_inductance_general/unit_boundary")
+BUNDLE = MANIFEST.oracle("oracle:mutual_inductance_general/section_bundle")
 
 
 def _coaxial_pair(
@@ -316,6 +321,115 @@ def test_the_millimetre_declaration_agrees_with_the_metre_one():
     })
 
 
+def _section_coil(spec, grid, scale=1.0, turns=1):
+    radius, axial, radial_extent, axial_extent = spec
+    return RectangularSectionCoil(
+        mean_radius_m=radius,
+        centre_m=(0.0, 0.0, axial),
+        normal=(0.0, 0.0, 1.0),
+        radial_extent_m=radial_extent * scale,
+        axial_extent_m=axial_extent * scale,
+        radial_filaments=grid,
+        axial_filaments=grid,
+        turns=turns,
+    )
+
+
+def test_the_section_bundle_converges_to_the_four_dimensional_reference():
+    """第八层（S2.4）：把导体截面离散成一束细丝。
+
+    三条方向不同的判据：**截面细分**按代数二阶收敛到四维GL参考、
+    **截面缩小**按二阶退化到中心细丝、以及一束丝的互易与匝数因子逐位成立。
+    """
+
+    spec_a = BUNDLE.inputs["coil_a_radius_axial_radial_extent_axial_extent_m"]
+    spec_b = BUNDLE.inputs["coil_b_radius_axial_radial_extent_axial_extent_m"]
+    segments = BUNDLE.inputs["segments"]
+    grids = BUNDLE.inputs["section_grids"]
+    envelope = BUNDLE.inputs["relative_error_envelope"]
+    low, high = BUNDLE.inputs["order_bracket"]
+    reference = BUNDLE.expected["mutual_inductance_at_the_finest_grid_h"]
+
+    values = [
+        bundle_mutual_inductance_h(
+            _section_coil(spec_a, grid),
+            _section_coil(spec_b, grid),
+            segments_a=segments,
+            segments_b=segments,
+        )
+        for grid in grids
+    ]
+    errors = [abs(value - reference) / abs(reference) for value in values]
+    section_orders = [
+        math.log2(errors[index] / errors[index + 1]) for index in range(len(errors) - 1)
+    ]
+
+    limit_grid = BUNDLE.inputs["filament_limit_grid"]
+    deviations = []
+    for scale in BUNDLE.inputs["filament_limit_scales"]:
+        coil_a = _section_coil(spec_a, limit_grid, scale)
+        coil_b = _section_coil(spec_b, limit_grid, scale)
+        bundled = bundle_mutual_inductance_h(
+            coil_a, coil_b, segments_a=segments, segments_b=segments
+        )
+        filament = neumann_mutual_inductance_h(
+            coil_a.centre_filament(),
+            coil_b.centre_filament(),
+            segments_a=segments,
+            segments_b=segments,
+        )
+        deviations.append(abs(bundled - filament) / abs(filament))
+    limit_orders = [
+        math.log2(deviations[index] / deviations[index + 1])
+        for index in range(len(deviations) - 1)
+    ]
+
+    zero_a = _section_coil(spec_a, limit_grid, 0.0)
+    zero_b = _section_coil(spec_b, limit_grid, 0.0)
+    zero_section = bundle_mutual_inductance_h(
+        zero_a, zero_b, segments_a=segments, segments_b=segments
+    ) == neumann_mutual_inductance_h(
+        zero_a.centre_filament(),
+        zero_b.centre_filament(),
+        segments_a=segments,
+        segments_b=segments,
+    )
+
+    grid_a, grid_b = BUNDLE.inputs["reciprocity_grids"]
+    segments_a, segments_b = BUNDLE.inputs["reciprocity_segments"]
+    turns_a, turns_b = BUNDLE.inputs["turns"]
+    coil_a = _section_coil(spec_a, grid_a, turns=turns_a)
+    coil_b = _section_coil(spec_b, grid_b, turns=turns_b)
+    forward = bundle_mutual_inductance_h(
+        coil_a, coil_b, segments_a=segments_a, segments_b=segments_b
+    )
+    reverse = bundle_mutual_inductance_h(
+        coil_b, coil_a, segments_a=segments_b, segments_b=segments_a
+    )
+    single = bundle_mutual_inductance_h(
+        _section_coil(spec_a, grid_a),
+        _section_coil(spec_b, grid_b),
+        segments_a=segments_a,
+        segments_b=segments_b,
+    )
+
+    BUNDLE.check_all({
+        "mutual_inductance_at_the_finest_grid_h": values[-1],
+        "section_errors_fall_under_the_envelope": all(
+            error <= bound for error, bound in zip(errors, envelope, strict=True)
+        ),
+        "section_refinement_orders_bracket_two": all(
+            low <= order <= high for order in section_orders
+        ),
+        "filament_limit_orders_bracket_two": all(
+            low <= order <= high for order in limit_orders
+        ),
+        "zero_section_equals_the_centre_filament": zero_section,
+        "bundle_reciprocity_max_abs_difference_h": abs(forward - reverse),
+        "turns_factor_is_bit_exact": forward == (turns_a * turns_b) * single,
+    })
+
+
 def test_the_manifest_generator_is_the_one_that_produced_it():
     """清单与生成它的脚本必须同批变（轴7规则2的执行体）。"""
 
@@ -324,7 +438,7 @@ def test_the_manifest_generator_is_the_one_that_produced_it():
 
 @pytest.mark.parametrize(
     "oracle",
-    [COAXIAL, CONVERGENCE, GENERAL, RECIPROCITY, FAR_FIELD, SINGULARITY, UNITS],
+    [COAXIAL, CONVERGENCE, GENERAL, RECIPROCITY, FAR_FIELD, SINGULARITY, UNITS, BUNDLE],
 )
 def test_every_expected_quantity_carries_a_reason(oracle):
     """**判据本身被验**：每一个量的容差都要有理由，且理由不许是空话。"""

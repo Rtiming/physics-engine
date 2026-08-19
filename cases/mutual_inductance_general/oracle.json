@@ -7,10 +7,10 @@
     "algorithm_id": "algorithm:oracle/mutual_inductance_general",
     "algorithm_version": "1.0.0",
     "path_relative": "cases/mutual_inductance_general/generate_oracle.py",
-    "sha256": "33b416f85475b06d85190e91f0666d0bc69d7fc2ec9dc991efb48a8c012f08aa"
+    "sha256": "2373fe688df30b597562ef063010b2233d6defa49c779265ad551115b0684815"
   },
   "load_tier": "interactive",
-  "manifest_self_sha256": "8d6a50b8c924be1d0518abb2f817cc9c18d64bc4cdef52bc82c2b29f7383ec22",
+  "manifest_self_sha256": "2227ab6e9ab153c10841b3e564730bccab28e2d1c52a1e09adcc3721d674afaa",
   "oracles": [
     {
       "expected": {
@@ -599,6 +599,108 @@
           "abs": 0.0,
           "reason": "mm制声明的几何算出的互感，金标由米制的Biot-Savart面积分给出。**它钉的是换算的方向**：往返判据（mm->m->mm）只验可逆，验不出方向——乘1000再除1000同样可逆。方向反了差1e6倍。容差与一般位形那一层同源",
           "rel": 1e-12
+        }
+      }
+    },
+    {
+      "expected": {
+        "bundle_reciprocity_max_abs_difference_h": 0.0,
+        "filament_limit_orders_bracket_two": true,
+        "mutual_inductance_at_the_finest_grid_h": 1.5397444393515213e-08,
+        "section_errors_fall_under_the_envelope": true,
+        "section_refinement_orders_bracket_two": true,
+        "turns_factor_is_bit_exact": true,
+        "zero_section_equals_the_centre_filament": true
+      },
+      "id": "oracle:mutual_inductance_general/section_bundle",
+      "inputs": {
+        "coil_a_radius_axial_radial_extent_axial_extent_m": [
+          0.05,
+          0.0,
+          0.01,
+          0.008
+        ],
+        "coil_b_radius_axial_radial_extent_axial_extent_m": [
+          0.03,
+          0.04,
+          0.006,
+          0.005
+        ],
+        "current_density_assumption": "截面上电流密度**均匀**（每根丝等份电流）。这是一个建模选择不是数值参数：直流成立、低频近似成立、高频（趋肤与邻近效应）不成立。S2.4只解开一半",
+        "filament_limit_grid": 2,
+        "filament_limit_scales": [
+          1.0,
+          0.5,
+          0.25,
+          0.125
+        ],
+        "kind": "four_dimensional_gauss_legendre_over_both_sections",
+        "order_bracket": [
+          1.9,
+          2.1
+        ],
+        "reciprocity_grids": [
+          4,
+          3
+        ],
+        "reciprocity_segments": [
+          48,
+          31
+        ],
+        "reference_nodes": 12,
+        "reference_self_check": 3.0084287443491965e-15,
+        "reference_self_check_nodes": 8,
+        "relative_error_envelope": [
+          0.0033,
+          0.00083,
+          0.00021
+        ],
+        "section_grids": [
+          1,
+          2,
+          4
+        ],
+        "segments": 24,
+        "turns": [
+          3,
+          7
+        ]
+      },
+      "tolerances": {
+        "bundle_reciprocity_max_abs_difference_h": {
+          "abs": 0.0,
+          "reason": "`M(A,B)`与`M(B,A)`**逐位相同**，且两条线圈的**截面细分(4与3)与分段数(48与31)都不同**。零容差是算出来的：丝对的值集合在交换时是同一个多重集（每一对本身逐位对称），`math.fsum`对置换不变，而`n_a*n_b`与`N_a*N_b`都是可交换的乘法。**截面细分不同这一点是故意的**：它是'角色写反'在本层的新形态",
+          "rel": 0.0
+        },
+        "filament_limit_orders_bracket_two": {
+          "abs": 0.0,
+          "reason": "布尔：截面按1/2/4/8缩小时，与中心细丝的偏差比取log2落在[1.9, 2.1]。实测2.00075 / 2.00022 / 2.00006。**首阶为零是因为截面对中心对称**——一阶项相消，这正是'取中心细丝当零阶近似'能有二阶精度的原因。**它抓的是截面网格摆歪**：若中点公式写成`i/n`而不是`(i+0.5)/n`，截面整体偏半格，一阶项不再相消，阶掉到1",
+          "rel": 0.0
+        },
+        "mutual_inductance_at_the_finest_grid_h": {
+          "abs": 0.0,
+          "reason": "grid=4的截面平均对**四维Gauss-Legendre参考**（每维12节点、核用Maxwell闭式，与被验侧求积法与核都不同；两档8/12节点自校验相对差<=1e-15）。**这条容差不是舍入而是声明的截断**：二维中点求积在grid=4上的相对误差实测1.03504e-4，容差取它的2倍。一条容差比舍入大九个数量级的判据要说清它在判什么——它判的是**装配**（丝对平均、权重、匝数因子、截面网格的位置），不是数值精度；数值精度由下面两条收敛判据判",
+          "rel": 0.00021
+        },
+        "section_errors_fall_under_the_envelope": {
+          "abs": 0.0,
+          "reason": "布尔：grid=1/2/4三档对四维GL参考的相对误差落在包络内。包络取实测的2倍：1.64463e-3 / 4.13424e-4 / 1.03504e-4。**grid=1那一档就是中心细丝**，所以这条同时说明了'把有截面的线圈当细丝算'要付多少代价：本构型1.6e-3",
+          "rel": 0.0
+        },
+        "section_refinement_orders_bracket_two": {
+          "abs": 0.0,
+          "reason": "布尔：相邻两档的log2误差比落在[1.9, 2.1]。实测1.99207 / 1.99794。**这一条与`geometric_convergence`那一层方向相反、必须分开读**：那里加密的是回路角向（解析周期被积函数，几何收敛、没有固定阶），这里加密的是截面（区间不周期，二维中点法就是代数二阶）。**同一块代码里两条收敛阶不同不是矛盾，是两件事**。实测N=24与N=32给出**同样的三个阶**，说明细丝求积没有污染这一层",
+          "rel": 0.0
+        },
+        "turns_factor_is_bit_exact": {
+          "abs": 0.0,
+          "reason": "布尔：`M(N_a,N_b)`与`(N_a*N_b)*M(1,1)`**逐位相同**。与`mutual_inductance_coaxial`那条同源，但在本层多守一件事：**匝数与截面细分是两个完全无关的数**，而把匝数当细分数（或反过来）是这块最容易犯的错——本条与上一条（细分4与3、匝数3与7）合起来把两者钉死",
+          "rel": 0.0
+        },
+        "zero_section_equals_the_centre_filament": {
+          "abs": 0.0,
+          "reason": "布尔：截面尺寸缩到0时，一束丝与中心那一根丝**逐位相同**。零容差是算出来的：n^2根丝的位置与半径全部相同，于是丝对的值也全部相同，`fsum(n^2个相同的值)/n^2`在double下精确复原那个值（n^2是2的幂时更是显然，本档n=4、n^2=16）。**它钉住`scaled_section(0)`这条退化路**",
+          "rel": 0.0
         }
       }
     }
