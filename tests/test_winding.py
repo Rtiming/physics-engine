@@ -4,8 +4,12 @@
 弧长闭式）的对拍与收敛阶在`cases/spool_winding_growth`，
 因为金标与被验量不该出自同一支笔。
 
-四条判据：
+五条判据：
 
+0. **盘宽决定一层排几匝**：``turns_per_layer = ⌊W_channel / w_tape⌋``，
+   ``W_channel``正是`modelgen.generate_spool`的
+   ``barrel_width_ratio × characteristic_length_mm``。
+   **它是几何量与卷绕律之间缺的那一步**——在它之前每层匝数是调用方随手给的一个数；
 1. **与`drives.SpoolTension.radius_mm`逐位相同**（退化档：每层1匝、堆积因子1、
    连续式）。判``==``不是判容差——"旧式子是新式子的特例"这句话
    **要么逐位成立，要么就不该说**（`cases/free_span_tension_step`对
@@ -37,18 +41,20 @@
 
 | 注错 | 本文件红掉 | conformance红掉 |
 |---|---|---|
-| `radius_mm`漏掉``t_eff``（半径不长） | 12 | 2 |
+| `radius_mm`漏掉``t_eff``（半径不长） | 13 | 2 |
 | `radius_integral_mm`连续式写成``R₀n + slope·n²``（漏掉½） | 6 | 2 |
 | `radius_integral_mm`写成``R(n)·n``（整卷按最外匝算） | 6 | 2 |
 | `turn_mean_radius_mm`取``R(index+1)``（半径更新**早**一匝） | 6 | 1 |
-| `layers_at`台阶式改用`ceil`（层数早跳一格） | 6 | 1 |
+| `layers_at`台阶式改用`ceil`（层数早跳一格） | 7 | 1 |
 | `segments_on_spool`写成``fed_count − free_span``（少减1） | 4 | 1 |
 | `turn_mean_radius_mm`取``R(index)``（半径更新**晚**一匝） | 3 | 1 |
 | `effective_layer_thickness_mm`写成``t·packing``（堆积因子反了） | 2 | 2 |
+| `turns_per_layer_from_widths`改用`round`（排不下的半匝挤进本层） | 2 | 0 |
+| `turns_per_layer_from_widths`去掉"带比槽宽"的失败关闭 | 2 | 0 |
 | `turns_at_length_mm`连续式取``(−R₀+√…)/c``那一支 | 2 | 1 |
 | `segments_in_free_span`漏掉``min``（跨距吃掉全部料） | **1（补门前0）** | 1 |
 
-**十条全被抓到，最低一条。** 两条有信息的：
+**十二条全被抓到，最低一条。** 两条有信息的：
 
 * **最后一行原本是0红**——守恒恒等式``in_span + on_spool == fed``对
   "两边同时错了一个常数"是**盲的**：``7 + (k−1−7) == k−1``在``k < 8``时照样成立，
@@ -73,7 +79,13 @@ from physics_engine.drives import SpoolTension
 from physics_engine.feed import FeedFront
 from physics_engine.modelgen import generate_spool
 from physics_engine.shapes import FiniteCylinder
-from physics_engine.winding import TAU, WindingError, WindingFront, WindingPack
+from physics_engine.winding import (
+    TAU,
+    WindingError,
+    WindingFront,
+    WindingPack,
+    turns_per_layer_from_widths,
+)
 
 #: 二进制精确的一组卷绕参数：``64 = 2⁶``、``0.5 = 2⁻¹``。
 #: 乘加全程无舍入，于是第3条判据可以判真的``==``。
@@ -223,6 +235,50 @@ def test_the_stepped_radius_holds_still_inside_a_layer_and_jumps_between_them() 
     continuous = _exact_pack(turns_per_layer=4, layer_advance="continuous")
     assert continuous.radius_mm(2.0) > continuous.radius_mm(1.0)
     assert continuous.radius_mm(2.0) != stepped.radius_mm(2.0)
+
+
+def test_the_channel_width_decides_how_many_turns_fit_in_a_layer() -> None:
+    """``turns_per_layer = ⌊W_channel / w_tape⌋``——盘宽与每层匝数的那一步换算。
+
+    在它之前``turns_per_layer``是调用方随手给的一个数，与盘的宽度无关，
+    **而"这盘一层排几匝"本来是几何决定的**。``W_channel``正是
+    `modelgen.generate_spool`的``barrel_width_ratio × characteristic_length_mm``。
+
+    **取下取整**：排不下的那小半匝去下一层。``round``会让``47.9/12``报4匝，
+    而第4匝有0.1mm在法兰外面。
+    """
+
+    assert turns_per_layer_from_widths(48.0, 12.0) == 4
+    assert turns_per_layer_from_widths(50.0, 12.0) == 4
+    assert turns_per_layer_from_widths(47.9, 12.0) == 3
+    assert turns_per_layer_from_widths(12.0, 12.0) == 1
+
+    #: 与`generate_spool`那组冻结入参对齐：``0.375 × 256 = 96mm``的槽、
+    #: 24mm的带 ⟹ 一层4匝。
+    channel_mm = 0.375 * SPOOL_LENGTH_MM
+    assert channel_mm == 96.0
+    pack = _exact_pack(turns_per_layer=turns_per_layer_from_widths(channel_mm, 24.0),
+                       layer_advance="stepped")
+    assert pack.turns_per_layer == 4
+    assert pack.radius_mm(3.0) == EXACT_BARREL_MM
+    assert pack.radius_mm(4.0) == EXACT_BARREL_MM + EXACT_THICKNESS_MM
+
+
+@pytest.mark.parametrize("channel_mm,tape_mm", [
+    (12.0, 12.5), (1.0, 48.0), (0.0, 12.0), (48.0, 0.0),
+    (-48.0, 12.0), (48.0, math.nan), (math.inf, 12.0),
+])
+def test_a_tape_that_does_not_fit_the_channel_fails_closed(
+    channel_mm: float, tape_mm: float
+) -> None:
+    """带比槽宽 ⟹ **失败关闭**，不是"每层0匝"。
+
+    返回0会让``WindingPack``当场因``turns_per_layer < 1``而炸，
+    但那时报出来的是"每层匝数不合法"，**读的人查不到真正的原因是带装错了盘**。
+    """
+
+    with pytest.raises(WindingError):
+        turns_per_layer_from_widths(channel_mm, tape_mm)
 
 
 # ------------------------------------------------- 判据3：材料守恒的零容差恒等式

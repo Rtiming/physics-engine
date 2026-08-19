@@ -116,6 +116,46 @@ class WindingError(ValueError):
     """卷绕堆积律的一切失败关闭。"""
 
 
+def turns_per_layer_from_widths(channel_width_mm: float, tape_width_mm: float) -> int:
+    """一层排得下几匝：``⌊W_channel / w_tape⌋``——**密排、无边隙、无排线节距**。
+
+    ``W_channel``是两片法兰内侧面的轴向间距，正是`modelgen.generate_spool`的
+    ``barrel_width_ratio × characteristic_length_mm``（那个参数的文档里写着
+    "即两片法兰内侧面的轴向间距，对应WDS的``flange_channel_width_mm``"）。
+    **本函数是那个几何量与`WindingPack.turns_per_layer`之间缺的那一步**：
+    在它之前，``turns_per_layer``是调用方随手给的一个数，与盘的宽度无关——
+    而"这盘绕到第几匝会碰到法兰"这件事本来是几何决定的。
+
+    ## 取下取整而不是四舍五入
+
+    排不下的那小半匝**不会挤进这一层**，它去下一层。取``round``会让
+    ``W = 47.9、w = 12``报出4匝，而第4匝有0.1mm在法兰外面。
+
+    ## 本函数**不做什么**（负空间，写在这里而不是等着别人踩）
+
+    * **不做边隙与排线节距**。真机上排线机构的节距通常略大于带宽
+      （避免边缘互相蹭），于是实际每层匝数比本式**少**。要那个，
+      入参该是节距而不是带宽——那是一次新裁决，登记成GAP（决策0093第五节）；
+    * **不做绕满溢出的判断**。"绕到第几层会超出法兰外径"在
+      `modelgen.generate_spool`里（它对溢出失败关闭），本函数只管一层排几匝。
+
+    失败关闭：带比槽还宽（一匝都排不下——那不是"每层0匝"，那是装错了带）。
+    """
+
+    for name, value in (
+        ("channel_width_mm", channel_width_mm), ("tape_width_mm", tape_width_mm)
+    ):
+        if not (value > 0.0 and math.isfinite(value)):
+            raise WindingError(f"{name} must be positive and finite: {value!r}")
+    count = math.floor(channel_width_mm / tape_width_mm)
+    if count < 1:
+        raise WindingError(
+            f"带宽{tape_width_mm!r} mm排不进{channel_width_mm!r} mm的槽 —— "
+            "一匝都排不下不是『每层0匝』，是这卷带材装错了盘"
+        )
+    return count
+
+
 @dataclass(frozen=True)
 class WindingPack:
     """一卷带材的堆积声明：筒半径、带厚、每层匝数、堆积因子与层推进形制。
@@ -432,4 +472,5 @@ __all__ = [
     "WindingError",
     "WindingFront",
     "WindingPack",
+    "turns_per_layer_from_widths",
 ]
