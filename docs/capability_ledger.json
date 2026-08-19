@@ -411,14 +411,16 @@
         {
           "id": "S5.3",
           "label": "线圈盘几何与半径随匝数生长",
-          "status": "partial",
+          "status": "done",
           "exercises_physics": false,
           "evidence": [
-            "case:generator_determinism",
-            "test:tests/cases/test_generator_determinism.py::test_the_spool_products_are_real_shapes_with_closed_form_mass_properties"
+            "case:spool_winding_growth",
+            "test:tests/cases/test_spool_winding_growth.py::test_the_radius_ladder_matches_the_hand_written_closed_form",
+            "test:tests/cases/test_spool_winding_growth.py::test_the_wound_material_is_conserved_turn_by_turn",
+            "test:tests/test_winding.py::test_the_degenerate_pack_and_the_drive_side_radius_are_the_same_float",
+            "test:tests/test_winding.py::test_the_stepped_pack_reproduces_the_generator_layer_growth_bit_for_bit"
           ],
-          "why": "`modelgen.generate_spool`产出的是真形状，质量属性对圆柱/胶囊教科书闭式rel 1e-15，且同参数逐字节相同。",
-          "missing": "**只做了静态几何**。有效半径随层数生长引擎侧为零（WDS有`WindingSurface`可搬）。"
+          "why": "label两半各自有证据。**「线圈盘几何」**：`modelgen.generate_spool`产筒＋两片法兰、三件互不重叠且对溢出法兰失败关闭。**「半径随匝数生长」**：0093的`winding.py`落地，而判据强度靠**恒等式**不靠容差——半径对手写闭式14档**零容差浮点`==`**；材料守恒`Σ R(k+½) == ∫₀ⁿR ds`五种形制×32匝**真的浮点`==`**；反解`长度→匝`往返最坏rel **1.3158e-16**（1 ulp）；另有一条**从下方单调逼近2**的收敛阶（同心圆理想化对真阿基米德螺线弧长闭式，七档1.9354→1.9670→1.9833→1.9916→1.9958→1.9986）。**本仓三处写着「半径随卷绕生长」的关系被两道逐位门钉住而不是靠注释**：退化档与`drives.radius_mm`给同一个浮点数、台阶式与`generate_spool`在冻结那组入参下同为`68.0`——三者**不是三份重复，自变量不同**（`drives`吃匝答力、`generate_spool`吃层答形、`winding`补中间那段匝→层换算）。**本位进位时删掉了一句已经过期的`missing`**：原文写「有效半径随层数生长引擎侧为零」，而`modelgen.py`第244行起早就在按已卷层数生长（主代理合入时逐行核过）。"
         },
         {
           "id": "S5.4",
@@ -431,7 +433,7 @@
             "test:tests/test_feed.py::test_the_fed_portion_behaves_like_a_rod_of_that_length"
           ],
           "why": "十几匝不是一次装配出来的，是一匝一匝喂出来的——自由度数在过程中变。0062丙1已落`feed.FeedFront`，**解法直接复用0050对锚点裁过的形制**：节点数不由『已经喂进来多少』决定，由『这一卷总共要喂多少』决定；预算在声明期定死、布局定长，`fed_count`是**向量里的一个值不是一次布局变更**，未喂节点停在喂料口后方一个静止段长处并被钉住。于是S5.4原文那句『自由度数在过程中变』在这里**不变**——0050那条承重条款（指纹跨步不变）保住了。未喂边的贡献**逐字节为零**（全预算项与只含已喂边的项能量/梯度逐字节相同），不是被if跳过的——跳过会让求和次序随`fed_count`变，而求和次序是形制。",
-          "missing": "**不是材料注入**。WDS `research/05`第三节称『当前最大的单项缺口』的那一条是**带材从轮面上流过、边界随材料移动**（欧拉式），而本模块是**拉格朗日**的：每个节点始终是同一块材料，喂料只是往前接长度。横漂稳态、绞盘全滑都要材料注入，本模块给不了。另无匝数与半径生长的接线（那是`drives.SpoolTension`的`turns`，两者尚未接在一起）、无自接触（S5.2）、无喂料速度与线速的耦合、未喂节点的停放位置是一条直线而不是放线盘上的真实位形。故只报partial。"
+          "missing": "**不是材料注入**。WDS `research/05`第三节称『当前最大的单项缺口』的那一条是**带材从轮面上流过、边界随材料移动**（欧拉式），而本模块是**拉格朗日**的：每个节点始终是同一块材料，喂料只是往前接长度。横漂稳态、绞盘全滑都要材料注入，本模块给不了。~~另无匝数与半径生长的接线~~（**2026-08-18已接**：0093的`winding.py`把喂料前沿与卷绕堆积接在一起，`喂进来 == 跨距里 + 盘上`1400档**整数`==`**，前沿角速率`ω = v/R`对中心差分五档实测二阶）、无自接触（S5.2）、无喂料速度与线速的耦合、未喂节点的停放位置是一条直线而不是放线盘上的真实位形。故只报partial。"
         },
         {
           "id": "S5.5",
