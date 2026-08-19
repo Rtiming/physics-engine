@@ -355,39 +355,42 @@
         {
           "id": "S4.5",
           "label": "场传播（角谱／菲涅耳／夫琅禾费，要FFT）",
-          "status": "partial",
+          "status": "done",
           "exercises_physics": false,
           "evidence": [
-            "case:double_slit_propagated",
-            "test:tests/test_optics_propagation.py::test_a_plane_wave_only_picks_up_the_closed_form_phase",
-            "test:tests/test_optics_propagation.py::test_two_half_steps_equal_one_whole_step",
-            "test:tests/test_optics_propagation.py::test_zero_distance_is_bit_for_bit_the_pure_round_trip"
+            "case:angular_spectrum_propagation",
+            "test:tests/cases/test_angular_spectrum_propagation.py::test_a_plane_wave_only_picks_up_the_exact_transfer_phase",
+            "test:tests/cases/test_angular_spectrum_propagation.py::test_the_evanescent_content_really_costs_power_and_a_paraxial_form_cannot_see_it",
+            "test:tests/cases/test_angular_spectrum_propagation.py::test_the_zero_distance_result_is_bit_for_bit_the_pure_round_trip"
           ],
-          "why": "0086落地：角谱／菲涅耳／夫琅禾费三形制。判据里最有分辨力的两条是**平面波本征函数**（唯一能把精确角谱与傍轴分开的判据，实测比值3.09）与**能量守恒**（前因子唯一的捕手，角谱实测恰为0、菲涅耳3.33e-16）；另有`z→0`与`ifft2(fft2(U0))`**逐位相同**（零容差）、半群性质残差6.28e-16。**采样判据显式声明并两侧失败关闭**：`z_c = N·dx²/λ`既是角谱上界又是菲涅耳下界，越界报错指路——一个在混叠区静默给数的传播器是冒充。规模墙钟实测秒/(N²log₂N)只在1.49e-7—1.83e-7浮动，即实现真是`O(N² log N)`。",
-          "missing": "**角谱那一侧没有任何案例冻结金标**——平面波本征函数／倏逝波衰减／`z→0`逐位／半群四条今天只活在`tests/`里，而案例`double_slit_propagated`走的是夫琅禾费那一支。按本仓的分档，`tests/`里的门守的是实现、案例冻结的才是判据，**所以这一位是partial不是done**。另两条不改状态但要记：**没有加速档**，512²以上纯Python进本机批级（0016的加速档正该在这里出场，而0052第七节实测`accel`档在能量装配之外只值1.00—1.02倍）；**半群那条依赖平台的三角函数幅角约化**（本机libm做精确约化，相位`k·z ~ 1e5`弧度时残差仍停在eps量级），它在别的平台红的时候**先查平台，不要先放宽**。"
+          "why": "0086落地：角谱／菲涅耳／夫琅禾费三形制。判据里最有分辨力的两条是**平面波本征函数**（唯一能把精确角谱与傍轴分开的判据，实测比值3.09）与**能量守恒**（前因子唯一的捕手，角谱实测恰为0、菲涅耳3.33e-16）；另有`z→0`与`ifft2(fft2(U0))`**逐位相同**（零容差）、半群性质残差6.28e-16。**采样判据显式声明并两侧失败关闭**：`z_c = N·dx²/λ`既是角谱上界又是菲涅耳下界，越界报错指路——一个在混叠区静默给数的传播器是冒充。规模墙钟实测秒/(N²log₂N)只在1.49e-7—1.83e-7浮动，即实现真是`O(N² log N)`。**2026-08-18（0091）补上了本位报partial的唯一理由**：角谱那一侧从「只活在`tests/`里」变成有案例冻结金标（`angular_spectrum_propagation`），生成器走**二维直接求和**（无行列分解、无位反转、无旋转因子表，不import`physics_engine.optics`）。`missing`点名的四条全部进案例，另有**两条角谱独有、傍轴给不出的**：平面波本征值残差3.5253e-15、而精确与傍轴的差逐bin冻住（倏逝四bin达7.86e-1—1.01）；**倏逝功率损失就是一个数**——亚波长网格上精确角谱`0.895526867531937`、傍轴**恰好1.0**（`|H|=1`逐bin ⟹ Parseval分子分母逐项相同 ⟹ 零容差），**差0.1045就是「傍轴给不出角谱」的量**。"
         },
         {
           "id": "S4.6",
           "label": "一般孔径的衍射（单缝／双缝／矩孔，由传播算出而非闭式代入）",
-          "status": "partial",
+          "status": "done",
           "exercises_physics": false,
           "evidence": [
             "case:double_slit_propagated",
-            "test:tests/cases/test_double_slit_propagated.py::test_the_fast_transform_agrees_with_a_direct_summation_over_the_aperture",
-            "test:tests/test_optics_propagation.py::test_the_first_three_zeros_land_exactly_where_the_closed_form_says",
-            "test:tests/test_optics_propagation.py::test_the_fresnel_pattern_falls_onto_the_airy_closed_form_as_the_fresnel_number_drops"
+            "case:angular_spectrum_propagation",
+            "test:tests/test_optics_rectangular_aperture.py::test_a_hole_is_bounded_in_both_directions_and_the_counts_are_exact",
+            "test:tests/test_optics_rectangular_aperture.py::test_must_be_red_the_repository_wide_slit_spelling_lights_every_row"
           ],
-          "why": "0086落地，**这一位的定义就是「由传播算出而非闭式代入」，本仓此前所有光学量都是闭式代入**。单缝：主极大在bin 0且是全局最大、前三个零点在bin 32/64/96且归一化强度**恰为0.0**（缝宽取2的幂⟹蝶形末级相位差恰为π，IEEE精确取负），`sinθ = mλ/w`偏差≤3.5e-18，剖面对连续`sinc²`固定物理缝宽加密网格实测阶2.474→2.106→**2.026**。双缝：前6级条纹极大落在`sinθ = mλ/d`上偏差≤1.7e-18，**第8级缺级实测恰为0.0**。矩孔与圆孔两个构件都在（`rectangular_aperture`／`circular_aperture`）。**菲涅耳数极限退化到艾里斑**这条现成的自洽门也做了，金标取`diffraction.py`已有的闭式。",
-          "missing": "**label里三件（单缝／双缝／矩孔）只做了两件——「矩孔」那一格没有被传播验过。**`rectangular_aperture`这个构件是有的，但仓里**每一处**调用它的地方`half_width_y_m`都取`1.0e9 × pitch`，即y方向占满窗口：**那是缝不是孔**，图样是一维`sinc²`而不是二维`sinc²×sinc²`。**这条是主代理合入时逐格核出来的，不是轨道自己报的**——形状与S3.7（label三件只做了第一件）和同行C档第7条（转述失真变成一个进位）完全相同，本仓2026-08-18已经栽过两次。**补法很轻**：给一个两个方向都有界的矩孔加一条传播判据（二维可分离，`sinc²(x)·sinc²(y)`，而可分离性本身在`optics/field`那边已经有门），条件到了随时可做。另：**圆孔那一档的误差是振荡的不是单调的**（阶梯边，Gauss圆问题那一类，实测「阶」0.040与2.892），所以那条门只断「都在上界内」与「加密到R=64真的更好」——**假装它是`O(h²)`会得到一条随机红的门，比没有门更坏**。这一条是边界不是缺陷。"
+          "why": "0086落地，**这一位的定义就是「由传播算出而非闭式代入」，本仓此前所有光学量都是闭式代入**。单缝：主极大在bin 0且是全局最大、前三个零点在bin 32/64/96且归一化强度**恰为0.0**（缝宽取2的幂⟹蝶形末级相位差恰为π，IEEE精确取负），`sinθ = mλ/w`偏差≤3.5e-18，剖面对连续`sinc²`固定物理缝宽加密网格实测阶2.474→2.106→**2.026**。双缝：前6级条纹极大落在`sinθ = mλ/d`上偏差≤1.7e-18，**第8级缺级实测恰为0.0**。矩孔与圆孔两个构件都在（`rectangular_aperture`／`circular_aperture`）。**菲涅耳数极限退化到艾里斑**这条现成的自洽门也做了，金标取`diffraction.py`已有的闭式。**2026-08-18（0091）补上label里缺的那一格「矩孔」**——此前仓里每一处`rectangular_aperture`调用的y半宽都取`1e9 × pitch`（**那是缝不是孔**），是上一批合入时逐格核出来的。现在有15条门（含3条必红）：亮采样32／亮行4／亮列8**零容差整数**、两方向前三个零点归一化强度**恰为0.0**、**图样可分离残差7.7716e-16 = 3.50 eps**（而圆孔同一条式子给3.5852e-2，**比上界大1.0e13倍**——这条必红证明可分离性判据真有牙齿）、对连续`sinc²(x)·sinc²(y)`收敛阶1.822/1.895/1.943、**单缝是矩孔的极限**（离轴功率份额闭式`ROWS/My−1`：My=2→3.0、4→1.0、8→0.0，与闭式**逐位相同**）。案例级另有三个零容差整数冻进`angular_spectrum_propagation`。**顺带走到了一条从没被执行过的分支**：0086那条「边界落在采样点上失败关闭」在**y方向**上从未被走到。"
         },
         {
           "id": "S4.7",
           "label": "Mie散射的严格级数解",
-          "status": "todo",
+          "status": "partial",
           "exercises_physics": false,
-          "evidence": [],
-          "why": "plans/05对场景④的判词原文是「散射零」。Mie对均匀球是**严格级数解**不是近似，小球极限退化到瑞利∝1/λ⁴是独立自洽门，判据强度是本仓能拿到的光学案例里最高的之一。",
-          "missing": "要复数与球贝塞尔函数（j_n、y_n、h_n^(1)），纯Python可写但要小心小宗量相消（0031已在J1上处理过同类问题）。"
+          "evidence": [
+            "case:mie_sphere_scattering",
+            "test:tests/cases/test_mie_sphere_scattering.py::test_the_coefficients_and_efficiencies_match_a_fifty_digit_independent_series",
+            "test:tests/cases/test_mie_sphere_scattering.py::test_a_lossless_sphere_conserves_energy_and_every_order_sits_on_the_unitarity_circle",
+            "test:tests/cases/test_mie_sphere_scattering.py::test_the_extinction_efficiency_approaches_two_along_the_analytic_scaling_law"
+          ],
+          "why": "0091落地`optics/spherical_bessel.py`＋`optics/mie.py`（纯Python零依赖）与**全仓第一条散射案例**。四条门**互相独立**：**幺正性**（无吸收球`Q_ext=Q_sca`最坏相对差1.281e-16、六构型中四个**恰为0**；逐阶`||a_n|²−Re a_n|`最坏2.220e-16）、**退化到瑞利**（两条互不依赖：只用严格级数验`C_sca ∝ 1/λ⁴`阶1.780/1.952/1.988，另对瑞利闭式阶1.665→1.996）、**大球极限**（不止断「接近2」，**断它按`x^(−2/3)`趋近**：相邻比值0.634430→0.632662对理论`2^(−2/3)=0.629961`从上方单调）、**50位十进制独立实现**（自己的泰勒`sin/cos`，**连libm都不共用**，最坏偏差5.5511e-16）。截断显式声明＋失败关闭（`n_max=ceil(x+4x^⅓+2)`，末项占比超申报当场炸；域外拒答不外推）。**抓到教科书算法本身一个缺陷**：Bohren & Huffman的`BHMIE`向下递推起点取`max(n_max,|mx|)+15`，x=500、m=1.33实测`Q_ext=2.031189119014`而收敛值`2.030373894631`——**相对差4.0e-4，而它自称严格级数解、一个字都不报**（级数照收敛、能量照守恒、幺正性照满足）。",
+          "missing": "**label是「Mie散射的严格级数解」，而本轮只做了效率因子那一半。** 三条逐条（轨己主动报的）：① **角分布一行都没有**（`S_1`/`S_2`、`π_n`/`τ_n`、非对称因子`g`）；② **没有对过任何已发表基准表**——50位那份参照与被验实现算的是**同一条公式**（B&H 4.53），挡住共同转写错误的只有幺正性/瑞利/消光佯谬三条**间接**判据；③ **有吸收球的逐阶系数没有高精度参照**。另：向上递推`ψ_n`在小宗量上返回噪声（x=1e-3时n=3给5.952e+04，大六万倍，而n=3恰是`mie_max_order(1e-3)`），**那几阶对`Q_sca`的实际影响没有单独量过**，所以不由此推「效率也错了」。"
         }
       ]
     },
