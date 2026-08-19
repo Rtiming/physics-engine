@@ -32,6 +32,22 @@
 驱动链那条只有一个换算比、求解器那条只有接触与摩擦，两条不共享任何一行代码。
 
 **原有的七条门一个字未动**，新加的四条（三道正门＋一道必须红）在文件末尾。
+
+## 同日（丁3）：从一只轮扩成一条路由
+
+`_geometry`现在吃一条``route = ((段数, 摩擦), ...)``，一项一只轮。
+S6.5的``missing``原话是"多轮路由（R4→R1）与活动小导轮未接"——
+**多轮路由这一半接上了，活动小导轮那一半没有**（路由里的轮仍是固定的、
+不自旋、无轴承阻力矩）。
+
+判据三条：逐只轮的接触**各自落在自己那只轮的摩擦锥上**（2.3e-16，
+一个把某只轮的μ当全局值用的实现立刻红）；逐只轮的比各自对上**离散**绞盘闭式；
+逐只轮的比**连乘等于总比**——这一条在引擎侧是望远镜式的，
+所以它真正判的是"没有哪只轮的接触力漏进了自由段"。
+
+**单只轮路由逐位退回2026-08-17那一版**：13个点 × 3分量、整条状态向量（79个）、
+逐段轴力、蹭边力在横动0／±7 mm三档上`float.hex()`全同（对拍上一个提交，
+记在决策0088第四节）。案例里留下的是四个不会随实现漂的常数。
 """
 
 from __future__ import annotations
@@ -84,6 +100,27 @@ TAPE_HALF_WIDTH_MM = 2.0
 HALF_CLEARANCE_MM = CHANNEL_HALF_WIDTH_MM - TAPE_HALF_WIDTH_MM
 
 FREE_SEGMENTS = 2
+#: 丁3：两只轮之间的自由段长度（段）。**它不进任何闭式**——绞盘比只看包角与
+#: 摩擦，自由段里张力恒定。取2是为了让每只轮之间真的有一段"张力不变的直段"，
+#: 判据才有地方读"这只轮之前/之后的张力"。
+SPAN_SEGMENTS = 2
+#: 一条路由是``((段数, 摩擦), ...)``，一项一只轮。默认单只＝2026-08-17那一版。
+ROUTE_SINGLE: tuple[tuple[int, float], ...] = ((WRAP_SEGMENTS, FRICTION),)
+#: **R4→R3→R2→R1**（plans/13第六节点名的那条多轮路由）。段角恒11.25°，
+#: 于是包角分别是45°／67.5°／33.75°／90°；四只轮的摩擦**各不相同**——
+#: 全给同一个μ的实现在逐只轮那条判据上当场红。
+ROUTE_FOUR: tuple[tuple[int, float], ...] = (
+    (3, 0.12), (4, 0.10), (3, 0.15), (6, 0.08),
+)
+#: 中间一只**零摩擦**的三轮路由：它是"逐只轮各用自己的μ"那条门的必须红。
+ROUTE_WITH_A_FREE_ROLLER: tuple[tuple[int, float], ...] = (
+    (3, 0.15), (3, 0.0), (3, 0.15),
+)
+#: 多轮路由的收线：**0.03 mm / 720步**。取值由决策0088第四节那张扫描表定——
+#: 0.02 mm时最远那只轮还没进全滑移（摩擦锥偏差0.44），0.03 mm起四只全部
+#: 精确落在锥上（偏差2.2e-16）且逐只轮的比在0.03—0.08区间内**稳定不再变**。
+ROUTE_WIND_MM = 0.03
+ROUTE_WIND_STEPS = 720
 PAYOUT_TENSION_N = 30.0
 
 #: 丁1：驱动链的三件（决策0088）。参数与`tests/test_drives.py`逐字相同——
@@ -133,27 +170,78 @@ def _lay_start_z(traverse_mm: float) -> float:
     )
 
 
-def _geometry(traverse_mm: float):
-    """入口自由段 → 绕导向轮 → 出口自由段 → 落位点。
+def _geometry(traverse_mm: float, route: tuple[tuple[int, float], ...] = ROUTE_SINGLE):
+    """入口自由段 → 逐只导向轮（各自的包角与摩擦） → 出口自由段 → 落位点。
 
-    导向轮轴沿``z``、心在原点；带材在``xy``平面内从``φ=0``绕到``φ=WRAP``。
-    **带材的横向位置不随排线横动变**——横动的是收线盘（连带它的两片法兰）。
+    ``route``是``((段数, 摩擦), ...)``，一项一只轮，**次序即带材经过的次序**
+    （R4→R3→R2→R1）。段角恒为``dphi = WRAP_RAD/WRAP_SEGMENTS = 11.25°``，
+    于是包角是它的整数倍，弦长逐只轮相同——**这条是有意的**：
+    弦长一变，`AxialStretch`的自然长度就要逐段不同，而那会把"张力比"这条判据
+    与"每段自然长度对不对"这条混在一起。
+
+    ## 构造：每只轮在自己的局部帧里用``(R cos ψ, R sin ψ)``摆点
+
+    进入第``k``只轮时手里有一个点``P``与一个切向``t``。轮心在``P + R·n``、
+    ``n = (−t_y, t_x, 0)``是``t``左侧的法向（于是所有轮同向缠绕）；
+    局部帧取``u = −n``（从轮心指向``P``）、``v = t``。
+
+    **第一只轮的局部帧恰是``u = (1,0,0)``、``v = (0,1,0)``、轮心在原点**，
+    于是``C + R·(cos ψ·u + sin ψ·v)``逐位退回2026-08-17那一版的
+    ``(R cos ψ, R sin ψ, 0)``——``0.0 + t``与``t ± 0.0``都不改变``t``。
+    `test_the_single_roller_route_is_bit_for_bit_the_2026_08_17_geometry`判这一条。
+
+    ## 第一只轮的弧含``ψ=0``那个点，后面几只不含
+
+    第一只轮的``ψ=0``点由弧自己生成（入口自由段只走到它前一格），
+    而第``k>0``只轮的``ψ=0``点**就是上一段自由段的最后一个点**——
+    再生成一次就会多出一个零长边。
+
+    返回``(点, 每只轮的接触节点区间, 每只轮的轮心, 出口切向, 落位点, 弦长)``。
     """
 
     dphi = WRAP_RAD / WRAP_SEGMENTS
     chord = 2.0 * ROLLER_RADIUS_MM * math.sin(dphi / 2.0)
     points: list[tuple[float, float, float]] = []
+    #: 入口：从第一只轮的``ψ=0``点往回退。第一只轮的``ψ=0``点恒是``(R, 0, 0)``。
+    start = (ROLLER_RADIUS_MM, 0.0, 0.0)
+    tangent = (0.0, 1.0, 0.0)
     for step in range(FREE_SEGMENTS, 0, -1):
-        points.append((ROLLER_RADIUS_MM, -step * chord, 0.0))
-    wrap_start = len(points)
-    for index in range(WRAP_SEGMENTS + 1):
-        angle = index * dphi
         points.append(
-            (ROLLER_RADIUS_MM * math.cos(angle), ROLLER_RADIUS_MM * math.sin(angle), 0.0)
+            tuple(start[a] - tangent[a] * step * chord for a in range(3))
         )
-    wrap_end = len(points) - 1
-    tip = points[wrap_end]
-    tangent = (-math.sin(WRAP_RAD), math.cos(WRAP_RAD), 0.0)
+    spans: list[tuple[int, int]] = []
+    centres: list[tuple[float, float, float]] = []
+    tip = start
+    for order, (segments, _) in enumerate(route):
+        normal = (-tangent[1], tangent[0], 0.0)
+        centre = tuple(tip[a] + ROLLER_RADIUS_MM * normal[a] for a in range(3))
+        centres.append(centre)
+        radial = tuple(-normal[a] for a in range(3))
+        first = len(points) if order == 0 else len(points) - 1
+        for index in range(0 if order == 0 else 1, segments + 1):
+            angle = index * dphi
+            points.append(
+                tuple(
+                    centre[a]
+                    + ROLLER_RADIUS_MM
+                    * (math.cos(angle) * radial[a] + math.sin(angle) * tangent[a])
+                    for a in range(3)
+                )
+            )
+        #: 接触节点＝这只轮弧上除``ψ=0``之外的每一个点。
+        spans.append((first + 1, len(points) - 1))
+        wrap = segments * dphi
+        tip = points[-1]
+        tangent = tuple(
+            -math.sin(wrap) * radial[a] + math.cos(wrap) * tangent[a] for a in range(3)
+        )
+        if order < len(route) - 1:
+            base = tip
+            for step in range(1, SPAN_SEGMENTS + 1):
+                points.append(
+                    tuple(base[a] + tangent[a] * step * chord for a in range(3))
+                )
+            tip = points[-1]
     for step in range(1, FREE_SEGMENTS + 1):
         points.append(
             (
@@ -162,17 +250,25 @@ def _geometry(traverse_mm: float):
                 0.0 if step < FREE_SEGMENTS else _lay_start_z(traverse_mm),
             )
         )
-    return points, wrap_start, wrap_end, len(points) - 1, chord
+    return points, tuple(spans), tuple(centres), tangent, len(points) - 1, chord
 
 
 def _assemble(
     traverse_mm: float,
     payout_tension_n: float = PAYOUT_TENSION_N,
     extra_terms: tuple = (),
+    route: tuple[tuple[int, float], ...] = ROUTE_SINGLE,
 ):
-    points, wrap_start, wrap_end, lay, chord = _geometry(traverse_mm)
+    points, spans, centres, exit_tangent, lay, chord = _geometry(traverse_mm, route)
     nodes = len(points)
-    contact_nodes = list(range(wrap_start + 1, wrap_end + 1))
+    contact_nodes = [
+        node for first, last in spans for node in range(first, last + 1)
+    ]
+    #: 逐接触节点：它属于哪一只轮（轮心与摩擦从这里取）。
+    owner = [
+        order for order, (first, last) in enumerate(spans) for _ in range(first, last + 1)
+    ]
+    frictions = [route[order][1] for order in owner]
     layout = build_contact_layout(
         layout_id="layout/winding-line",
         node_count=nodes,
@@ -189,9 +285,9 @@ def _assemble(
     )
     roller = PenaltyCylinderContact(
         cylinders=tuple(
-            (i, (0.0, 0.0, 0.0), (0.0, 0.0, 1.0), ROLLER_RADIUS_MM,
+            (node, centres[owner[order]], (0.0, 0.0, 1.0), ROLLER_RADIUS_MM,
              ROLLER_HALF_WIDTH_MM, PENALTY_N_PER_MM, 0.0)
-            for i in contact_nodes
+            for order, node in enumerate(contact_nodes)
         )
     )
     #: **法兰随排线横动整体平移**，朝向用显式的``inward``——
@@ -228,7 +324,8 @@ def _assemble(
     fixed |= {3 * i + 2 for i in range(nodes) if i != lay}
     fixed |= set(range(layout.layout.node_dof_count, layout.layout.dof_count))
     return (layout, context, registry, stretch, roller, flanges,
-            contact_nodes, tuple(vector), frozenset(fixed), lay, chord)
+            contact_nodes, tuple(vector), frozenset(fixed), lay, chord,
+            spans, tuple(frictions), exit_tangent)
 
 
 def _run(
@@ -237,10 +334,12 @@ def _run(
     wind_mm: float = WIND_MM,
     payout_tension_n: float = PAYOUT_TENSION_N,
     extra_terms: tuple = (),
+    route: tuple[tuple[int, float], ...] = ROUTE_SINGLE,
 ):
     (layout, context, registry, stretch, roller, flanges,
-     contact_nodes, vector, fixed, lay, chord) = _assemble(
-        traverse_mm, payout_tension_n, extra_terms
+     contact_nodes, vector, fixed, lay, chord,
+     spans, frictions, tangent) = _assemble(
+        traverse_mm, payout_tension_n, extra_terms, route
     )
     settled = solve_equilibrium(
         registry, context, layout.layout, vector,
@@ -265,11 +364,11 @@ def _run(
             slot=layout.slot_of(f"roll{node}"), node=node, normal=normal_of(order),
             normal_force_of=(lambda st, o=order: roller.normal_force_n(st)[o]),
             tangential_stiffness_n_per_mm=PENALTY_N_PER_MM,
-            friction_coefficient=FRICTION,
+            #: **逐只轮各自的摩擦**（丁3）。单只路由时它恒是`FRICTION`。
+            friction_coefficient=frictions[order],
         )
         for order, node in enumerate(contact_nodes)
     )
-    tangent = (-math.sin(WRAP_RAD), math.cos(WRAP_RAD), 0.0)
     step = None
     for _ in range(steps):
         moved = list(current)
@@ -283,7 +382,7 @@ def _run(
         )
         current = step.state.vector
     assert step is not None
-    return step, stretch, roller, flanges, lay, chord
+    return step, stretch, roller, flanges, lay, chord, spans
 
 
 @pytest.fixture(scope="module")
@@ -356,7 +455,7 @@ def test_the_tape_stays_clear_until_the_traverse_exceeds_the_half_clearance():
     entry = _oracle("oracle:line/half_clearance")
     assert HALF_CLEARANCE_MM == entry.expected["half_clearance_mm"]
     for traverse, rubs in ((0.0, False), (6.0, False), (6.5, False), (7.0, True)):
-        step, _, _, flanges, lay, _ = _run(traverse)
+        step, _, _, flanges, lay, _, _ = _run(traverse)
         forces = flanges.rub_force_n(step.state)
         assert (max(forces) > 0.0) is rubs, (
             f"横动{traverse} mm处蹭边判定与预期相反：{forces}"
@@ -381,7 +480,7 @@ def test_the_rub_force_is_the_lateral_component_of_the_tension():
     entry = _oracle("oracle:line/rub_force_scales_with_tension")
     span = entry.expected["free_span_mm"]
     for traverse, key in ((7.0, "overshoot_at_seven_mm"), (8.0, "overshoot_at_eight_mm")):
-        step, stretch, _, flanges, _, chord = _run(traverse)
+        step, stretch, _, flanges, _, chord, _ = _run(traverse)
         assert chord == pytest.approx(span, rel=1e-15)
         tensions = stretch.axial_force_n(step.state)
         closed_form = tensions[-1] * entry.expected[key] / span
@@ -660,3 +759,259 @@ def test_one_extra_load_on_the_payout_node_makes_the_bit_for_bit_gate_red(drives
     assert dirty_stretch.axial_force_n(dirty.state)[0] == pytest.approx(
         payout + surplus, rel=1.0e-9
     )
+
+
+# ---------------------------------------------------------------------------
+# 丁3：多轮路由 R4→R3→R2→R1（决策0088，兑现S6.5的``missing``那一句）
+# ---------------------------------------------------------------------------
+
+
+def _discrete_node_ratio(friction: float) -> float:
+    """逐节点的**精确离散**绞盘比。与金标同式，**两份各写一遍、互不共享**。"""
+
+    half = math.tan(WRAP_RAD / WRAP_SEGMENTS / 2.0)
+    return (1.0 + friction * half) / (1.0 - friction * half)
+
+
+def _per_roller_ratios(step, stretch, spans) -> tuple[float, ...]:
+    """逐只轮的**实测**张力比：这只轮之后的自由段张力 ÷ 之前的自由段张力。
+
+    ``spans[k] = (第一个接触节点, 最后一个接触节点)``。
+    进这只轮之前最后一条自由段边是``first − 2``（``first − 1``是弧上``ψ=0``
+    那个**非接触**节点，张力跨过它不变）；出来之后第一条是``last``。
+    """
+
+    tensions = stretch.axial_force_n(step.state)
+    return tuple(
+        tensions[last] / tensions[first - 2] for first, last in spans
+    )
+
+
+def _route_run(route, wind_mm: float = ROUTE_WIND_MM, steps: int = ROUTE_WIND_STEPS):
+    return _run(0.0, steps=steps, wind_mm=wind_mm, route=route)
+
+
+@pytest.fixture(scope="module")
+def four_rollers():
+    """R4→R3→R2→R1一次跑通，四条门共用（一次约7秒，不重复跑）。"""
+
+    return _route_run(ROUTE_FOUR)
+
+
+@pytest.mark.batch
+def test_every_roller_slips_on_its_own_friction_cone(four_rollers):
+    """**逐只轮各用自己的μ**：每个接触精确落在**它那只轮**的摩擦锥上。
+
+    这是本片最锐的一条：容差是``2.3e-16``（一个ulp量级），
+    而四只轮的μ两两不同（0.12／0.10／0.15／0.08）。
+    一个把``route[0][1]``当成全局摩擦用的实现在这里**立刻**红，
+    不需要等张力比那条松容差的门。
+
+    它同时是下面几条门的前提：绞盘式只在**全滑移**下成立。
+    """
+
+    step, _, roller, _, _, _, spans = four_rollers
+    normals = roller.normal_force_n(step.state)
+    order = 0
+    for index, (first, last) in enumerate(spans):
+        friction = ROUTE_FOUR[index][1]
+        for _ in range(first, last + 1):
+            force = step.tangential_force_n[order]
+            magnitude = math.sqrt(sum(value * value for value in force))
+            assert normals[order] > 0.0, f"轮{index}的接触{order}没有法向力"
+            assert magnitude / (friction * normals[order]) == pytest.approx(
+                1.0, abs=2.3e-16
+            ), f"轮{index}（μ={friction}）的接触{order}没有落在自己的摩擦锥上"
+            order += 1
+    assert order == len(normals), "接触点数与法向力数对不上"
+
+
+@pytest.mark.batch
+def test_each_roller_ratio_matches_its_own_discrete_capstan(four_rollers):
+    """逐只轮的张力比各自对上**自己的**离散绞盘闭式。
+
+    ## 容差1e-2是端效应，不是"差不多就行"
+
+    弧的两端各有一个``ψ=0``的**非接触**节点，那半格转角没有摩擦承接，
+    于是这只轮攒到的张力比理想离散式少一点，**而少的那点与段数成反比**。
+    同一条装配上单只轮的实测（μ=0.30、收线0.03 mm）：
+
+    | 段数 | 1 | 2 | 3 | 4 | 6 | 8 |
+    |---|---|---|---|---|---|---|
+    | 相对偏差 | 1.84e-2 | 1.53e-2 | 1.23e-2 | 9.50e-3 | 4.34e-3 | 2.54e-4 |
+
+    **单调下降。今天那条单只轮的门用的是8段，恰好落在偏差最小的那一档**——
+    2.54e-4不是模型精度，是构型选出来的。这句话本身是本片最该被读到的一条。
+    """
+
+    step, stretch, _, _, _, _, spans = four_rollers
+    entry = _oracle("oracle:line/multi_roller_route")
+    measured = _per_roller_ratios(step, stretch, spans)
+    expected = entry.expected["per_roller_ratio"]
+    tolerance = entry.tolerances["per_roller_ratio"].rel_tol
+    assert len(measured) == len(ROUTE_FOUR) == len(expected)
+    for index, (got, want) in enumerate(zip(measured, expected, strict=True)):
+        #: 金标与本地闭式互钉——**两处不共享实现**。
+        assert want == pytest.approx(
+            _discrete_node_ratio(ROUTE_FOUR[index][1]) ** ROUTE_FOUR[index][0],
+            rel=1e-15,
+        )
+        assert got == pytest.approx(want, rel=tolerance), (
+            f"轮{index}（{ROUTE_FOUR[index]}）实测{got!r}与离散闭式{want!r}对不上"
+        )
+
+
+@pytest.mark.batch
+def test_the_per_roller_ratios_multiply_to_the_total_ratio(four_rollers):
+    """**逐只轮的比连乘＝总比**——本片的恒等式判据。
+
+    ## 它在引擎侧是望远镜式的，所以它判的是另一件事
+
+    第``k``只轮的出口张力就是第``k+1``只轮的入口张力（中间是一段**没有摩擦源**
+    的自由直段），于是连乘天然抵消成``T_末 / T_首``。
+    **这一条因此不是在验绞盘公式，是在验"没有哪只轮的接触力漏进了自由段"**——
+    自由段里只要有一丁点横向力，那两个读数就不再是同一个数，连乘立刻对不上。
+    实测偏差**2.40e-13**，取1e-11。
+
+    闭式那一侧的恒等式``∏exp(μᵢθᵢ) = exp(Σμᵢθᵢ)``另判（下一条门），
+    **两者不是同一句话**：这条是引擎的账，那条是指数函数的账。
+    """
+
+    step, stretch, _, _, _, _, spans = four_rollers
+    measured = _per_roller_ratios(step, stretch, spans)
+    tensions = stretch.axial_force_n(step.state)
+    product = 1.0
+    for value in measured:
+        product *= value
+    assert product == pytest.approx(tensions[-1] / tensions[0], rel=1.0e-11), (
+        "逐只轮的比连乘不等于总比——有接触力漏进了自由段"
+    )
+    entry = _oracle("oracle:line/multi_roller_route")
+    assert tensions[-1] / tensions[0] == pytest.approx(
+        entry.expected["total_ratio"],
+        rel=entry.tolerances["total_ratio"].rel_tol,
+    )
+
+
+def test_the_closed_form_product_is_the_exponential_of_the_sum():
+    """``∏exp(μᵢθᵢ) = exp(Σμᵢθᵢ)``——**闭式那一侧的恒等式，秒级、不跑求解器**。
+
+    同时钉住"离散与连续不是同一个数"：本路由上两者差**2.4e-3**相对。
+    把连续式直接当逐只轮的判据用，会引入一个比端效应还小、
+    但与它同号叠加的系统偏差——`cases/capstan_tension_ratio`第二节记过同一条。
+    """
+
+    entry = _oracle("oracle:line/multi_roller_route")
+    segment = WRAP_RAD / WRAP_SEGMENTS
+    product = 1.0
+    total_exponent = 0.0
+    for segments, friction in ROUTE_FOUR:
+        product *= math.exp(friction * segments * segment)
+        total_exponent += friction * segments * segment
+    assert product == pytest.approx(math.exp(total_exponent), rel=1.0e-15)
+    assert math.exp(total_exponent) == pytest.approx(
+        entry.expected["continuum_total"],
+        rel=entry.tolerances["continuum_total"].rel_tol,
+    )
+    #: 离散总比与连续总比**不是同一个数**。
+    discrete = entry.expected["total_ratio"]
+    assert abs(discrete / entry.expected["continuum_total"] - 1.0) == pytest.approx(
+        1.085e-3, rel=5.0e-2
+    ), "离散与连续的差额变了——要么Δφ变了，要么有一侧的式子被改了"
+
+
+@pytest.mark.batch
+def test_a_frictionless_roller_in_the_route_carries_no_tangential_force():
+    """**必须红的那一条**：路由中间放一只``μ = 0``的轮。
+
+    它的每个接触的切向力**恰为0.0（零容差）**，张力比落回1；
+    两侧那两只``μ = 0.15``的轮**照常攒张力**。
+
+    一个把某一只轮的μ当成全局摩擦用的实现在这里必然红：
+    要么零摩擦那只轮攒出了张力，要么两侧那两只不攒了。
+    **"逐只轮各自的摩擦"这句话的可证伪形式就是它。**
+
+    实测：零摩擦那只轮的三个切向力全是``0.0``，张力比0.996633
+    （与1差3.37e-3，与端效应同量级同来源，见上一条门那张表）。
+    """
+
+    step, stretch, roller, _, _, _, spans = _route_run(ROUTE_WITH_A_FREE_ROLLER)
+    entry = _oracle("oracle:line/multi_roller_route")
+    normals = roller.normal_force_n(step.state)
+    order = 0
+    for index, (first, last) in enumerate(spans):
+        friction = ROUTE_WITH_A_FREE_ROLLER[index][1]
+        for _ in range(first, last + 1):
+            force = step.tangential_force_n[order]
+            magnitude = math.sqrt(sum(value * value for value in force))
+            assert normals[order] > 0.0, "零摩擦不等于不接触——法向力还在"
+            if friction == 0.0:
+                assert magnitude == 0.0, (
+                    f"μ=0的轮{index}上出现了切向力{magnitude!r}—— "
+                    "那只可能是别的轮的摩擦系数被当成全局值用了"
+                )
+            else:
+                assert magnitude / (friction * normals[order]) == pytest.approx(
+                    1.0, abs=2.3e-16
+                )
+            order += 1
+    ratios = _per_roller_ratios(step, stretch, spans)
+    assert ratios[1] == pytest.approx(
+        entry.expected["free_roller_ratio"],
+        abs=entry.tolerances["free_roller_ratio"].abs_tol,
+    ), f"零摩擦那只轮的张力比是{ratios[1]!r}，没有落回1"
+    for index in (0, 2):
+        assert ratios[index] > 1.05, (
+            f"轮{index}（μ=0.15、3段）没有攒张力——那说明全局摩擦被清零了"
+        )
+
+
+def test_the_single_roller_route_is_bit_for_bit_the_2026_08_17_geometry():
+    """**丁3的分辨力**：路由只留一只轮时，几何逐位退回2026-08-17那一版。
+
+    ## 为什么它在IEEE-754下是精确的
+
+    第一只轮的局部帧恰是``u = (1,0,0)``、``v = (0,1,0)``、轮心在原点，
+    于是``C + R·(cos ψ·u + sin ψ·v)``逐分量是``0.0 + R·(cos ψ + 0.0)``一类，
+    而``0.0 + t``与``t ± 0.0``都不改变``t``。入口自由段那一项
+    ``start − t·step·chord``同理退回``(R, −step·chord, 0)``。
+
+    ## 这里钉的是硬数字，不是"两个函数长得像"
+
+    整条状态向量（79个）、逐段轴力、蹭边力在横动0／±7 mm三档上
+    `float.hex()`全同——**那一档在决策0088第四节，用的是对拍上一个提交**。
+    本门留在案例里的是**四个不会随实现漂的常数**。
+    """
+
+    points, spans, centres, tangent, lay, chord = _geometry(0.0, ROUTE_SINGLE)
+    assert len(points) == 13 and lay == 12
+    assert spans == ((3, 10),), "接触节点区间变了——那一版是3—10"
+    assert centres[0] == (0.0, 0.0, 0.0), "第一只轮的轮心必须精确在原点"
+    assert chord.hex() == "0x1.39a7a430094c2p+3", f"弦长漂了：{chord!r}"
+    assert [v.hex() for v in points[0]] == [
+        (50.0).hex(), (-2.0 * chord).hex(), (0.0).hex()
+    ]
+    assert [v.hex() for v in points[10]] == [
+        (ROLLER_RADIUS_MM * math.cos(WRAP_RAD)).hex(),
+        (ROLLER_RADIUS_MM * math.sin(WRAP_RAD)).hex(),
+        (0.0).hex(),
+    ]
+    assert [v.hex() for v in tangent] == [
+        (-math.sin(WRAP_RAD)).hex(), math.cos(WRAP_RAD).hex(), (0.0).hex()
+    ]
+
+
+@pytest.mark.batch
+def test_the_single_roller_route_reproduces_the_2026_08_17_tensions_bit_for_bit(centred):
+    """同上，但判的是**跑完整条链路之后**的两个数，逐位。
+
+    2026-08-17那一版（当时还没有路由这个概念）的首末段轴力是
+    ``30.00000000000159``与``48.13499049093557``。它们是
+    **13个点 × 480个收线步 × 每步4趟粘着-滑移**之后的产物，
+    任何一处几何或装配的改动都会打掉它们。
+    """
+
+    step, stretch, *_ = centred
+    tensions = stretch.axial_force_n(step.state)
+    assert tensions[0].hex() == "0x1.e0000000001c0p+4", repr(tensions[0])
+    assert tensions[-1].hex() == "0x1.811475e4feb6dp+5", repr(tensions[-1])
