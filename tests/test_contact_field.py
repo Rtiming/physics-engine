@@ -642,6 +642,35 @@ def test_the_dense_hessian_is_exactly_the_assembled_entries() -> None:
             assert dense[i][j].hex() == assembled[i][j].hex()
 
 
+def test_the_registry_sparse_and_dense_paths_agree_bitwise() -> None:
+    """把本项装进`EnergyRegistry`，**稀疏读法与稠密路径逐位相同**。
+
+    spec/13第一节义务2那条（`tests/test_energies.py`的
+    `test_sparse_hessian_matches_the_dense_one_bitwise`是样板）。
+    这条对新接触项是承重的：`solve_equilibrium`走的正是稀疏那一条，
+    **一个新项如果只把`hessian`写对而`hessian_entries`写岔，
+    单元门全绿而求解器用的是错的那一份**。
+    """
+
+    from physics_engine.energies import EnergyRegistry, PointLoad
+
+    field = _sphere_field(1.0)
+    registry = EnergyRegistry(
+        terms=(_sphere_term(field), PointLoad(loads=((0, (0.0, 0.0, -25.0)),)))
+    )
+    state = _state(ACTIVE_POINT)
+    _, _, dense = registry.total(state, CONTEXT, need_gradient=True, need_hessian=True)
+    sparse = registry.hessian_entries(state, CONTEXT)
+    assert dense is not None
+    for (row, column), value in sparse.items():
+        assert dense[row][column].hex() == value.hex(), (row, column)
+    #: 稀疏里没有的位置必须在稠密里恰好是0.0——**"结构非零"这句话要能被验**。
+    for row in range(len(state.vector)):
+        for column in range(len(state.vector)):
+            if (row, column) not in sparse:
+                assert dense[row][column] == 0.0, (row, column)
+
+
 def test_a_separated_contact_emits_nothing_at_all() -> None:
     """分离时能量、梯度、Hessian项、法向力全部为零。**一个非零项都不出。**"""
 
