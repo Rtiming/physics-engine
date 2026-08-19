@@ -145,9 +145,11 @@ SHA-256钉在`oracle.json`的`generator.sha256`字段。
 **A档／交互级**（`load_tier: interactive`，无pytest marker）。
 
 判据全部是闭式解与整数记账，没有求解器、没有时间推进、没有随机数。
-实测耗时：`tests/cases/test_spool_winding_growth.py`六条**0.02秒**、
-连同`tests/test_winding.py`共66条**0.08秒**
-（2026-08-18，本机Mac，`-q`，与`oracle.json`的`load_tier`一致）。
+实测耗时：`tests/cases/test_spool_winding_growth.py`六条**0.06秒**、
+连同`tests/test_winding.py`共**74条0.14秒**
+（2026-08-18，本机Mac，`-q`，与`oracle.json`的`load_tier`一致。
+**本机墙钟不作数**——本仓的墙钟台账以master为准；这里记的是量级，
+它离交互级30秒的档线还差两个数量级以上，不需要更准的数）。
 
 ## 六、本案例不是什么
 
