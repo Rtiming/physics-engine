@@ -264,3 +264,58 @@ def test_the_estimate_carries_every_intermediate_quantity() -> None:
     rendered = estimate.render()
     for dt_s in ladder:
         assert f"{dt_s:<12.6g}".strip() in rendered
+
+
+# ---------------------------------------------------------------------------
+# 带符号差变号：2026-08-18 master首次全规模扫描当场绕过既有那条判据
+# ---------------------------------------------------------------------------
+
+
+def test_a_sign_flip_in_the_signed_differences_is_not_asymptotic():
+    """**必须红**：绝对差规规矩矩递减，而带符号差变了号。
+
+    这是`box_rocking`在master上的真实形态（值序列照抄实测）：
+    绝对差 1.645e-8 → 1.467e-8 → 3.654e-9 → 2.224e-10 → 1.543e-10 **递减**，
+    于是既有那条`monotone`判据一句话都没说，**裸报了"渐近阶0.5267"**；
+    而带符号差是`−, −, +, −, −`——**变了两次号**。
+
+    还在渐近区里的Richardson序列从一侧单调逼近极限。变号说明舍入地板与
+    截断误差换了主导，此时相邻两差之比是噪声之比，**而它长得跟真的阶一模一样**。
+    """
+
+    measured = [
+        0.0005103894017672276,
+        0.0005103729485099657,
+        0.0005103582791266844,
+        0.0005103619327188695,  # ← 值在这里回头了
+        0.0005103617103670027,
+        0.0005103615560245316,
+    ]
+    ladder = tuple(5e-5 / 2**index for index in range(len(measured)))
+    estimate = order_by_richardson(
+        "box_rocking的实测序列", lambda dt: measured[ladder.index(dt)], ladder,
+        noise_floor_rel=1e-15,
+    )
+    absolute = estimate.differences
+    assert all(absolute[i] > absolute[i + 1] for i in range(len(absolute) - 1)), (
+        "这组数的**绝对**差是递减的——本用例的全部意义就在这里："
+        "既有那条判据看不见它，所以必须有第二条"
+    )
+    assert "变了号" in estimate.verdict, (
+        f"带符号差变号没有被判出来，verdict是{estimate.verdict!r}——"
+        "那正是master首扫时漏掉的那一档"
+    )
+
+
+def test_a_clean_one_sided_sequence_still_reports_an_order():
+    """反面：从一侧单调逼近的序列不许被这条新判据误伤。
+
+    没有这一条，上面那条可以靠"永远说变号了"作弊。
+    """
+
+    ladder = tuple(0.02 / 2**index for index in range(5))
+    estimate = order_by_richardson(
+        "干净的二阶序列", lambda dt: 1.0 + 3.0 * dt * dt, ladder
+    )
+    assert estimate.verdict == "", f"干净序列被误判：{estimate.verdict!r}"
+    assert abs(estimate.asymptotic_order - 2.0) < 1e-6

@@ -246,6 +246,23 @@ def order_by_richardson(
         differences[index] > differences[index + 1]
         for index in range(len(differences) - 1)
     )
+    # **带符号的差也必须同号**（2026-08-18补，master首次全规模扫描当场抓到）。
+    #
+    # 上面那条只看`abs`。`box_rocking`那一档的绝对差是**规规矩矩递减的**
+    # （1.645e-8 → 1.467e-8 → 3.654e-9 → 2.224e-10 → 1.543e-10），
+    # 于是它**一句警告都没有地报出了"渐近阶0.5267"**——而它的带符号差是
+    # `−, −, +, −, −`：**变了两次号**。
+    #
+    # 一个还在渐近区里的Richardson序列，逐档差是同号的（值从一侧单调逼近极限）。
+    # 变号意味着某个别的东西（这里多半是舍入地板与截断误差换了主导）已经接管，
+    # 那时相邻两差之比是噪声之比，**而它长得跟一个真的阶一模一样**——
+    # 与本函数上面那段"报一个假的阶比不报更坏"是同一条纪律的第二种形态。
+    signed = tuple(
+        values[index] - values[index + 1] for index in range(len(values) - 1)
+    )
+    same_sign = all(
+        signed[index] * signed[index + 1] > 0.0 for index in range(len(signed) - 1)
+    )
     return OrderEstimate(
         name=name,
         method="Richardson（无真值）",
@@ -255,12 +272,33 @@ def order_by_richardson(
         ratios=ratios,
         orders=orders,
         asymptotic_order=orders[-1],
-        verdict=(
-            ""
-            if monotone
-            else "**逐档差不单调——没有进渐近区**，这个阶不许当成收敛阶引用"
-        ),
+        verdict=_richardson_verdict(monotone=monotone, same_sign=same_sign),
     )
+
+
+def _richardson_verdict(*, monotone: bool, same_sign: bool) -> str:
+    """两条"没进渐近区"的判据各自报各自的话。
+
+    **分开报不是排版讲究**：绝对值不递减与带符号差变号是两种不同的病，
+    而第二种正是2026-08-18 master首扫时**绕过第一条**的那一种。
+    合成一句话会让下一个人以为只有一条判据。
+    """
+
+    if not monotone and not same_sign:
+        return (
+            "**逐档差既不单调、带符号差还变了号——没有进渐近区**，"
+            "这个阶不许当成收敛阶引用"
+        )
+    if not monotone:
+        return "**逐档差不单调——没有进渐近区**，这个阶不许当成收敛阶引用"
+    if not same_sign:
+        return (
+            "**逐档差的绝对值在递减，但带符号差变了号——没有进渐近区**。"
+            "还在渐近区里的Richardson序列是从一侧单调逼近极限的；变号说明"
+            "舍入地板与截断误差换了主导，此时相邻两差之比是噪声之比，"
+            "**而它长得跟一个真的阶一模一样**。这个阶不许当成收敛阶引用"
+        )
+    return ""
 
 
 def _ladder(coarsest: float, levels: int, refinement: float = 2.0) -> tuple[float, ...]:
