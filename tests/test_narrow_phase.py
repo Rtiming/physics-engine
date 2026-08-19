@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from physics_engine.collision import BroadPhaseCollisionQuery
 from physics_engine.shapes import (
+    Capsule,
     CollisionShape,
     FiniteCylinder,
     PosedBody,
@@ -32,20 +33,31 @@ def _body(name: str, shape, translation=(0.0, 0.0, 0.0), rotation=(0.0, 0.0, 0.0
 
 
 def test_unsupported_pair_stays_broad_phase_honestly():
-    """圆柱族没有narrow phase实现——事件必须自报`broad_phase`且不给穿透值。
+    """还没有窄相实现的对必须自报`broad_phase`且不给穿透值。
 
     "不知道就说不知道"：冒充一个`penetration_mm`比不给更糟，因为调用方
     没有办法分辨哪个数是算出来的、哪个是编的。
+
+    **2026-08-18（决策0090）换了样本，而这件事本身值得记下来。**
+    本条原来用的是**球对无法兰圆柱**，那一对现在有精确闭式了
+    （球型探针对解析原语，`shape_signed_distance_mm`）——
+    **一条守"没有实现"的门，会随着实现落地而悄悄变成守一条不成立的事实**。
+    换成胶囊对圆柱：胶囊不是球，``φ(c) − r``那条读法对它不成立，
+    而旋转扫掠体对圆柱没有闭式，本仓不做迭代 ⟹ 它今天仍然是真的"不知道"。
     """
 
-    sphere = _body("sph", Sphere(radius_mm=30.0))
+    capsule = _body(
+        "cap", Capsule(point_a_mm=(0.0, 0.0, -20.0), point_b_mm=(0.0, 0.0, 20.0), radius_mm=8.0)
+    )
     roller = _body(
         "rol", FiniteCylinder(radius_mm=45.0, half_width_mm=9.0), translation=(40.0, 0.0, 0.0)
     )
-    events = BroadPhaseCollisionQuery((sphere, roller)).check_state()
+    events = BroadPhaseCollisionQuery((capsule, roller)).check_state()
     assert len(events) == 1
     assert events[0].confidence == "broad_phase"
     assert events[0].penetration_mm is None
+    assert events[0].estimated_bias_mm is None
+    assert events[0].resolution_mm is None
 
 
 def test_supported_pair_never_reports_broad_phase_confidence():
