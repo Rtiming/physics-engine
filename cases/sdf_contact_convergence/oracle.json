@@ -1,0 +1,234 @@
+{
+  "arrays": {},
+  "case_id": "case/sdf_contact_convergence",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/sdf_contact_convergence",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/sdf_contact_convergence/generate_oracle.py",
+    "sha256": "9aea5e9181a0ace70bb849e564ea32fd25f25c438d5408d8d76b106d1ddfeeb0"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "4e9535f6b9b5153afaa4c1496eb3aad5ba8b3a2303c92b8c0650460112a3b90c",
+  "oracles": [
+    {
+      "expected": {
+        "contact_gap_mm": -0.005,
+        "normal_force_n": 25.0,
+        "plane_equilibrium_z_mm": 0.495,
+        "sphere_equilibrium_z_mm": 10.495
+      },
+      "id": "oracle:sdf_contact_convergence/analytic_equilibrium",
+      "inputs": {
+        "hold_down_n": 25.0,
+        "kind": "analytic_equilibrium",
+        "node_radius_mm": 0.5,
+        "note": "解析接触项的平衡，闭式一。半空间用`PenaltyNormalContact`，球用`PenaltySphereContact`把第二个节点钉在球心——**仓里本来就有一个解析球障碍**，不需要为本案例新造一个。",
+        "sphere_radius_mm": 10.0,
+        "stiffness_n_per_mm": 5000.0
+      },
+      "tolerances": {
+        "contact_gap_mm": {
+          "abs": 1e-16,
+          "reason": "**这一条不是零容差**，与上面两条差在表达式上：内核算的是``(x − p)·n − r``（一条减法链），闭式算的是``F/k``（一次除法），**两串运算不同**，逐位相等没有理由成立。实测差``4.337e-18 mm``（5 ulp），1e-16留两个量级。",
+          "rel": 0.0
+        },
+        "normal_force_n": {
+          "abs": 0.0,
+          "reason": "力在平衡处**精确**等于外载（0050第二节：``k·δ = N``恒成立，与``k``无关），但它是牛顿迭代出来的，带残差容差``1e-9 N``；1e-12相对 = 2.5e-11 N，比残差容差还紧两个量级——**这条能过说明收敛得比判据要求的更深**，不是说判据松。",
+          "rel": 1e-12
+        },
+        "plane_equilibrium_z_mm": {
+          "abs": 0.0,
+          "reason": "**零容差**，理由是一条代数事实而不是精度自信：活动接触段的能量``U = ½k(z − c)² − F·z``对``z``**是严格二次的**（球那一档在轴上``|x| = z``，所以也是），于是牛顿**一步走到精确解**，那一步就是一次除法``F/k``。实测两档都是``diff = 0.0``（逐位）、迭代次数1。**这是本案例唯一两条零容差**；它们一旦在别的平台上红，红的是'牛顿那一步在那台机器上不是精确的'这件事——**而那本身值得知道**。",
+          "rel": 0.0
+        },
+        "sphere_equilibrium_z_mm": {
+          "abs": 0.0,
+          "reason": "**零容差**，理由是一条代数事实而不是精度自信：活动接触段的能量``U = ½k(z − c)² − F·z``对``z``**是严格二次的**（球那一档在轴上``|x| = z``，所以也是），于是牛顿**一步走到精确解**，那一步就是一次除法``F/k``。实测两档都是``diff = 0.0``（逐位）、迭代次数1。**这是本案例唯一两条零容差**；它们一旦在别的平台上红，红的是'牛顿那一步在那台机器上不是精确的'这件事——**而那本身值得知道**。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "equilibrium_z_mm": 0.495,
+        "normal_force_n": 25.0
+      },
+      "id": "oracle:sdf_contact_convergence/plane_field_h_2p0",
+      "inputs": {
+        "kind": "plane_field_equilibrium",
+        "note": "半空间是仿射的：场给的平衡位置与h无关，也与解析项一致。",
+        "spacing_mm": 2.0
+      },
+      "tolerances": {
+        "equilibrium_z_mm": {
+          "abs": 1e-12,
+          "reason": "**仿射函数被三次B样条精确重构**（一阶矩为零），于是场与解析项解的是同一个方程，差别只有求和次序带来的舍入。实测三档``h``全部差**1 ulp**（2.220e-16 mm）。判据取``abs = 1e-12 mm``——留四个量级余量，**但不写零**：两条路的求和次序不同，逐位相等是没验过的、也不该被承诺的性质。",
+          "rel": 0.0
+        },
+        "normal_force_n": {
+          "abs": 0.0,
+          "reason": "**仿射函数被三次B样条精确重构**（一阶矩为零），于是场与解析项解的是同一个方程，差别只有求和次序带来的舍入。实测三档``h``全部差**1 ulp**（2.220e-16 mm）。判据取``abs = 1e-12 mm``——留四个量级余量，**但不写零**：两条路的求和次序不同，逐位相等是没验过的、也不该被承诺的性质。",
+          "rel": 1e-09
+        }
+      }
+    },
+    {
+      "expected": {
+        "equilibrium_z_mm": 0.495,
+        "normal_force_n": 25.0
+      },
+      "id": "oracle:sdf_contact_convergence/plane_field_h_1p0",
+      "inputs": {
+        "kind": "plane_field_equilibrium",
+        "note": "半空间是仿射的：场给的平衡位置与h无关，也与解析项一致。",
+        "spacing_mm": 1.0
+      },
+      "tolerances": {
+        "equilibrium_z_mm": {
+          "abs": 1e-12,
+          "reason": "**仿射函数被三次B样条精确重构**（一阶矩为零），于是场与解析项解的是同一个方程，差别只有求和次序带来的舍入。实测三档``h``全部差**1 ulp**（2.220e-16 mm）。判据取``abs = 1e-12 mm``——留四个量级余量，**但不写零**：两条路的求和次序不同，逐位相等是没验过的、也不该被承诺的性质。",
+          "rel": 0.0
+        },
+        "normal_force_n": {
+          "abs": 0.0,
+          "reason": "**仿射函数被三次B样条精确重构**（一阶矩为零），于是场与解析项解的是同一个方程，差别只有求和次序带来的舍入。实测三档``h``全部差**1 ulp**（2.220e-16 mm）。判据取``abs = 1e-12 mm``——留四个量级余量，**但不写零**：两条路的求和次序不同，逐位相等是没验过的、也不该被承诺的性质。",
+          "rel": 1e-09
+        }
+      }
+    },
+    {
+      "expected": {
+        "equilibrium_z_mm": 0.495,
+        "normal_force_n": 25.0
+      },
+      "id": "oracle:sdf_contact_convergence/plane_field_h_0p5",
+      "inputs": {
+        "kind": "plane_field_equilibrium",
+        "note": "半空间是仿射的：场给的平衡位置与h无关，也与解析项一致。",
+        "spacing_mm": 0.5
+      },
+      "tolerances": {
+        "equilibrium_z_mm": {
+          "abs": 1e-12,
+          "reason": "**仿射函数被三次B样条精确重构**（一阶矩为零），于是场与解析项解的是同一个方程，差别只有求和次序带来的舍入。实测三档``h``全部差**1 ulp**（2.220e-16 mm）。判据取``abs = 1e-12 mm``——留四个量级余量，**但不写零**：两条路的求和次序不同，逐位相等是没验过的、也不该被承诺的性质。",
+          "rel": 0.0
+        },
+        "normal_force_n": {
+          "abs": 0.0,
+          "reason": "**仿射函数被三次B样条精确重构**（一阶矩为零），于是场与解析项解的是同一个方程，差别只有求和次序带来的舍入。实测三档``h``全部差**1 ulp**（2.220e-16 mm）。判据取``abs = 1e-12 mm``——留四个量级余量，**但不写零**：两条路的求和次序不同，逐位相等是没验过的、也不该被承诺的性质。",
+          "rel": 1e-09
+        }
+      }
+    },
+    {
+      "expected": {
+        "equilibrium_offset_mm": -0.03176115610608226,
+        "equilibrium_z_mm": 10.463238843893917
+      },
+      "id": "oracle:sdf_contact_convergence/sphere_field_h_1p0",
+      "inputs": {
+        "kind": "sphere_field_equilibrium",
+        "note": "球是凸的：场系统性偏松，物体沉得更深，主项 −h²/(3z*)。",
+        "spacing_mm": 1.0
+      },
+      "tolerances": {
+        "equilibrium_offset_mm": {
+          "abs": 0.0,
+          "reason": "闭式二给的是**主项**``−h²/(3z*)``，实测值还带一个``O(h⁴)``的余项。实测（h = 1 / 0.5 / 0.25）主项与实测之差是``−1.1164e-04 / −9.8074e-06 / −1.3220e-06``mm，而主项本身是``−3.176e-02 / −7.940e-03 / −1.985e-03``mm。于是本条按**相对主项**判：容差取``rel = 5e-3``，覆盖``h = 1``那一档最差的0.35%余项，并留一个量级。**不按绝对判**：绝对容差会让粗档松、细档紧，量不出'主项抓对了没有'。",
+          "rel": 0.005
+        },
+        "equilibrium_z_mm": {
+          "abs": 0.0001588057805304113,
+          "reason": "同一条判据的另一种写法（绝对位置），容差按最粗那一档的主项×5e-3折算成绝对量。**两种写法都留着**是有意的：偏差那一列判'主项抓对了没有'，位置那一列判'算出来的还是不是同一个平衡'——后者能挡住'偏差对了但基准位置整体挪了'这一类错。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "equilibrium_offset_mm": -0.007940289026520565,
+        "equilibrium_z_mm": 10.487059710973478
+      },
+      "id": "oracle:sdf_contact_convergence/sphere_field_h_0p5",
+      "inputs": {
+        "kind": "sphere_field_equilibrium",
+        "note": "球是凸的：场系统性偏松，物体沉得更深，主项 −h²/(3z*)。",
+        "spacing_mm": 0.5
+      },
+      "tolerances": {
+        "equilibrium_offset_mm": {
+          "abs": 0.0,
+          "reason": "闭式二给的是**主项**``−h²/(3z*)``，实测值还带一个``O(h⁴)``的余项。实测（h = 1 / 0.5 / 0.25）主项与实测之差是``−1.1164e-04 / −9.8074e-06 / −1.3220e-06``mm，而主项本身是``−3.176e-02 / −7.940e-03 / −1.985e-03``mm。于是本条按**相对主项**判：容差取``rel = 5e-3``，覆盖``h = 1``那一档最差的0.35%余项，并留一个量级。**不按绝对判**：绝对容差会让粗档松、细档紧，量不出'主项抓对了没有'。",
+          "rel": 0.005
+        },
+        "equilibrium_z_mm": {
+          "abs": 0.0001588057805304113,
+          "reason": "同一条判据的另一种写法（绝对位置），容差按最粗那一档的主项×5e-3折算成绝对量。**两种写法都留着**是有意的：偏差那一列判'主项抓对了没有'，位置那一列判'算出来的还是不是同一个平衡'——后者能挡住'偏差对了但基准位置整体挪了'这一类错。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "equilibrium_offset_mm": -0.0019850722566301412,
+        "equilibrium_z_mm": 10.493014927743369
+      },
+      "id": "oracle:sdf_contact_convergence/sphere_field_h_0p25",
+      "inputs": {
+        "kind": "sphere_field_equilibrium",
+        "note": "球是凸的：场系统性偏松，物体沉得更深，主项 −h²/(3z*)。",
+        "spacing_mm": 0.25
+      },
+      "tolerances": {
+        "equilibrium_offset_mm": {
+          "abs": 0.0,
+          "reason": "闭式二给的是**主项**``−h²/(3z*)``，实测值还带一个``O(h⁴)``的余项。实测（h = 1 / 0.5 / 0.25）主项与实测之差是``−1.1164e-04 / −9.8074e-06 / −1.3220e-06``mm，而主项本身是``−3.176e-02 / −7.940e-03 / −1.985e-03``mm。于是本条按**相对主项**判：容差取``rel = 5e-3``，覆盖``h = 1``那一档最差的0.35%余项，并留一个量级。**不按绝对判**：绝对容差会让粗档松、细档紧，量不出'主项抓对了没有'。",
+          "rel": 0.005
+        },
+        "equilibrium_z_mm": {
+          "abs": 0.0001588057805304113,
+          "reason": "同一条判据的另一种写法（绝对位置），容差按最粗那一档的主项×5e-3折算成绝对量。**两种写法都留着**是有意的：偏差那一列判'主项抓对了没有'，位置那一列判'算出来的还是不是同一个平衡'——后者能挡住'偏差对了但基准位置整体挪了'这一类错。",
+          "rel": 0.0
+        }
+      }
+    },
+    {
+      "expected": {
+        "field_error_over_penalty_penetration_at_coarsest": 6.352231221216452,
+        "gradient_finite_difference_ratio": 4.0,
+        "position_error_order_ratio": 4.0
+      },
+      "id": "oracle:sdf_contact_convergence/order_and_penalty_ratio",
+      "inputs": {
+        "kind": "order_and_penalty_ratio",
+        "note": "阶＋闭式三：场的位置误差与罚穿透之比。",
+        "spacings_mm": [
+          1.0,
+          0.5,
+          0.25
+        ]
+      },
+      "tolerances": {
+        "field_error_over_penalty_penetration_at_coarsest": {
+          "abs": 0.0,
+          "reason": "闭式三是初等代数，但内核那一侧的分子是**解出来的位置误差**，带那条``O(h⁴)``余项（h=1时占主项的0.35%）。1e-2相对覆盖它并留一档。**这条数是本案例最要紧的一个**：6.37倍说明这个刚度档上决定位置精度的是分辨率不是罚刚度。",
+          "rel": 0.01
+        },
+        "gradient_finite_difference_ratio": {
+          "abs": 0.0,
+          "reason": "中心差分对能量的二阶收敛，实测比**恒4.0000**。窗口与上一条同为``[3.9, 4.1]``——**两条判的不是同一件事**：上一条判场的分辨率误差随h的阶，这一条判梯度是不是所实现能量的导数。",
+          "rel": 0.025
+        },
+        "position_error_order_ratio": {
+          "abs": 0.0,
+          "reason": "**收敛比是区间不是恒等于4**（`cases/harmonic_oscillator`那条同源：4是渐近值，粗档还没完全进渐近区）。2.5e-2相对 = ``[3.9, 4.1]``，与本仓其余二阶门同一个窗口，实测**4.0091 / 4.0023**。",
+          "rel": 0.025
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}
