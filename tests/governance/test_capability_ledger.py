@@ -80,6 +80,31 @@ def _mutated(tmp_path: Path, mutate: Callable[[dict], None]) -> Path:
     return _written(tmp_path, data)
 
 
+def _prose_tree(tmp_path: Path, readme: str, cases_readme: str | None = None) -> Path:
+    """造一棵只含本门要读的那两份散文的树（0084第八节的散文对账）。"""
+
+    (tmp_path / "cases").mkdir(exist_ok=True)
+    (tmp_path / "README.md").write_text(readme, encoding="utf-8")
+    (tmp_path / "cases" / "README.md").write_text(
+        cases_readme if cases_readme is not None else _GOOD_CASES_README, encoding="utf-8"
+    )
+    return tmp_path
+
+
+#: 与仓里两份散文**当前真值**同步的最小复制品。分子一变这里要跟着改——
+#: **而它跟着改的那一刻，正是散文对账门在起作用。**
+_GOOD_README = (
+    "| **主｜用户六场景端到端** | | **0/6** |\n"
+    "| 从｜同行C档13条标准案例 | | **6/13** |\n"
+    "能力位清单的当前机械计数是**12/42**\n"
+)
+_GOOD_CASES_README = (
+    "| **主｜用户六场景端到端** | | **0/6** |\n"
+    "| 从｜同行C档13条标准案例 | | **6/13** |\n"
+    "主分母的逐位机械计数当前为**12/42**\n"
+)
+
+
 def _expect_red(code: str, path: Path, root: Path = ROOT):
     """跑门并断言它以**这个分支**红。码写死在调用点上，元测试按调用点数覆盖。"""
 
@@ -89,6 +114,82 @@ def _expect_red(code: str, path: Path, root: Path = ROOT):
         f"期望分支{code}，实际{excinfo.value.code}：{excinfo.value}"
     )
     return excinfo.value
+
+
+def _expect_red_prose(code: str, root: Path):
+    """散文对账那一族的必红。
+
+    **它不能走`_expect_red`**：散文对账不在`check()`里（那是一条有意的分工，
+    见checker的`main()`），所以红要从`assert_prose_matches_counts`那一层取。
+    元测试同时数这两个调用点——**两个helper，一张覆盖表**。
+    """
+
+    counts = checker.check(LEDGER, ROOT)
+    with pytest.raises(checker.LedgerError) as excinfo:
+        checker.assert_prose_matches_counts(counts, root)
+    assert excinfo.value.code == code, (
+        f"期望分支{code}，实际{excinfo.value.code}：{excinfo.value}"
+    )
+    return excinfo.value
+
+
+# ---------------------------------------------------------------------------
+# 散文对账的必红（0084第八节）：五条分支各一条
+# ---------------------------------------------------------------------------
+
+
+def test_prose_file_missing_is_red(tmp_path: Path):
+    """注错：锚点表指着的散文文件根本不在。"""
+
+    (tmp_path / "cases").mkdir()
+    _expect_red_prose("PROSE_FILE_MISSING", tmp_path)
+
+
+def test_prose_anchor_lost_is_red(tmp_path: Path):
+    """注错：锚串被改短了。
+
+    **这一条是五条里最要紧的**——锚串失效意味着这一处不再被看着，
+    而它不会自己喊。与0084第七节那个"照着复制出来的第二个入口不会跟着修"同族。
+    """
+
+    _expect_red_prose(
+        "PROSE_ANCHOR_LOST",
+        _prose_tree(tmp_path, _GOOD_README.replace("主｜用户六场景端到端", "主｜六场景端到端")),
+    )
+
+
+def test_prose_anchor_ambiguous_is_red(tmp_path: Path):
+    """注错：锚串命中两行——说不清在核对哪一处。"""
+
+    doubled = "| **主｜用户六场景端到端** | | **0/6** |\n" + _GOOD_README
+    _expect_red_prose("PROSE_ANCHOR_AMBIGUOUS", _prose_tree(tmp_path, doubled))
+
+
+def test_prose_fraction_absent_is_red(tmp_path: Path):
+    """注错：锚住的那一行根本没写这个分母的分数。"""
+
+    _expect_red_prose(
+        "PROSE_FRACTION_ABSENT",
+        _prose_tree(tmp_path, _GOOD_README.replace("**0/6**", "见台账")),
+    )
+
+
+def test_prose_stale_is_red(tmp_path: Path):
+    """注错：散文里的数陈旧了——**这是本门存在的理由本身**。"""
+
+    _expect_red_prose(
+        "PROSE_STALE", _prose_tree(tmp_path, _GOOD_README.replace("**0/6**", "**1/6**"))
+    )
+
+
+def test_the_prose_red_cases_are_red_for_the_right_reason(tmp_path: Path):
+    """先证明那棵造出来的树在**没有植入**时是绿的。
+
+    否则上面五条红得没有意义——它们可能全部红在"这棵树本来就不合格"上。
+    """
+
+    counts = checker.check(LEDGER, ROOT)
+    checker.assert_prose_matches_counts(counts, _prose_tree(tmp_path, _GOOD_README))
 
 
 # ---------------------------------------------------------------------------
@@ -577,7 +678,9 @@ def test_every_branch_code_has_a_red_case():
     """
 
     source = Path(__file__).read_text(encoding="utf-8")
-    covered = set(re.findall(r'_expect_red\(\s*\n?\s*"([A-Z_]+)"', source))
+    # 两个helper一张覆盖表：`_expect_red`走`check()`，`_expect_red_prose`走
+    # `assert_prose_matches_counts`（散文对账不在`check()`里，见checker的`main()`）。
+    covered = set(re.findall(r'_expect_red(?:_prose)?\(\s*\n?\s*"([A-Z_]+)"', source))
     uncovered = sorted(set(_branch_codes()) - covered)
     assert not uncovered, f"这些分支没有必红用例：{uncovered}"
 

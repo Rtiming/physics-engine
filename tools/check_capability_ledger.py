@@ -51,10 +51,19 @@
 - **状态报得诚不诚实**。门能判"done的位必须能解析到真实存在的案例或测试"，
   **判不了那个案例是不是真的验到了这一位**。这一条只能靠案例页的判据表与
   `check_case_pages`那一侧，以及人读。
-- **散文里的数与本清单一致与否**。README两条分母表与`cases/README.md`
-  今天仍是手写的。本轮不改它们（决策0053第四节：README两条分母表轨道禁止改，
-  收口时统一改）。**登记在此**，触发条件：收口把两张表改成引用本清单之后，
-  给本门补一条"散文里的分数必须与算出来的相等"。
+## 散文里的数：2026-08-18补上（决策0084第八节）
+
+上一版这里写着"散文里的数与本清单一致与否"挡不住，并登记了触发条件
+（0056那条的措辞是"**下一次任一分子变化前**，先让门从清单计算值核对这些固定结构位置"）。
+**基础设施批次四条轨都会动分子，触发条件到了，故补上。**
+
+补法是**按固定结构位置逐个锚定**，不是全文扫分数——全文扫会当场误红：
+README那一行里`6/13`后面紧跟着"2026-08-18曾报7/13，当天被否掉并退回"，
+而**那个7/13是一段历史，不是一个待更新的读数**。
+一道会把历史记录判成陈旧的门会被关掉，然后这一条就白立了。
+
+所以`PROSE_ANCHORS`逐条写死"哪份文件、哪一行（按行内锚串认）、哪个分母、取第几个"，
+取的是**该行第一个**该分母的分数——历史值一律写在真值之后（本仓三处现状如此）。
 """
 
 from __future__ import annotations
@@ -626,6 +635,97 @@ def check(path: Path, root: Path) -> Counts:
     return count(ledger)
 
 
+# ---------------------------------------------------------------------------
+# 散文对账：固定结构位置（决策0084第八节，兑现0056那条"下一次任一分子变化前"）
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ProseAnchor:
+    """一处写着分数的散文位置。
+
+    `line_contains`认的是**行内锚串**而不是行号——行号会被上下文的增删推着走，
+    而一道因为别人加了一段就红的门会被当成噪声关掉。
+    """
+
+    #: 仓库根相对路径。
+    path: str
+    #: 行内锚串，唯一确定那一行。不唯一即红（见`assert_prose_matches_counts`）。
+    line_contains: str
+    #: 分母。
+    denominator: int
+    #: 这个分数应当等于`Counts`的哪个字段。
+    counts_field: str
+
+
+#: **三份散文、六处分数。** 每一处都是人手写的，而人手写的数会静默陈旧——
+#: 0056登记这条时的原话是"没有门看着分子"，本表是那句话的最后一段。
+PROSE_ANCHORS: tuple[ProseAnchor, ...] = (
+    ProseAnchor("README.md", "主｜用户六场景端到端", 6, "end_to_end_done"),
+    ProseAnchor("README.md", "从｜同行C档13条标准案例", 13, "peer_done"),
+    ProseAnchor("README.md", "能力位清单的当前机械计数是", 42, "main_done"),
+    ProseAnchor("cases/README.md", "主｜用户六场景端到端", 6, "end_to_end_done"),
+    ProseAnchor("cases/README.md", "从｜同行C档13条标准案例", 13, "peer_done"),
+    ProseAnchor("cases/README.md", "主分母的逐位机械计数当前为", 42, "main_done"),
+)
+
+
+def first_fraction_with(line: str, denominator: int) -> int | None:
+    r"""一行里**第一个**分母为`denominator`的分数的分子。
+
+    `(?<![\d/])`与`(?![\d/])`两个界防的是`7/5/10/7/6/7`那种逐场景位数串——
+    里面的`7/6`不是"六个场景做完了七个"，而`cases/README.md`第166行就有这么一串。
+    **不设这两个界，本门第一次跑就是误红。**
+    """
+
+    match = re.search(rf"(?<![\d/])(\d+)/{denominator}(?![\d/])", line)
+    return int(match.group(1)) if match else None
+
+
+def assert_prose_matches_counts(counts: Counts, root: Path) -> None:
+    """散文里的固定结构位置必须与算出来的数相等。**算出来的是唯一真值。**"""
+
+    for anchor in PROSE_ANCHORS:
+        path = root / anchor.path
+        if not path.is_file():
+            raise LedgerError(
+                "PROSE_FILE_MISSING",
+                f"散文对账：{anchor.path}不存在——本表指着一份不存在的文件",
+            )
+        lines = [
+            line
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if anchor.line_contains in line
+        ]
+        if not lines:
+            raise LedgerError(
+                "PROSE_ANCHOR_LOST",
+                f"散文对账：{anchor.path}里找不到锚串{anchor.line_contains!r}——"
+                "**锚串失效等于这一处不再被看着**，比数字错更坏。改散文时把锚串一起改。"
+            )
+        if len(lines) > 1:
+            raise LedgerError(
+                "PROSE_ANCHOR_AMBIGUOUS",
+                f"散文对账：{anchor.path}里锚串{anchor.line_contains!r}命中{len(lines)}行，"
+                "唯一性没了就说不清在核对哪一处。"
+            )
+        expected = getattr(counts, anchor.counts_field)
+        found = first_fraction_with(lines[0], anchor.denominator)
+        if found is None:
+            raise LedgerError(
+                "PROSE_FRACTION_ABSENT",
+                f"散文对账：{anchor.path}那一行没有写分母为{anchor.denominator}的分数——"
+                f"锚串{anchor.line_contains!r}"
+            )
+        if found != expected:
+            raise LedgerError(
+                "PROSE_STALE",
+                f"散文对账：{anchor.path}写着{found}/{anchor.denominator}，"
+                f"从清单算出来是{expected}/{anchor.denominator}——"
+                "**清单是唯一真值**，散文要跟着改（决策0052第二节）。"
+            )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="能力位清单的计数门")
     parser.add_argument("--root", default=str(ROOT), help="仓库根（证据按它解析）")
@@ -635,6 +735,13 @@ def main(argv: list[str] | None = None) -> int:
     path = Path(args.ledger).resolve() if args.ledger else root / "docs" / "capability_ledger.json"
     try:
         counts = check(path, root)
+        # **散文对账不在`check()`里，这是一条有意的分工。**
+        # `check(path, root)`回答的是"这份清单本身立不立得住"，它的调用方包括
+        # 一批喂**人造清单**的必红用例；把仓库散文的对账塞进去，那些用例就会
+        # 因为"人造清单的分子与真README不符"而红——**红得毫无意义**。
+        # 散文对账问的是另一件事："**这个仓**里手写的那几个分数跟不跟得上"，
+        # 所以它住在跑一次真仓的这一层。
+        assert_prose_matches_counts(counts, root)
     except LedgerEmpty as error:
         print(f"{error}\n—— 空跑不是通过。", file=sys.stderr)
         return 2
