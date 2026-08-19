@@ -49,13 +49,14 @@
 转动自由度进接触）。**并行的代价不在合并冲突，在读文件的开销**——
 改200行要先读2157行。于是按"谁依赖谁"切开，依赖是单向的：
 
-    errors ← layout ← {penalty, friction} ← {damping, stepper}
+    errors ← layout ← {penalty/, friction, field} ← {damping, stepper}
 
 | 文件 | 装什么 |
 |---|---|
 | `errors.py` | `ContactError`。谁也不依赖，故不产生环 |
 | `layout.py` | 槽宽/每对槽数/regime取值/法向来源类型＋声明与锚点布局 |
-| `penalty.py` | 罚法向五族：半空间、球-球、有限长圆柱侧面、法兰内环面、扫掠槽壁 |
+| `penalty/` | 罚法向**六族，一族一个文件**（2026-08-19由决策0095从单文件拆成包）：`halfspace`、`sphere`、`cylinder`、`annulus`、`groove`、`groove_live`，共用的边缘几何在`_edges`；`__init__`只做再导出，**公开面一个字没变** |
+| `field.py` | 有符号距离场接触项（决策0085）：窄带块稀疏＋三次B样条 |
 | `friction.py` | 库仑return-map（**圆与椭圆两条并列**，决策0068）与粘着弹簧 |
 | `damping.py` | 恢复系数↔阻尼比换算与线性法向dashpot |
 | `stepper.py` | 准静态步进器：单槽位与多槽位 |
