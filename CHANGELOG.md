@@ -24,6 +24,9 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
   physics-engine运行时依赖；本批没有修改WII、GCW或WDS，17/42和端到端0/6不变。
 - 修复`tools/master/run_accept_on_master.sh`在UTF-8 locale下把`$SHORT`后的全角括号误读为
   变量名一部分、导致master验收在发送前即`unbound variable`的问题。
+- 本机quick和srv01 full功能轴均PASS但计时分别为82.6s/30s与247.1s/180s；master
+  full在8核SLURM分配下2597+169 passed、22个有理由skip、122.819s/180s，四轴PASS。
+  `srun --test-only`的2026-08-30估计没有代替实际提交状态。
 
 ### 绕制偏差物理基础设施｜张力测量第二批（决策0098）
 
