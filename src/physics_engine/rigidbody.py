@@ -456,6 +456,20 @@ def attitude_xyzw(state: State) -> Quaternion:
     return state.block(_ATTITUDE)  # type: ignore[return-value]
 
 
+def centre_of_mass_position_mm(state: State) -> Vector3:
+    """世界系质心位置；字段身份来自``RIGID_BODY_LAYOUT``。"""
+
+    _require_layout(state)
+    return state.block(_POSITION)  # type: ignore[return-value]
+
+
+def centre_of_mass_velocity_mm_per_s(state: State) -> Vector3:
+    """世界系质心线速度。"""
+
+    _require_layout(state)
+    return state.block(_VELOCITY)  # type: ignore[return-value]
+
+
 def angular_momentum_world_kg_mm2_per_s(
     inertia: RigidBodyInertia, state: State
 ) -> Vector3:
@@ -730,6 +744,8 @@ __all__ = [
     "angular_velocity_body_rad_per_s",
     "attitude_matrix",
     "attitude_xyzw",
+    "centre_of_mass_position_mm",
+    "centre_of_mass_velocity_mm_per_s",
     "cross",
     "integrate_free_flight",
     "make_state",

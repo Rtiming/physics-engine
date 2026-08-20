@@ -77,6 +77,19 @@ def test_model_scene_assembly_benchmark_reports_preloaded_resource_costs():
     )
 
 
+def test_dynamic_scene_benchmarks_report_assembly_and_free_flight_costs():
+    assembly = bench._measure_dynamic_model_scene_assembly(repeat=2)
+    flight = bench._measure_dynamic_model_scene_free_flight(repeat=2)
+    assert assembly["batch_size"] == bench.DYNAMIC_MODEL_SCENE_BATCH_SIZE == 100
+    assert assembly["dynamic_body_count"] == 1
+    assert assembly["median_per_scene_s"] == pytest.approx(
+        assembly["median_s"] / assembly["batch_size"], rel=0.0, abs=0.0
+    )
+    assert flight["steps"] == bench.DYNAMIC_MODEL_SCENE_FLIGHT_STEPS == 500
+    assert flight["median_s"] > 0.0
+    assert flight["renormalisations"] == flight["steps"]
+
+
 def test_source_bytes_include_python_subpackages(tmp_path: Path):
     """必须红：只用``glob('*.py')``会让新增物理域整个隐身。"""
 

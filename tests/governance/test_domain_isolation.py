@@ -124,10 +124,15 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
         "contact_pipeline",
         "disturbance",
         "drives",
+        #: `dynamic_body`与`model_scene`由0101归力学：前者直接import刚体13维State与
+        #: 惯量，后者从0101起import前者并要求逐帧dynamic State。0100时`model_scene`
+        #: 仍只做static/kinematic基座编排；**import边改变时归属同批改变**。
+        "dynamic_body",
         "energies",
         "feed",
         "integrate",
         "laydown",
+        "model_scene",
         "rigidbody",
         "rod",
         #: `rotation`归力学（2026-08-18，决策0079）：它import `energies`（取`POTENTIAL`
@@ -195,7 +200,6 @@ SUBSTRATE_RINGS: dict[str, tuple[str, ...]] = {
     "scene": (
         "actuators",
         "model_physics",
-        "model_scene",
         "motion",
         "planned_motion",
         "pose_math",

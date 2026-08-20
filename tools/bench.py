@@ -29,6 +29,8 @@ MuJoCo的CI干脆不跑benchmark，Drake在README里明写其基准不承担回�
   规划track和虚拟物理所有权闭包；WII适配以后不会改变这条内核成本口径。
 * ``model_scene_assembly``：100份P3.1两体场景装配，资源已预加载，量位姿组合、
   Scene finalize、MotionSource、虚拟frame和显式候选装配的进程内成本。
+* ``dynamic_model_scene``：100份一静一动场景装配，以及同一dynamic体500步RK4自由飞行
+  加COM状态→geometry位姿回读；两条分别量装配成本与运行成本。
 
 这些物理组也**不进门**，理由与墙钟同（决策0018第一节未被本页改动）。它们的用途是
 spec/13第一节义务1的那个前提：**没有热点数据的优化提案不受理**。
@@ -100,6 +102,7 @@ from physics_engine.planned_motion import (
     PlannedMotionSample,
     TrackPose,
 )
+from physics_engine.rigidbody import RK4_BODY, integrate_free_flight
 from physics_engine.state import State, StateField, StateLayout
 from physics_engine.tension_measurement import MeasuringRoll
 from physics_engine.tension_readout import (
@@ -111,7 +114,10 @@ from physics_engine.tension_readout import (
     TensionReadout,
     TensionReadoutChannel,
 )
-from tools.bench_model_scene import build_model_scene_benchmark_fixture
+from tools.bench_model_scene import (
+    build_dynamic_model_scene_benchmark_fixture,
+    build_model_scene_benchmark_fixture,
+)
 
 EXAMPLE_SCENE = ROOT / "examples/collision_preview_cell.scene.json"
 
@@ -132,6 +138,8 @@ TENSION_MEASUREMENT_BATCH_SIZE = 1000
 TENSION_READOUT_BATCH_SIZE = 1000
 MODEL_MOTION_INPUT_BATCH_SIZE = 100
 MODEL_SCENE_ASSEMBLY_BATCH_SIZE = 100
+DYNAMIC_MODEL_SCENE_BATCH_SIZE = 100
+DYNAMIC_MODEL_SCENE_FLIGHT_STEPS = 500
 
 
 class BenchmarkError(RuntimeError):
@@ -499,6 +507,53 @@ def _measure_model_scene_assembly(repeat: int) -> dict:
     return result
 
 
+def _measure_dynamic_model_scene_assembly(repeat: int) -> dict:
+    """100份预加载资源的一静一动场景装配。"""
+
+    package, resources, interactions = build_dynamic_model_scene_benchmark_fixture()
+
+    def batch() -> None:
+        for _ in range(DYNAMIC_MODEL_SCENE_BATCH_SIZE):
+            assemble_model_physics_scene(package, resources, interactions)
+
+    result = _time_in_process(batch, repeat)
+    result["batch_size"] = DYNAMIC_MODEL_SCENE_BATCH_SIZE
+    result["dynamic_body_count"] = 1
+    result["median_per_scene_s"] = result["median_s"] / DYNAMIC_MODEL_SCENE_BATCH_SIZE
+    result["min_per_scene_s"] = result["min_s"] / DYNAMIC_MODEL_SCENE_BATCH_SIZE
+    return result
+
+
+def _measure_dynamic_model_scene_free_flight(repeat: int) -> dict:
+    """一个已装配dynamic体的500步自由飞行与geometry位姿回读。"""
+
+    package, resources, interactions = build_dynamic_model_scene_benchmark_fixture()
+    prepared = assemble_model_physics_scene(package, resources, interactions)
+    runtime = prepared.body_runtime("body/bench-workpiece").dynamic_runtime
+    assert runtime is not None
+    last_diagnostics = [None]
+
+    def flight() -> None:
+        final, diagnostics = integrate_free_flight(
+            RK4_BODY,
+            state=runtime.initial_state,
+            inertia=runtime.inertia,
+            dt_s=0.001,
+            steps=DYNAMIC_MODEL_SCENE_FLIGHT_STEPS,
+        )
+        prepared.posed_bodies_at_time(
+            0.5, dynamic_states={runtime.body_id: final}
+        )
+        last_diagnostics[0] = diagnostics
+
+    result = _time_in_process(flight, repeat)
+    diagnostics = last_diagnostics[0]
+    assert diagnostics is not None
+    result["steps"] = DYNAMIC_MODEL_SCENE_FLIGHT_STEPS
+    result["renormalisations"] = diagnostics.renormalisations
+    return result
+
+
 def build_chain(
     nodes: int, *, with_bending: bool = False
 ) -> tuple[EnergyRegistry, State, EnergyContext]:
@@ -830,6 +885,10 @@ def measure_physics(repeat: int, *, with_profile: bool) -> dict:
         "tension_readout_sampled": _measure_tension_readout(repeat),
         "model_motion_input_load": _measure_model_motion_input(repeat),
         "model_scene_assembly": _measure_model_scene_assembly(repeat),
+        "dynamic_model_scene_assembly": _measure_dynamic_model_scene_assembly(repeat),
+        "dynamic_model_scene_free_flight": _measure_dynamic_model_scene_free_flight(
+            repeat
+        ),
     }
     if with_profile:
         report["hotspots"] = {
@@ -931,6 +990,18 @@ def _print_physics(physics: dict) -> None:
         f"tracks={model_scene['motion_track_count']} "
         f"median={model_scene['median_s'] * 1e3:.3f}ms "
         f"per_scene={model_scene['median_per_scene_s'] * 1e6:.3f}us"
+    )
+    dynamic_scene = physics["dynamic_model_scene_assembly"]
+    dynamic_flight = physics["dynamic_model_scene_free_flight"]
+    print(
+        f"  dynamic场景装配 {dynamic_scene['batch_size']}份 "
+        f"median={dynamic_scene['median_s'] * 1e3:.3f}ms "
+        f"per_scene={dynamic_scene['median_per_scene_s'] * 1e6:.3f}us"
+    )
+    print(
+        f"  dynamic自由飞行 {dynamic_flight['steps']}步 "
+        f"median={dynamic_flight['median_s'] * 1e3:.3f}ms "
+        f"renormalisations={dynamic_flight['renormalisations']}"
     )
     print("  积分推进 pure_python/numpy 耗时比")
     for record in physics["integration"]:

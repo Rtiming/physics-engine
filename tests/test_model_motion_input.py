@@ -12,6 +12,8 @@ from physics_engine.materials import EvidenceRef
 from physics_engine.model_physics import (
     PHYSICS_MODEL_MOTION_CANONICAL_PROFILE,
     BodyBehavior,
+    DynamicBodyInitialState,
+    DynamicStateFrame,
     GeometrySource,
     ModelPhysicsError,
     ModelPhysicsRelation,
@@ -406,6 +408,66 @@ def test_red_kinematic_and_dynamic_state_ownership_cannot_be_mixed():
             analytic_shape_id=None,
             material_record_id="material/steel",
             mass_properties_id="mass-properties/workpiece",
+            material_record_sha256="a" * 64,
+            mass_properties_sha256="b" * 64,
+        )
+
+
+def test_dynamic_body_requires_an_explicit_com_state_frame_and_initial_rates():
+    initial = DynamicBodyInitialState(
+        state_frame=DynamicStateFrame.CENTRE_OF_MASS_GEOMETRY_AXES,
+        centre_of_mass_velocity_mm_per_s=(1.0, 2.0, 3.0),
+        angular_velocity_body_rad_per_s=(0.1, 0.2, 0.3),
+    )
+    binding = PhysicsBodyBinding(
+        body_id="body/dynamic-workpiece",
+        component_id="model-component/workpiece",
+        behavior=BodyBehavior.DYNAMIC,
+        geometry_source=GeometrySource.COLLISION_ASSET,
+        motion_track_id=None,
+        analytic_shape_id=None,
+        material_record_id="material/steel",
+        mass_properties_id="mass-properties/workpiece",
+        dynamic_initial_state=initial,
+        material_record_sha256="a" * 64,
+        mass_properties_sha256="b" * 64,
+    )
+    assert binding.dynamic_initial_state == initial
+
+
+def test_red_dynamic_body_without_initial_state_is_rejected():
+    with pytest.raises(ModelPhysicsError, match="dynamic body requires.*initial state"):
+        PhysicsBodyBinding(
+            body_id="body/dynamic-workpiece",
+            component_id="model-component/workpiece",
+            behavior=BodyBehavior.DYNAMIC,
+            geometry_source=GeometrySource.COLLISION_ASSET,
+            motion_track_id=None,
+            analytic_shape_id=None,
+            material_record_id="material/steel",
+            mass_properties_id="mass-properties/workpiece",
+            material_record_sha256="a" * 64,
+            mass_properties_sha256="b" * 64,
+        )
+
+
+def test_red_static_or_kinematic_body_cannot_carry_dynamic_initial_state():
+    initial = DynamicBodyInitialState(
+        state_frame=DynamicStateFrame.CENTRE_OF_MASS_GEOMETRY_AXES,
+        centre_of_mass_velocity_mm_per_s=(0.0, 0.0, 0.0),
+        angular_velocity_body_rad_per_s=(0.0, 0.0, 0.0),
+    )
+    with pytest.raises(ModelPhysicsError, match="only valid for a dynamic"):
+        PhysicsBodyBinding(
+            body_id="body/static-with-state",
+            component_id="model-component/workpiece",
+            behavior=BodyBehavior.STATIC,
+            geometry_source=GeometrySource.COLLISION_ASSET,
+            motion_track_id=None,
+            analytic_shape_id=None,
+            material_record_id=None,
+            mass_properties_id=None,
+            dynamic_initial_state=initial,
         )
 
 

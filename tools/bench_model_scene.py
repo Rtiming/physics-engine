@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
-from physics_engine.materials import EvidenceRef
+from dataclasses import replace
+
+from physics_engine.geometry import MassProperties
+from physics_engine.materials import EvidenceRef, MaterialProperty, MaterialRecord
 from physics_engine.model_physics import (
     BodyBehavior,
+    DynamicBodyInitialState,
+    DynamicStateFrame,
     GeometrySource,
     ModelPhysicsRelation,
     PhysicsBodyBinding,
@@ -22,7 +27,11 @@ from physics_engine.planned_motion import (
     PlannedMotionSample,
     TrackPose,
 )
-from physics_engine.scene_resources import LoadedCollisionAsset, SceneResourceCatalog
+from physics_engine.scene_resources import (
+    LoadedCollisionAsset,
+    MassPropertiesRecord,
+    SceneResourceCatalog,
+)
 from physics_engine.shapes import CollisionShape, MeshAsset
 
 IDENTITY = Pose((0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0))
@@ -200,4 +209,112 @@ def build_model_scene_benchmark_fixture() -> tuple[
     return package, resources, interactions
 
 
-__all__ = ["build_model_scene_benchmark_fixture"]
+def build_dynamic_model_scene_benchmark_fixture() -> tuple[
+    PhysicsModelMotionInput, SceneResourceCatalog, SceneInteractionPlan
+]:
+    """由同一两体语料构造一静一动、只保留虚拟frame时间线的dynamic场景。"""
+
+    package, resources, interactions = build_model_scene_benchmark_fixture()
+    process_track = package.motion.tracks[1]
+    samples = tuple(
+        replace(
+            sample,
+            track_poses=tuple(
+                pose
+                for pose in sample.track_poses
+                if pose.track_id == process_track.track_id
+            ),
+        )
+        for sample in package.motion.samples
+    )
+    motion = PlannedMotion.create(
+        motion_id="motion/bench-dynamic-scene",
+        producer_id=package.motion.producer_id,
+        root_frame_id=package.motion.root_frame_id,
+        parameterization=MotionParameterization.TIME_S,
+        coordinate_unit="s",
+        source_artifacts=package.motion.source_artifacts,
+        tracks=(process_track,),
+        state_coordinates=(),
+        samples=samples,
+    )
+    static_binding = package.relation.body_bindings[0]
+    material = MaterialRecord(
+        material_id="material/bench-dynamic",
+        applicable_domains=("mechanics",),
+        properties=(
+            MaterialProperty(
+                "density_kg_m3",
+                1000.0,
+                ("mechanics",),
+                EvidenceRef(
+                    "estimated",
+                    "evidence/bench-dynamic-material",
+                    "Synthetic benchmark material.",
+                ),
+            ),
+        ),
+    ).sealed()
+    component = package.model.component("model-component/bench-workpiece")
+    assert component.collision_asset is not None
+    mass = MassPropertiesRecord.create(
+        mass_properties_id="mass-properties/bench-dynamic",
+        geometry_resource_id=component.collision_asset.asset_id,
+        expressed_in_frame_id=component.collision_asset.frame_id,
+        properties=MassProperties(
+            8.0,
+            (2.0, 0.0, 0.0),
+            1.0,
+            ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 2.0)),
+        ),
+        evidence=EvidenceRef(
+            "estimated",
+            "evidence/bench-dynamic-mass",
+            "Synthetic benchmark mass properties.",
+        ),
+    )
+    dynamic_binding = PhysicsBodyBinding(
+        "body/bench-workpiece",
+        "model-component/bench-workpiece",
+        BodyBehavior.DYNAMIC,
+        GeometrySource.COLLISION_ASSET,
+        None,
+        None,
+        "material/bench-dynamic",
+        "mass-properties/bench-dynamic",
+        DynamicBodyInitialState(
+            DynamicStateFrame.CENTRE_OF_MASS_GEOMETRY_AXES,
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 3.141592653589793),
+        ),
+        material.content_sha256,
+        mass.content_sha256,
+    )
+    relation = ModelPhysicsRelation.create(
+        relation_id="model-physics/bench-dynamic-scene",
+        model_snapshot_sha256=package.model.content_sha256,
+        motion_plan_sha256=motion.content_sha256,
+        body_bindings=(static_binding, dynamic_binding),
+        virtual_frame_bindings=package.relation.virtual_frame_bindings,
+        excluded_component_ids=(),
+        excluded_motion_track_ids=(),
+    )
+    dynamic_package = PhysicsModelMotionInput.create(
+        input_id="physics-input/bench-dynamic-scene",
+        model=package.model,
+        motion=motion,
+        relation=relation,
+        evidence=package.evidence,
+    )
+    dynamic_resources = replace(
+        resources,
+        materials=(material,),
+        mass_property_records=(mass,),
+    )
+    return dynamic_package, dynamic_resources, interactions
+
+
+__all__ = [
+    "build_dynamic_model_scene_benchmark_fixture",
+    "build_model_scene_benchmark_fixture",
+]

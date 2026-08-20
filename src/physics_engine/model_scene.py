@@ -4,17 +4,24 @@
 ``scene_resources``，既有场景冻结仍由``scene.SceneAssembly``负责。它不读取WII/GCW，
 不解析网格，也不自动生成全体两两接触。
 
-首片支持static、kinematic与虚拟frame。dynamic合同已经存在，但它还缺“状态frame相对
-质心”的冻结语义；本模块遇到dynamic明确拒绝，绝不把它冻结成static冒充已装配。
+0100首片支持static、kinematic与虚拟frame；0101又通过``dynamic_body``接入
+COM+geometry轴刚体状态。dynamic真位姿必须由调用方提供精确State mapping，
+``FinalizedScene``内的identity声明位姿不冒充运行位姿。
 """
 
 from __future__ import annotations
 
 import math
 from bisect import bisect_right
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from physics_engine.collision import BroadPhaseCollisionQuery
+from physics_engine.dynamic_body import (
+    DynamicBodyError,
+    DynamicBodyRuntime,
+    prepare_dynamic_body_runtime,
+)
 from physics_engine.model_physics import (
     BodyBehavior,
     GeometrySource,
@@ -34,6 +41,7 @@ from physics_engine.pose_math import IDENTITY_POSE, compose_pose
 from physics_engine.scene import FinalizedScene, SceneAssembly, SceneError
 from physics_engine.scene_resources import SceneResourceCatalog, SceneResourceError
 from physics_engine.shapes import PosedBody, ShapeError, SimBody
+from physics_engine.state import State
 
 
 class ModelSceneError(ValueError):
@@ -147,6 +155,7 @@ class PhysicsBodyRuntime:
     component_from_geometry: Pose
     resource_id: str
     planning_source: _PlanningScalePoseSource | None
+    dynamic_runtime: DynamicBodyRuntime | None
 
     @property
     def body_id(self) -> str:
@@ -209,10 +218,67 @@ class PreparedModelScene:
                 return runtime
         raise ModelSceneError(f"prepared scene has no virtual frame {frame_id!r}")
 
-    def posed_bodies_at_time(self, t_s: float) -> tuple[PosedBody, ...]:
+    def initial_dynamic_states(self) -> dict[str, State]:
+        return {
+            runtime.body_id: runtime.dynamic_runtime.initial_state
+            for runtime in self.physics_bodies
+            if runtime.dynamic_runtime is not None
+        }
+
+    def _dynamic_states(
+        self, states: Mapping[str, State] | None
+    ) -> Mapping[str, State]:
+        required = {
+            runtime.body_id
+            for runtime in self.physics_bodies
+            if runtime.dynamic_runtime is not None
+        }
+        if not required:
+            if states:
+                raise ModelSceneError(
+                    f"unknown dynamic states for a scene without dynamic bodies: "
+                    f"{sorted(states)}"
+                )
+            return {}
+        if states is None:
+            raise ModelSceneError(
+                f"dynamic states are required for bodies {sorted(required)}; "
+                "use initial_dynamic_states() explicitly for the initial frame"
+            )
+        if not isinstance(states, Mapping):
+            raise ModelSceneError("dynamic_states must be a mapping from body ID to State")
+        invalid_keys = [repr(key) for key in states if not isinstance(key, str) or not key]
+        if invalid_keys:
+            raise ModelSceneError(
+                f"dynamic state mapping keys must be nonempty body IDs: {invalid_keys}"
+            )
+        actual = set(states)
+        missing = sorted(required - actual)
+        unknown = sorted(actual - required)
+        if missing:
+            raise ModelSceneError(f"missing dynamic states: {missing}")
+        if unknown:
+            raise ModelSceneError(f"unknown dynamic states: {unknown}")
+        if any(not isinstance(states[body_id], State) for body_id in required):
+            raise ModelSceneError("dynamic state mapping values must be State")
+        return states
+
+    def posed_bodies_at_time(
+        self,
+        t_s: float,
+        *,
+        dynamic_states: Mapping[str, State] | None = None,
+    ) -> tuple[PosedBody, ...]:
         if self.parameterization is not MotionParameterization.TIME_S:
             raise ModelSceneError("prepared scene is planning_scale, not physical time")
-        return self.scene.posed_bodies_at(t_s)
+        states = self._dynamic_states(dynamic_states)
+        posed = list(self.scene.posed_bodies_at(t_s))
+        for index, runtime in enumerate(self.physics_bodies):
+            if runtime.dynamic_runtime is not None:
+                posed[index] = runtime.dynamic_runtime.posed_geometry(
+                    states[runtime.body_id], self.scene.bodies[index].posed.body
+                )
+        return tuple(posed)
 
     def posed_bodies_at_planning_scale(self, scale: float) -> tuple[PosedBody, ...]:
         if self.parameterization is not MotionParameterization.PLANNING_SCALE:
@@ -251,8 +317,15 @@ class PreparedModelScene:
             candidate_pairs=candidates,
         )
 
-    def collision_query_at_time(self, t_s: float) -> BroadPhaseCollisionQuery:
-        return self._query(self.posed_bodies_at_time(t_s))
+    def collision_query_at_time(
+        self,
+        t_s: float,
+        *,
+        dynamic_states: Mapping[str, State] | None = None,
+    ) -> BroadPhaseCollisionQuery:
+        return self._query(
+            self.posed_bodies_at_time(t_s, dynamic_states=dynamic_states)
+        )
 
     def collision_query_at_planning_scale(
         self, scale: float
@@ -304,13 +377,19 @@ def _geometry(
             loaded.collision,
             component.collision_asset.component_from_asset,
             component.collision_asset.asset_id,
+            component.collision_asset.frame_id,
         )
     assert binding.analytic_shape_id is not None
     try:
         analytic = resources.analytic_shape(binding.analytic_shape_id)
     except SceneResourceError as error:
         raise ModelSceneError(f"body {binding.body_id}: {error}") from error
-    return analytic.collision, analytic.component_from_shape, analytic.shape_id
+    return (
+        analytic.collision,
+        analytic.component_from_shape,
+        analytic.shape_id,
+        analytic.shape_frame_id,
+    )
 
 
 def assemble_model_physics_scene(
@@ -331,11 +410,10 @@ def assemble_model_physics_scene(
         for binding in package.relation.body_bindings
         if binding.behavior is BodyBehavior.DYNAMIC
     ]
-    if dynamic:
+    if dynamic and package.motion.parameterization is not MotionParameterization.TIME_S:
         raise ModelSceneError(
-            f"dynamic bodies {dynamic} cannot enter Scene yet: dynamic state frame relative "
-            "to the mass centroid is not frozen; freezing them as static would create two "
-            "different physics meanings"
+            f"dynamic bodies {dynamic} require physical time; planning_scale cannot drive "
+            "a time integrator"
         )
 
     reference = dict(reference_component_poses(package.model))
@@ -344,11 +422,12 @@ def assemble_model_physics_scene(
     try:
         for binding in package.relation.body_bindings:
             component = package.model.component(binding.component_id)
-            collision, component_from_geometry, resource_id = _geometry(
+            collision, component_from_geometry, resource_id, geometry_frame_id = _geometry(
                 binding, component, resources
             )
             planning_source = None
             motion_source = None
+            dynamic_runtime = None
             if binding.behavior is BodyBehavior.KINEMATIC:
                 assert binding.motion_track_id is not None
                 if package.motion.parameterization is MotionParameterization.TIME_S:
@@ -364,12 +443,34 @@ def assemble_model_physics_scene(
                         component_from_geometry,
                     )
                     initial = planning_source.pose_at(0.0)
+            elif binding.behavior is BodyBehavior.DYNAMIC:
+                root_from_geometry = compose_pose(
+                    reference[component.component_id], component_from_geometry
+                )
+                assert binding.material_record_id is not None
+                assert binding.mass_properties_id is not None
+                dynamic_runtime = prepare_dynamic_body_runtime(
+                    binding=binding,
+                    root_from_geometry=root_from_geometry,
+                    geometry_resource_id=resource_id,
+                    geometry_frame_id=geometry_frame_id,
+                    material=resources.material(binding.material_record_id),
+                    mass_record=resources.mass_properties(binding.mass_properties_id),
+                )
+                initial = IDENTITY_POSE
             else:
                 initial = compose_pose(
                     reference[component.component_id], component_from_geometry
                 )
+            mass_kg = (
+                None if dynamic_runtime is None else dynamic_runtime.inertia.mass_kg
+            )
             posed = PosedBody(
-                body=SimBody(body_id=binding.body_id, collision=collision),
+                body=SimBody(
+                    body_id=binding.body_id,
+                    collision=collision,
+                    mass_kg=mass_kg,
+                ),
                 translation_mm=initial.translation_mm,
                 rotation_xyzw=initial.rotation_xyzw,
             )
@@ -382,6 +483,7 @@ def assemble_model_physics_scene(
                     component_from_geometry=component_from_geometry,
                     resource_id=resource_id,
                     planning_source=planning_source,
+                    dynamic_runtime=dynamic_runtime,
                 )
             )
         for body_a, body_b in interactions.contact_pairs:
@@ -408,7 +510,13 @@ def assemble_model_physics_scene(
                     planning_source=planning_source,
                 )
             )
-    except (MotionError, SceneError, SceneResourceError, ShapeError) as error:
+    except (
+        DynamicBodyError,
+        MotionError,
+        SceneError,
+        SceneResourceError,
+        ShapeError,
+    ) as error:
         raise ModelSceneError(f"model scene assembly failed: {error}") from error
 
     return PreparedModelScene(

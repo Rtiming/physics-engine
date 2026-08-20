@@ -42,6 +42,8 @@ WII规划/运动状态adapter ─├─> 模型—运动—物理绑定 ─> phy
 无时间规划、多track、源状态和送带；`model_physics`独立裁决static/kinematic/dynamic体、
 虚拟工艺frame与明确排除。0100起，`scene_resources`重读包内资产字节/SHA并接显式AABB/凸性，
 `model_scene`把static/kinematic体、时间/规划尺度运动、虚拟frame和显式候选接进既有Scene/CollisionQuery。
+决策0101起`dynamic_body`又把geometry frame内质心与绕COM惯量接到13维刚体状态，
+`model_scene`因此改归力学域；dynamic运行位姿只经完整状态集反算，不读Scene里的声明占位位姿。
 模型生产者可以是WII、CAD、人工包或GCW；GCW只是可选溯源，
 不是运行时前置。WII保留IK/FK和路径规划所有权，后续只加产物adapter。WDS不得反向改写上游，
 也不复制公共物理。

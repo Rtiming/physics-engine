@@ -4,16 +4,23 @@
 提供``CollisionAssetLoadSpec``；本模块重新读取包内文件、核SHA，再把声明与
 ``shapes.MeshAsset``钉在同一个记录里。这样“文件存在”“形状声明存在”和“二者确实
 属于同一资产”是三道独立门。
+
+0101起同一目录还保存已密封``MaterialRecord``与自内容寻址
+``MassPropertiesRecord``；dynamic binding以ID+SHA双锁它们，不允许同名替换。
 """
 
 from __future__ import annotations
 
 import hashlib
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any
 
+from physics_engine.canonical import WDS_PROFILE, canonical_sha256
+from physics_engine.geometry import MassProperties
 from physics_engine.identity import IdentityError, parse_namespace_id
+from physics_engine.materials import EvidenceRef, MaterialRecord
 from physics_engine.model_snapshot import AssetRole, ModelAssetRef
 from physics_engine.motion import Pose
 from physics_engine.shapes import (
@@ -115,17 +122,108 @@ class AnalyticCollisionRecord:
     """一个组件局部frame下的解析碰撞形状。"""
 
     shape_id: str
+    shape_frame_id: str
     collision: CollisionShape
     component_from_shape: Pose
 
     def __post_init__(self) -> None:
         _require_namespace(self.shape_id, "shape", "shape_id")
+        _require_namespace(self.shape_frame_id, "frame", "shape_frame_id")
         if not isinstance(self.collision, CollisionShape):
             raise SceneResourceError("collision must be a CollisionShape")
         if isinstance(self.collision.shape, MeshAsset):
             raise SceneResourceError("analytic shape record cannot contain a MeshAsset")
         if not isinstance(self.component_from_shape, Pose):
             raise SceneResourceError("component_from_shape must be a Pose")
+
+
+@dataclass(frozen=True)
+class MassPropertiesRecord:
+    """命名质量属性；质心坐标与惯量轴都在同一个geometry frame表达。"""
+
+    mass_properties_id: str
+    geometry_resource_id: str
+    expressed_in_frame_id: str
+    properties: MassProperties
+    evidence: EvidenceRef
+    content_sha256: str | None = None
+
+    def __post_init__(self) -> None:
+        _require_namespace(
+            self.mass_properties_id, "mass-properties", "mass_properties_id"
+        )
+        if not isinstance(self.geometry_resource_id, str):
+            raise SceneResourceError("geometry_resource_id must be a string")
+        try:
+            namespace, _ = parse_namespace_id(self.geometry_resource_id)
+        except IdentityError as error:
+            raise SceneResourceError(
+                f"geometry_resource_id is invalid: {error}"
+            ) from error
+        if namespace not in {"asset", "shape"}:
+            raise SceneResourceError(
+                "geometry_resource_id must live in 'asset' or 'shape' namespace"
+            )
+        _require_namespace(
+            self.expressed_in_frame_id, "frame", "expressed_in_frame_id"
+        )
+        if not isinstance(self.properties, MassProperties):
+            raise SceneResourceError("properties must be MassProperties")
+        if not isinstance(self.evidence, EvidenceRef):
+            raise SceneResourceError("evidence must be EvidenceRef")
+        if self.content_sha256 is not None:
+            if (
+                not isinstance(self.content_sha256, str)
+                or len(self.content_sha256) != 64
+                or any(item not in "0123456789abcdef" for item in self.content_sha256)
+            ):
+                raise SceneResourceError("content_sha256 must be 64 lowercase hex characters")
+            if self.content_sha256 != self.content_address():
+                raise SceneResourceError("mass properties content_sha256 does not match")
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        mass_properties_id: str,
+        geometry_resource_id: str,
+        expressed_in_frame_id: str,
+        properties: MassProperties,
+        evidence: EvidenceRef,
+    ) -> MassPropertiesRecord:
+        return cls(
+            mass_properties_id=mass_properties_id,
+            geometry_resource_id=geometry_resource_id,
+            expressed_in_frame_id=expressed_in_frame_id,
+            properties=properties,
+            evidence=evidence,
+        ).sealed()
+
+    def to_document(self) -> dict[str, Any]:
+        properties = self.properties
+        return {
+            "mass_properties_id": self.mass_properties_id,
+            "geometry_resource_id": self.geometry_resource_id,
+            "expressed_in_frame_id": self.expressed_in_frame_id,
+            "properties": {
+                "volume_mm3": properties.volume_mm3,
+                "centroid_mm": list(properties.centroid_mm),
+                "mass_kg": properties.mass_kg,
+                "inertia_about_centroid_kg_mm2": [
+                    list(row) for row in properties.inertia_about_centroid_kg_mm2
+                ],
+            },
+            "evidence": self.evidence.to_document(),
+            "content_sha256": self.content_sha256,
+        }
+
+    def content_address(self) -> str:
+        document = self.to_document()
+        document.pop("content_sha256")
+        return canonical_sha256(document, WDS_PROFILE)
+
+    def sealed(self) -> MassPropertiesRecord:
+        return replace(self, content_sha256=self.content_address())
 
 
 def _file_sha256(path: Path) -> tuple[str, int]:
@@ -197,15 +295,40 @@ class SceneResourceCatalog:
 
     collision_assets: tuple[LoadedCollisionAsset, ...]
     analytic_shapes: tuple[AnalyticCollisionRecord, ...]
+    materials: tuple[MaterialRecord, ...] = ()
+    mass_property_records: tuple[MassPropertiesRecord, ...] = ()
 
     def __post_init__(self) -> None:
         if not all(isinstance(item, LoadedCollisionAsset) for item in self.collision_assets):
             raise SceneResourceError("collision_assets contains another type")
         if not all(isinstance(item, AnalyticCollisionRecord) for item in self.analytic_shapes):
             raise SceneResourceError("analytic_shapes contains another type")
+        if not all(isinstance(item, MaterialRecord) for item in self.materials):
+            raise SceneResourceError("materials contains another type")
+        if not all(
+            isinstance(item, MassPropertiesRecord) for item in self.mass_property_records
+        ):
+            raise SceneResourceError("mass_property_records contains another type")
+        unsealed = [item.material_id for item in self.materials if item.content_sha256 is None]
+        if unsealed:
+            raise SceneResourceError(f"resource catalog materials are not sealed: {unsealed}")
+        unsealed_mass = [
+            item.mass_properties_id
+            for item in self.mass_property_records
+            if item.content_sha256 is None
+        ]
+        if unsealed_mass:
+            raise SceneResourceError(
+                f"resource catalog mass properties are not sealed: {unsealed_mass}"
+            )
         for label, identifiers in (
             ("collision asset", tuple(item.asset.asset_id for item in self.collision_assets)),
             ("analytic shape", tuple(item.shape_id for item in self.analytic_shapes)),
+            ("material", tuple(item.material_id for item in self.materials)),
+            (
+                "mass properties",
+                tuple(item.mass_properties_id for item in self.mass_property_records),
+            ),
         ):
             if len(set(identifiers)) != len(identifiers):
                 raise SceneResourceError(f"duplicate {label} id in resource catalog")
@@ -222,11 +345,24 @@ class SceneResourceCatalog:
                 return record
         raise SceneResourceError(f"resource catalog has no analytic shape {shape_id!r}")
 
+    def material(self, material_id: str) -> MaterialRecord:
+        for record in self.materials:
+            if record.material_id == material_id:
+                return record
+        raise SceneResourceError(f"resource catalog has no material {material_id!r}")
+
+    def mass_properties(self, record_id: str) -> MassPropertiesRecord:
+        for record in self.mass_property_records:
+            if record.mass_properties_id == record_id:
+                return record
+        raise SceneResourceError(f"resource catalog has no mass properties {record_id!r}")
+
 
 __all__ = [
     "AnalyticCollisionRecord",
     "CollisionAssetLoadSpec",
     "LoadedCollisionAsset",
+    "MassPropertiesRecord",
     "SceneResourceCatalog",
     "SceneResourceError",
     "load_collision_asset",

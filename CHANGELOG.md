@@ -6,6 +6,28 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
 
 ## Unreleased
 
+### dynamic质心状态、惯量与几何位姿闭环（决策0101）
+
+- 新增`DynamicBodyInitialState`与唯一状态frame
+  `centre_of_mass_geometry_axes`：世界系COM线速度、体/geometry系角速度进内容寻址输入，
+  position/attitude由模型参考位姿、几何安装变换和质心唯一推导。
+- 新增`MassPropertiesRecord`：命名质量属性必须与binding ID、geometry resource ID和
+  geometry frame ID全部一致；记录自内容寻址并带证据。binding同时锁材料和质量属性SHA，
+  同ID改内容仍拒绝；材料必须密封且声明mechanics域。
+- 新增`dynamic_body`：复用`RigidBodyInertia`的惯量物理门，实现geometry初始位姿→
+  13维COM状态→任意后续状态反算geometry位姿的可逆闭环。
+- `model_scene`由scene基座改归mechanics；dynamic体只接受`time_s`，且调用方必须给出
+  完整、无多余body的dynamic state mapping。`FinalizedScene`中identity pose只是状态槽，
+  不冒充运行真位姿。
+- 新增P3-M2`cases/dynamic_model_scene_free_flight`：geometry原点x=10mm、geometry frame内COM x=2mm，
+  主轴角速度πrad/s自由转0.5s后，COM仍为(12,0,0)mm、姿态转90°、
+  geometry原点为(12,-2,0)mm。案例53→54，17/42与端到端0/6不变。
+- 故意改反COM→geometry平移符号时，初始geometry x从10mm错成14mm；故意绕过
+  mass-properties resource ID门时，错资源被静默接受。两道必红均已实际失败并恢复。
+- 性能：100份预加载dynamic场景装配三组中位5.937ms/100ms；单体500步RK4+
+  geometry回读三组中位24.238ms/50ms；100份严格包复读三组中位41.772ms/100ms。
+  当前仍不适合GPU。
+
 ### 模型输入到Scene的模块化装配（决策0100）
 
 - 新增`pose_math`、`scene_resources`和`model_scene`：位姿组合、资产字节/SHA/形状记录、
@@ -19,8 +41,8 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
   visual、改字节、路径逃逸、缺资源与资产身份不同均拒绝。
 - `SceneInteractionPlan`只接受调用方显式声明的接触/允许对，不自动全体两两检测；
   候选直接交给既有`BroadPhaseCollisionQuery`。
-- dynamic状态frame相对质心的语义尚未冻结，P3.1首片见dynamic明确拒绝，不把它当成
-  static体冒充完成。故意绕过dynamic门和资产SHA门时，对应必红用例均已实际失败。
+- 0100首片当时dynamic状态frame尚未冻结，因此见dynamic明确拒绝、不把它当成
+  static体冒充完成；随后已由上方0101接续。
 - 新增P3-M1`cases/model_scene_assembly`：两份合成资产、static张力机、kinematic工件、
   虚拟process frame和一对候选进Scene/CollisionQuery；0s分离、1s只报broad-phase重叠。
   案例52→53，17/42和端到端0/6不变。

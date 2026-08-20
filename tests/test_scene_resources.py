@@ -7,11 +7,14 @@ from pathlib import Path
 
 import pytest
 
+from physics_engine.geometry import MassProperties
+from physics_engine.materials import EvidenceRef, MaterialProperty, MaterialRecord
 from physics_engine.model_snapshot import AssetRole, ModelAssetRef
 from physics_engine.motion import Pose
 from physics_engine.scene_resources import (
     AnalyticCollisionRecord,
     CollisionAssetLoadSpec,
+    MassPropertiesRecord,
     SceneResourceCatalog,
     SceneResourceError,
     load_collision_asset,
@@ -123,6 +126,7 @@ def test_resource_catalog_keeps_asset_and_analytic_sources_separate(tmp_path: Pa
     loaded = load_collision_asset(tmp_path, reference, _spec())
     analytic = AnalyticCollisionRecord(
         shape_id="shape/guide-sphere",
+        shape_frame_id="frame/guide-sphere",
         collision=CollisionShape(Sphere(5.0), "fitted"),
         component_from_shape=Pose(
             (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
@@ -138,3 +142,46 @@ def test_resource_catalog_keeps_asset_and_analytic_sources_separate(tmp_path: Pa
         catalog.collision_asset("asset/missing")
     with pytest.raises(SceneResourceError, match="no analytic shape"):
         catalog.analytic_shape("shape/missing")
+
+
+def test_resource_catalog_resolves_sealed_material_and_named_mass_properties():
+    material = MaterialRecord(
+        material_id="material/workpiece",
+        applicable_domains=("mechanics",),
+        properties=(
+            MaterialProperty(
+                "density_kg_m3",
+                1000.0,
+                ("mechanics",),
+                EvidenceRef(
+                    "estimated",
+                    "evidence/resource-material",
+                    "Synthetic resource catalog fixture.",
+                ),
+            ),
+        ),
+    ).sealed()
+    mass = MassPropertiesRecord.create(
+        mass_properties_id="mass-properties/workpiece",
+        geometry_resource_id="asset/workpiece-collision",
+        expressed_in_frame_id="frame/workpiece-asset",
+        properties=MassProperties(
+            8.0,
+            (0.0, 0.0, 0.0),
+            1.0,
+            ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
+        ),
+        evidence=EvidenceRef(
+            "estimated",
+            "evidence/resource-mass",
+            "Synthetic resource mass properties.",
+        ),
+    )
+    catalog = SceneResourceCatalog(
+        collision_assets=(),
+        analytic_shapes=(),
+        materials=(material,),
+        mass_property_records=(mass,),
+    )
+    assert catalog.material(material.material_id) is material
+    assert catalog.mass_properties(mass.mass_properties_id) is mass

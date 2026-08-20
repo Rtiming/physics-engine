@@ -6,12 +6,16 @@
 
 一个组件不能既由运动计划驱动又由求解器积分。visual资产不能静默替代collision资产。
 每个模型组件和每条motion track都必须被绑定或明确排除，防止“文件存在但物理根本没读”。
+
+dynamic还必须声明COM+geometry轴state frame、世界系初始线速度、体系初始角速度，
+并以ID+SHA锁定材料和质量属性。position/attitude不重复存，由模型参考几何位姿与质心推导。
 """
 
 from __future__ import annotations
 
 import enum
 import hashlib
+import math
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -52,6 +56,12 @@ class GeometrySource(enum.StrEnum):
     ANALYTIC_SHAPE = "analytic_shape"
 
 
+class DynamicStateFrame(enum.StrEnum):
+    """dynamic状态的原点与轴约定；当前只冻结一条。"""
+
+    CENTRE_OF_MASS_GEOMETRY_AXES = "centre_of_mass_geometry_axes"
+
+
 def _require_namespace(value: object, namespace: str, name: str) -> str:
     if not isinstance(value, str):
         raise ModelPhysicsError(f"{name} must be a string: {value!r}")
@@ -82,6 +92,19 @@ def _require_sha256(value: object, name: str) -> str:
     return value
 
 
+def _require_vector3(value: object, name: str) -> tuple[float, float, float]:
+    if (
+        not isinstance(value, tuple)
+        or len(value) != 3
+        or any(isinstance(item, bool) or not isinstance(item, (int, float)) for item in value)
+    ):
+        raise ModelPhysicsError(f"{name} must be a numeric 3-tuple")
+    result = (float(value[0]), float(value[1]), float(value[2]))
+    if not all(math.isfinite(item) for item in result):
+        raise ModelPhysicsError(f"{name} must be finite")
+    return result
+
+
 def _parse_evidence(value: object) -> EvidenceRef:
     expected = {"grade", "evidence_id", "method", "source_sha256"}
     if not isinstance(value, dict) or set(value) != expected:
@@ -98,6 +121,43 @@ def _parse_evidence(value: object) -> EvidenceRef:
 
 
 @dataclass(frozen=True)
+class DynamicBodyInitialState:
+    """dynamic体的初始速率与状态frame声明。
+
+    position和attitude不重复存：它们由模型参考位姿、几何安装变换和质量属性质心
+    唯一推导。线速度在root/world轴表达，角速度在geometry/body轴表达，与
+    ``rigidbody.RIGID_BODY_LAYOUT``逐字段一致。
+    """
+
+    state_frame: DynamicStateFrame
+    centre_of_mass_velocity_mm_per_s: tuple[float, float, float]
+    angular_velocity_body_rad_per_s: tuple[float, float, float]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.state_frame, DynamicStateFrame):
+            raise ModelPhysicsError("state_frame must be DynamicStateFrame")
+        _require_vector3(
+            self.centre_of_mass_velocity_mm_per_s,
+            "centre_of_mass_velocity_mm_per_s",
+        )
+        _require_vector3(
+            self.angular_velocity_body_rad_per_s,
+            "angular_velocity_body_rad_per_s",
+        )
+
+    def to_document(self) -> dict[str, Any]:
+        return {
+            "state_frame": self.state_frame.value,
+            "centre_of_mass_velocity_mm_per_s": list(
+                self.centre_of_mass_velocity_mm_per_s
+            ),
+            "angular_velocity_body_rad_per_s": list(
+                self.angular_velocity_body_rad_per_s
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class PhysicsBodyBinding:
     body_id: str
     component_id: str
@@ -107,6 +167,9 @@ class PhysicsBodyBinding:
     analytic_shape_id: str | None
     material_record_id: str | None
     mass_properties_id: str | None
+    dynamic_initial_state: DynamicBodyInitialState | None = None
+    material_record_sha256: str | None = None
+    mass_properties_sha256: str | None = None
 
     def __post_init__(self) -> None:
         _require_namespace(self.body_id, "body", "body_id")
@@ -125,6 +188,18 @@ class PhysicsBodyBinding:
             _require_namespace(
                 self.mass_properties_id, "mass-properties", "mass_properties_id"
             )
+        if (self.material_record_id is None) != (self.material_record_sha256 is None):
+            raise ModelPhysicsError(
+                "material_record_id and material_record_sha256 must be present together"
+            )
+        if (self.mass_properties_id is None) != (self.mass_properties_sha256 is None):
+            raise ModelPhysicsError(
+                "mass_properties_id and mass_properties_sha256 must be present together"
+            )
+        if self.material_record_sha256 is not None:
+            _require_sha256(self.material_record_sha256, "material_record_sha256")
+        if self.mass_properties_sha256 is not None:
+            _require_sha256(self.mass_properties_sha256, "mass_properties_sha256")
         if self.behavior is BodyBehavior.KINEMATIC and self.motion_track_id is None:
             raise ModelPhysicsError("kinematic body requires a motion track")
         if self.behavior is BodyBehavior.DYNAMIC and self.motion_track_id is not None:
@@ -138,6 +213,16 @@ class PhysicsBodyBinding:
         ):
             raise ModelPhysicsError(
                 "dynamic body requires material_record_id and mass_properties_id"
+            )
+        if self.behavior is BodyBehavior.DYNAMIC and self.dynamic_initial_state is None:
+            raise ModelPhysicsError("dynamic body requires an explicit initial state")
+        if self.behavior is not BodyBehavior.DYNAMIC and self.dynamic_initial_state is not None:
+            raise ModelPhysicsError("dynamic_initial_state is only valid for a dynamic body")
+        if self.dynamic_initial_state is not None and not isinstance(
+            self.dynamic_initial_state, DynamicBodyInitialState
+        ):
+            raise ModelPhysicsError(
+                "dynamic_initial_state must be DynamicBodyInitialState or None"
             )
         if self.geometry_source is GeometrySource.COLLISION_ASSET:
             if self.analytic_shape_id is not None:
@@ -157,6 +242,13 @@ class PhysicsBodyBinding:
             "analytic_shape_id": self.analytic_shape_id,
             "material_record_id": self.material_record_id,
             "mass_properties_id": self.mass_properties_id,
+            "dynamic_initial_state": (
+                None
+                if self.dynamic_initial_state is None
+                else self.dynamic_initial_state.to_document()
+            ),
+            "material_record_sha256": self.material_record_sha256,
+            "mass_properties_sha256": self.mass_properties_sha256,
         }
 
 
@@ -449,6 +541,9 @@ def _binding_from_document(value: object, index: int) -> PhysicsBodyBinding:
         "analytic_shape_id",
         "material_record_id",
         "mass_properties_id",
+        "dynamic_initial_state",
+        "material_record_sha256",
+        "mass_properties_sha256",
     }
     if not isinstance(value, dict) or set(value) != expected:
         raise ModelPhysicsError(f"body_binding[{index}] fields differ from the contract")
@@ -457,6 +552,35 @@ def _binding_from_document(value: object, index: int) -> PhysicsBodyBinding:
         geometry = GeometrySource(value["geometry_source"])
     except (TypeError, ValueError) as error:
         raise ModelPhysicsError(f"body_binding[{index}] enum is invalid") from error
+    raw_initial = value["dynamic_initial_state"]
+    initial = None
+    if raw_initial is not None:
+        expected_initial = {
+            "state_frame",
+            "centre_of_mass_velocity_mm_per_s",
+            "angular_velocity_body_rad_per_s",
+        }
+        if not isinstance(raw_initial, dict) or set(raw_initial) != expected_initial:
+            raise ModelPhysicsError(
+                f"body_binding[{index}].dynamic_initial_state is invalid"
+            )
+        linear = raw_initial["centre_of_mass_velocity_mm_per_s"]
+        angular = raw_initial["angular_velocity_body_rad_per_s"]
+        if not isinstance(linear, list) or not isinstance(angular, list):
+            raise ModelPhysicsError(
+                f"body_binding[{index}] dynamic velocity fields must be arrays"
+            )
+        try:
+            frame = DynamicStateFrame(raw_initial["state_frame"])
+        except (TypeError, ValueError) as error:
+            raise ModelPhysicsError(
+                f"body_binding[{index}] dynamic state_frame is invalid"
+            ) from error
+        initial = DynamicBodyInitialState(
+            state_frame=frame,
+            centre_of_mass_velocity_mm_per_s=tuple(linear),  # type: ignore[arg-type]
+            angular_velocity_body_rad_per_s=tuple(angular),  # type: ignore[arg-type]
+        )
     return PhysicsBodyBinding(
         body_id=value["body_id"],
         component_id=value["component_id"],
@@ -466,6 +590,9 @@ def _binding_from_document(value: object, index: int) -> PhysicsBodyBinding:
         analytic_shape_id=value["analytic_shape_id"],
         material_record_id=value["material_record_id"],
         mass_properties_id=value["mass_properties_id"],
+        dynamic_initial_state=initial,
+        material_record_sha256=value["material_record_sha256"],
+        mass_properties_sha256=value["mass_properties_sha256"],
     )
 
 
@@ -585,6 +712,8 @@ def load_physics_model_motion_input(
 
 __all__ = [
     "BodyBehavior",
+    "DynamicBodyInitialState",
+    "DynamicStateFrame",
     "GeometrySource",
     "ModelPhysicsError",
     "ModelPhysicsRelation",

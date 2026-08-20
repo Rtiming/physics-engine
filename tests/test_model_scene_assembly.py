@@ -3,19 +3,25 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import math
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from physics_engine.materials import EvidenceRef
+from physics_engine.geometry import MassProperties
+from physics_engine.materials import EvidenceRef, MaterialProperty, MaterialRecord
 from physics_engine.model_physics import (
     BodyBehavior,
+    DynamicBodyInitialState,
+    DynamicStateFrame,
     GeometrySource,
     ModelPhysicsRelation,
     PhysicsBodyBinding,
     PhysicsModelMotionInput,
     VirtualFrameBinding,
+    load_physics_model_motion_input,
 )
 from physics_engine.model_scene import (
     ModelSceneError,
@@ -42,6 +48,7 @@ from physics_engine.planned_motion import (
 from physics_engine.pose_math import IDENTITY_POSE
 from physics_engine.scene_resources import (
     CollisionAssetLoadSpec,
+    MassPropertiesRecord,
     SceneResourceCatalog,
     load_collision_asset,
 )
@@ -345,8 +352,14 @@ def test_red_missing_collision_resource_is_rejected_with_body_identity(tmp_path:
         assemble_model_physics_scene(package, incomplete, interactions)
 
 
-def test_red_dynamic_body_is_not_silently_frozen_as_a_static_scene_body(tmp_path: Path):
-    package, resources, interactions = _fixture(tmp_path)
+def _dynamic_fixture(
+    tmp_path: Path,
+    *,
+    parameterization: MotionParameterization = MotionParameterization.TIME_S,
+):
+    package, resources, interactions = _fixture(
+        tmp_path, parameterization=parameterization
+    )
     retained_tracks = package.motion.tracks[1:]
     retained_ids = {track.track_id for track in retained_tracks}
     samples = tuple(
@@ -370,6 +383,44 @@ def test_red_dynamic_body_is_not_silently_frozen_as_a_static_scene_body(tmp_path
         samples=samples,
     )
     static_binding = package.relation.body_bindings[0]
+    material = MaterialRecord(
+        material_id="material/workpiece",
+        applicable_domains=("mechanics",),
+        properties=(
+            MaterialProperty(
+                "density_kg_m3",
+                1000.0,
+                ("mechanics",),
+                EvidenceRef(
+                    "estimated",
+                    "evidence/model-scene-dynamic-material",
+                    "Synthetic dynamic scene fixture.",
+                ),
+            ),
+        ),
+    ).sealed()
+    component = package.model.component("model-component/workpiece")
+    assert component.collision_asset is not None
+    mass = MassPropertiesRecord.create(
+        mass_properties_id="mass-properties/workpiece",
+        geometry_resource_id=component.collision_asset.asset_id,
+        expressed_in_frame_id=component.collision_asset.frame_id,
+        properties=MassProperties(
+            volume_mm3=8.0,
+            centroid_mm=(2.0, 0.0, 0.0),
+            mass_kg=1.0,
+            inertia_about_centroid_kg_mm2=(
+                (1.0, 0.0, 0.0),
+                (0.0, 1.0, 0.0),
+                (0.0, 0.0, 2.0),
+            ),
+        ),
+        evidence=EvidenceRef(
+            "estimated",
+            "evidence/model-scene-dynamic-mass",
+            "Synthetic dynamic scene mass properties.",
+        ),
+    )
     dynamic_binding = PhysicsBodyBinding(
         "body/workpiece",
         "model-component/workpiece",
@@ -379,6 +430,13 @@ def test_red_dynamic_body_is_not_silently_frozen_as_a_static_scene_body(tmp_path
         None,
         "material/workpiece",
         "mass-properties/workpiece",
+        DynamicBodyInitialState(
+            state_frame=DynamicStateFrame.CENTRE_OF_MASS_GEOMETRY_AXES,
+            centre_of_mass_velocity_mm_per_s=(0.0, 0.0, 0.0),
+            angular_velocity_body_rad_per_s=(0.0, 0.0, math.pi),
+        ),
+        material.content_sha256,
+        mass.content_sha256,
     )
     relation = ModelPhysicsRelation.create(
         relation_id=package.relation.relation_id,
@@ -396,9 +454,63 @@ def test_red_dynamic_body_is_not_silently_frozen_as_a_static_scene_body(tmp_path
         relation=relation,
         evidence=package.evidence,
     )
+    resources = replace(
+        resources,
+        materials=(material,),
+        mass_property_records=(mass,),
+    )
+    return dynamic_package, resources, interactions
 
-    with pytest.raises(ModelSceneError, match="dynamic.*state frame.*centroid"):
-        assemble_model_physics_scene(dynamic_package, resources, interactions)
+
+def test_dynamic_body_uses_explicit_com_state_to_drive_scene_geometry(tmp_path: Path):
+    package, resources, interactions = _dynamic_fixture(tmp_path)
+    prepared = assemble_model_physics_scene(package, resources, interactions)
+    states = prepared.initial_dynamic_states()
+    assert states["body/workpiece"].block("centre_of_mass_position_mm") == (
+        33.0,
+        0.0,
+        0.0,
+    )
+    assert prepared.body_runtime("body/workpiece").dynamic_runtime is not None
+    with pytest.raises(ModelSceneError, match="dynamic states are required"):
+        prepared.posed_bodies_at_time(0.0)
+    posed = prepared.posed_bodies_at_time(0.0, dynamic_states=states)
+    assert _body_x(posed, "body/workpiece") == 31.0
+
+
+def test_dynamic_initial_state_survives_the_strict_outer_package_round_trip(tmp_path: Path):
+    package, _, _ = _dynamic_fixture(tmp_path)
+    payload = json.dumps(package.to_document()).encode()
+    loaded = load_physics_model_motion_input(payload)
+    binding = loaded.relation.body_bindings[1]
+    assert binding.dynamic_initial_state == package.relation.body_bindings[1].dynamic_initial_state
+
+
+def test_red_dynamic_state_mapping_must_be_exact(tmp_path: Path):
+    package, resources, interactions = _dynamic_fixture(tmp_path)
+    prepared = assemble_model_physics_scene(package, resources, interactions)
+    with pytest.raises(ModelSceneError, match="missing dynamic states"):
+        prepared.posed_bodies_at_time(0.0, dynamic_states={})
+    states = prepared.initial_dynamic_states()
+    states["body/ghost"] = states["body/workpiece"]
+    with pytest.raises(ModelSceneError, match="unknown dynamic states"):
+        prepared.posed_bodies_at_time(0.0, dynamic_states=states)
+    with pytest.raises(ModelSceneError, match="must be a mapping"):
+        prepared.posed_bodies_at_time(0.0, dynamic_states=[])  # type: ignore[arg-type]
+    with pytest.raises(ModelSceneError, match="keys must be nonempty body IDs"):
+        prepared.posed_bodies_at_time(
+            0.0,
+            dynamic_states={7: states["body/workpiece"]},  # type: ignore[dict-item]
+        )
+
+
+def test_red_dynamic_body_requires_physical_time_parameterization(tmp_path: Path):
+    package, resources, interactions = _dynamic_fixture(
+        tmp_path, parameterization=MotionParameterization.PLANNING_SCALE
+    )
+
+    with pytest.raises(ModelSceneError, match="dynamic.*physical time"):
+        assemble_model_physics_scene(package, resources, interactions)
 
 
 def test_reference_component_hierarchy_is_composed_in_model_order(tmp_path: Path):

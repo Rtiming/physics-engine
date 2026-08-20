@@ -79,11 +79,11 @@
     },
     "model_motion_input_load_100_documents": {
       "budget_s": 0.1,
-      "measured_median_s": 0.040522,
+      "measured_median_s": 0.041772,
       "load_tier": "interactive",
       "measured_on": "2026-08-20",
-      "workload": "100份3529字节physics_model_motion_input/0.1严格复读：四层内容哈希+模型层级+组件frame/多track交叉核对+组件/track/几何/状态所有权闭包",
-      "measured_by": "docs/decisions/0100_P3-M1模型输入到Scene的模块化装配_20260820.md；决策0100补ModelComponent.frame_id后，Apple M4本机同进程三组各先热身、各9次，批中位数40.046417/42.062542/40.522250ms，三组中位40.522250ms，最快单批36.880333ms，1分钟负载6.664—6.809。较本批改前65.404292ms没有性能回推；墙钟仍只作观测"
+      "workload": "100份3618字节physics_model_motion_input/0.1严格复读：四层内容哈希+模型层级+组件frame/多track交叉核对+dynamic COM frame/初始速率+材料/质量属性SHA+所有权闭包",
+      "measured_by": "docs/decisions/0101_P3-M2_dynamic质心状态与惯量几何闭环_20260820.md；Apple M4本机同进程三组各先热身、各9次，批中位41.772375/33.920375/59.105166ms，三组中位41.772375ms，最快单批33.644750ms，load1 6.270—7.949。本批改前45.618041ms，无可见回推；第三组有明显瞬时扰动，墙钟只作观测"
     },
     "model_scene_assembly_100_preloaded": {
       "budget_s": 0.1,
@@ -92,6 +92,22 @@
       "measured_on": "2026-08-20",
       "workload": "100份P3.1预加载资源两体装配：2个物理体、2条运动track、1个虚拟frame、1对显式接触候选；不把磁盘资产SHA读取混入装配热路径",
       "measured_by": "docs/decisions/0100_P3-M1模型输入到Scene的模块化装配_20260820.md；Apple M4本机同进程每组先热身，三组各9次的批中位数为26.232750/8.250083/7.605167ms，三组中位8.250083ms，最快单批7.144500ms；当时1分钟负载9.278—9.314。首组有显著瞬时扰动，故墙钟只作观测，100ms预算不是回退门"
+    },
+    "dynamic_model_scene_assembly_100_preloaded": {
+      "budget_s": 0.1,
+      "measured_median_s": 0.005937,
+      "load_tier": "interactive",
+      "measured_on": "2026-08-20",
+      "workload": "100份P3-M2预加载资源一静一动场景装配：含密封力学材料、命名质量属性、geometry frame质心、13维初始状态与惯量验证",
+      "measured_by": "docs/decisions/0101_P3-M2_dynamic质心状态与惯量几何闭环_20260820.md；Apple M4三组各先热身、各9次，批中位5.743500/7.363625/5.936542ms，三组中位5.936542ms，最快单批5.538583ms，load1 4.286—7.949"
+    },
+    "dynamic_model_scene_free_flight_500_steps": {
+      "budget_s": 0.05,
+      "measured_median_s": 0.024238,
+      "load_tier": "interactive",
+      "measured_on": "2026-08-20",
+      "workload": "P3-M2已装配dynamic体1个，RK4自由飞行500步，每步四元数归一化，末态COM状态反算geometry位姿一次",
+      "measured_by": "docs/decisions/0101_P3-M2_dynamic质心状态与惯量几何闭环_20260820.md；Apple M4三组各先热身、各9次，中位24.007000/25.925708/24.237583ms，三组中位24.237583ms，最快单趟23.611667ms，每趟500/500步归一化，load1 4.286—7.949"
     },
     "accept_full_batch_tier_on_master": {
       "budget_s": 90.0,
