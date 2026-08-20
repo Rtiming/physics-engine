@@ -65,7 +65,7 @@ trap 'rm -rf "$STAGE"' EXIT
 # **必红**——而那是本脚本的传输缺陷,不是被测代码的问题。
 # 发版脚本只允许从`main`发,所以这里`HEAD == main`;真不相等时下面那条SHA核对会拦住。
 git bundle create "$STAGE/pe.bundle" main HEAD 2>/dev/null
-echo "[master] 打包 $SHORT（$(wc -c < "$STAGE/pe.bundle") 字节）"
+echo "[master] 打包 ${SHORT}（$(wc -c < "$STAGE/pe.bundle") 字节）"
 
 rtime-sync push "$STAGE/pe.bundle" "$HOST:/tmp/pe-accept-$SHORT-$RUN_TAG.bundle" >/dev/null
 echo "[master] 已送达 $HOST"

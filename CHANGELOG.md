@@ -22,6 +22,8 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
   不满足GPU三门槛。
 - WII后续只需在产物出口加adapter。GCW/CAD可作为模型生产者和溯源，但GCW不是
   physics-engine运行时依赖；本批没有修改WII、GCW或WDS，17/42和端到端0/6不变。
+- 修复`tools/master/run_accept_on_master.sh`在UTF-8 locale下把`$SHORT`后的全角括号误读为
+  变量名一部分、导致master验收在发送前即`unbound variable`的问题。
 
 ### 绕制偏差物理基础设施｜张力测量第二批（决策0098）
 
