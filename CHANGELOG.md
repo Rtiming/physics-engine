@@ -22,7 +22,11 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
   0°/60°/90°/180°闭式与三种安装/tare/支承刚体静力；两个案例均为合成
   `hypothesis_only`，所以17/42和端到端0/6均不变。
 - 性能台账新增1000个静态测量样点工作负载：Apple M4本机中位数约25ms，预算50ms；
-  当前是Python常数规模交互路径，不满足GPU三门槛，零运行时依赖不变。
+  srv01同口径中位32.353ms，也在预算内。当前是Python常数规模交互路径，不满足GPU三门槛，
+  零运行时依赖不变。
+- 提交`d0f75f6`的本机quick与srv01 full均为**functional=PASS、timing=FAIL**：srv01全套为
+  2553+165 passed、22个有理由的skip、244.6s/180s；本机quick为2553 passed、63.0s/30s。
+  master的SLURM预约测算预计2026-08-30起跑，本批没有绕调度器，所以没有宣称四轴绿。
 - T-M2五点标定/采样时延、T-M3动态收放线、现场LTS参数、official WII时间线、上游输入闭包
   与WDS采用均未完成；本批没有修改WDS、WII或GCW。
 
