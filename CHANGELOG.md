@@ -6,6 +6,29 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
 
 ## Unreleased
 
+### 绕制偏差物理基础设施｜张力测量第二批（决策0098）
+
+- 新增`physics_engine.tension_readout`和draft面`tension_readout_sample/0.1`：分别保留
+  raw gross桥路、tare桥路、zeroed桥路、ADC与显示跨段张力；读取端从拟合点和力输入重算
+  全部派生字段，手改标定系数或显示值后重算哈希仍会红。
+- tare位置不再靠默认值：`analog_pre_adc`与`digital_post_adc`两种候选分别量化。
+  100N量程下gross 110N、tare 20N时，net虽只有90N，`is_gross_saturated`仍必须为真；
+  tare不能把物理过载清掉。
+- `LinearSpanCalibration`要求至少五个参考等级且每级正反程齐全；fit入口拒绝holdout，
+  独立留出点只经`evaluate_holdout`评估。拟合保留斜率、截距、RMS、最大残差、最大回程差、
+  点身份与证据；合成标定仍为`hypothesis_only`。
+- `TensionReadoutChannel`新增显式plant步长、正整数采样抽取、非负整数时延样点数与零阶保持；
+  `ClosedTensionLoop`新增与旧`sensor`互斥的可选完整测量通道。通道缺席时旧路径与
+  drives样例SHA-256保持逐字节不变。
+- 新增T-M2`cases/tension_readout_calibration`和T-M3
+  `cases/tension_wind_unwind_dynamic`，案例49→51。T-M3三档30000步对独立离散oracle：
+  好控制器峰值/开环0.5883、ISE/开环0.1026；坏控制器峰值/开环0.9927。
+  半径60→80mm时同扭矩稳态张力20.2778→15.1563N。
+- 性能测量新增1000个plant步完整采样读出：本机load 13.911下9次中位12.073ms，
+  预算50ms。T-M3案例约1.2s；当前不满足GPU三门槛，继续保留零依赖CPU参考路径。
+- T-M2/T-M3仍是合成小场景；现场标定、ATC600内部结构、连续卷径、摆杆、真实导轮/工件、
+  official WII时间线、GCW输入闭包与WDS采用均未完成，17/42和端到端0/6不变。
+
 ### 绕制偏差物理基础设施｜张力测量第一批（决策0096—0097）
 
 - 新增`physics_engine.tension_measurement`：入口/出口材料行进切向与两侧张力装配成三维
@@ -27,8 +50,9 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
 - 提交`d0f75f6`的本机quick与srv01 full均为**functional=PASS、timing=FAIL**：srv01全套为
   2553+165 passed、22个有理由的skip、244.6s/180s；本机quick为2553 passed、63.0s/30s。
   master的SLURM预约测算预计2026-08-30起跑，本批没有绕调度器，所以没有宣称四轴绿。
-- T-M2五点标定/采样时延、T-M3动态收放线、现场LTS参数、official WII时间线、上游输入闭包
-  与WDS采用均未完成；本批没有修改WDS、WII或GCW。
+- 第一批收口时，T-M2五点标定/采样时延、T-M3动态收放线、现场LTS参数、official WII时间线、
+  上游输入闭包与WDS采用均未完成；其中T-M2/T-M3随后由上方0098批次以合成案例兑现，
+  其余仍未完成。本批没有修改WDS、WII或GCW。
 
 ### 基础设施批次二｜五条轨并行（决策0089—0094）
 

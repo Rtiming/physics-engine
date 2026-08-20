@@ -36,8 +36,10 @@ LTS敏感轴→mV/ADC→小型放线—收线链”。研究、裁决与执行�
 [decision/0097](docs/decisions/0097_测力轮张力测量物理与T-M0_T-M1_20260820.md)已经落下第一片：
 `tension_measurement`把两侧张力装配为三维合力，分出敏感轴、tare、gross/net与支承载荷，
 再组合旧`TensionSensor`的mV/ADC；`tension_measurement_sample/0.1`严格复读全部派生量，
-T-M0/T-M1两个合成静力案例使案例数47→49。它们不表示T-M2/T-M3、official WII时间线、
-现场标定或WDS采用已经落地，主能力分母仍为17/42、端到端仍为0/6。
+T-M0/T-M1两个合成静力案例使案例数47→49。[decision/0098](docs/decisions/0098_T-M2电气标定与T-M3动态收放线测量链_20260820.md)
+又补上raw/tare桥路、显式清零位置、五级正反程标定、独立holdout、采样时延和小型动态闭环，
+T-M2/T-M3使案例数49→51。四案均为`hypothesis_only`；official WII时间线、现场标定、
+连续卷径、真实导轮/工件和WDS采用仍未落地，主能力分母仍为17/42、端到端仍为0/6。
 
 ## 能力边界（诚实条款）
 

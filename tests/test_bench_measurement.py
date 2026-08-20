@@ -45,6 +45,17 @@ def test_tension_measurement_benchmark_reports_batch_and_per_sample_costs():
     )
 
 
+def test_sampled_tension_readout_benchmark_reports_plant_step_costs():
+    result = bench._measure_tension_readout(repeat=2)
+    assert result["batch_size"] == bench.TENSION_READOUT_BATCH_SIZE == 1000
+    assert result["sample_decimation"] == 10
+    assert result["delay_samples"] == 5
+    assert result["median_s"] > 0.0
+    assert result["median_per_plant_step_s"] == pytest.approx(
+        result["median_s"] / result["batch_size"], rel=0.0, abs=0.0
+    )
+
+
 def test_source_bytes_include_python_subpackages(tmp_path: Path):
     """必须红：只用``glob('*.py')``会让新增物理域整个隐身。"""
 

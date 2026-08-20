@@ -14,6 +14,13 @@
 本模块就是那一层。**它不新增任何物理**：跨段弹性、力矩平衡、磁滞时滞、
 量化、时延一条都不是这里写的，本模块只决定**谁在什么时刻把哪个数交给谁**。
 
+## T-M3测量通道（2026-08-20，决策0098）
+
+旧``sensor``路径保持原样；新增的可选``measurement_channel``把T-M0/T-M1测力轮静力、
+T-M2标定/ADC/采样/测量时延接成控制器输入。两者互斥，不能同时声称自己是观测真值。
+测量通道每个plant步推进自己的采样钟，控制器只在原有control tick读取当时保持的值；
+两条时钟可以不同，但``plant_dt_s``必须逐位相同。没有通道时旧样例指纹逐字节不变。
+
 ## 一、裁决A：控制器接**制动力矩**，不接收线速度
 
 真机是双执行器（`HARDWARE_TOPOLOGY.md`）：`ED3L-08AEA`伺服在CSP位置模式下
@@ -177,6 +184,7 @@ from physics_engine.drives import (
     TensionSensor,
     capstan_transfer_ratio,
 )
+from physics_engine.tension_readout import TensionReadoutChannel
 from physics_engine.transport import (
     MM_PER_M,
     FreeSpan,
@@ -477,6 +485,9 @@ class ClosedTensionLoop:
     delay_line: object | None
     brake_torque_nmm: float
     held_current_a: float
+    #: T-M2完整测力轮/标定/采样通道。``None``保持0062—0070旧读数路径；
+    #: 与``sensor``互斥，不能让两条观测链同时声称自己是控制器输入。
+    measurement_channel: TensionReadoutChannel | None = None
     step_index: int = 0
 
     def __post_init__(self) -> None:
@@ -494,6 +505,25 @@ class ClosedTensionLoop:
             raise TensionControlError(f"capstan must be a CapstanSpan or None: {self.capstan!r}")
         if self.sensor is not None and not isinstance(self.sensor, TensionSensor):
             raise TensionControlError(f"sensor must be a TensionSensor or None: {self.sensor!r}")
+        measurement_channel = self.measurement_channel
+        #: 旧路径每个plant步都会重建本对象；把三次``is not None``收成一次，
+        #: 否则一个默认关闭的新功能也会稳定增加旧路径派发成本。
+        if measurement_channel is not None:
+            if not isinstance(measurement_channel, TensionReadoutChannel):
+                raise TensionControlError(
+                    "measurement_channel must be a TensionReadoutChannel or None: "
+                    f"{measurement_channel!r}"
+                )
+            if self.sensor is not None:
+                raise TensionControlError(
+                    "sensor and measurement_channel cannot both claim the same observation"
+                )
+            if measurement_channel.plant_dt_s != self.plant.dt_s:
+                raise TensionControlError(
+                    f"measurement_channel.plant_dt_s is "
+                    f"{measurement_channel.plant_dt_s!r}, plant.dt_s is "
+                    f"{self.plant.dt_s!r}"
+                )
         if isinstance(self.control_decimation, bool) or not isinstance(
             self.control_decimation, int
         ):
@@ -548,6 +578,7 @@ class ClosedTensionLoop:
         line_speed_mm_s: float,
         delay_line: object | None,
         forbid_slack: bool,
+        measurement_channel: TensionReadoutChannel | None = None,
     ) -> ClosedTensionLoop:
         """从**闭式稳态**起手：对象、执行器与控制器三者同时在不动点上。
 
@@ -600,15 +631,23 @@ class ClosedTensionLoop:
             delay_line=delay_line,
             brake_torque_nmm=torque,
             held_current_a=feedforward,
+            measurement_channel=measurement_channel,
         )
 
     def step(self, *, takeup_speed_mm_s: float) -> tuple[ClosedTensionLoop, TensionControlSample]:
         """走一个**推进步**，返回``(新回路, 本步观测)``。次序见模块docstring第二节。"""
 
         true_tension = self.plant.tension_n
-        measured = (
-            true_tension if self.sensor is None else self.sensor.read_n(true_tension)
-        )
+        measurement_channel = self.measurement_channel
+        if measurement_channel is None:
+            measured = (
+                true_tension if self.sensor is None else self.sensor.read_n(true_tension)
+            )
+        else:
+            measurement_channel, readout_sample = measurement_channel.advance(
+                span_tension_n=true_tension
+            )
+            measured = readout_sample.displayed_span_tension_n
         laydown = (
             measured if self.capstan is None else self.capstan.laydown_tension_n(measured)
         )
@@ -669,7 +708,7 @@ class ClosedTensionLoop:
         )
         #: 直接构造而不是`dataclasses.replace`，理由与`transport.SpanTransportLoop.step`
         #: 那处逐字相同（全部字段`init=True`、`__post_init__`照常跑、省掉的只是
-        #: 标准库的字段自省）。**这里字段有12个，`replace`的自省成本更高。**
+        #: 标准库的字段自省）。**这里字段有13个，`replace`的自省成本更高。**
         return (
             ClosedTensionLoop(
                 plant=plant,
@@ -683,6 +722,7 @@ class ClosedTensionLoop:
                 delay_line=delay_line,
                 brake_torque_nmm=torque,
                 held_current_a=current,
+                measurement_channel=measurement_channel,
                 step_index=self.step_index + 1,
             ),
             sample,

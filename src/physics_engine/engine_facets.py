@@ -75,6 +75,12 @@ ENGINE_RUN_TRACE_VERSION = "0.1"
 TENSION_MEASUREMENT_SAMPLE_FACET = "tension_measurement_sample"
 TENSION_MEASUREMENT_SAMPLE_VERSION = "0.1"
 
+#: T-M2电气读出面：原始gross桥路、tare位置、ADC、五点正反程标定与显示跨段张力。
+#: 与`tension_measurement_sample`分面，避免用后者的理想清零路径冒充现场电气拓扑。
+#: 出生draft——现场ATC600采样/清零结构与VR451比例尚未确认（决策0098）。
+TENSION_READOUT_SAMPLE_FACET = "tension_readout_sample"
+TENSION_READOUT_SAMPLE_VERSION = "0.1"
+
 ENGINE_REGISTRY = FacetRegistry(
     Facet(
         name=ACCEPTANCE_RECEIPT_FACET,
@@ -130,6 +136,12 @@ ENGINE_REGISTRY = FacetRegistry(
         max_tested_minor=1,
         status=FacetStatus.DRAFT,
     ),
+    Facet(
+        name=TENSION_READOUT_SAMPLE_FACET,
+        major=0,
+        max_tested_minor=1,
+        status=FacetStatus.DRAFT,
+    ),
 )
 
 __all__ = [
@@ -152,4 +164,6 @@ __all__ = [
     "PHYSICS_SCENE_VERSION",
     "TENSION_MEASUREMENT_SAMPLE_FACET",
     "TENSION_MEASUREMENT_SAMPLE_VERSION",
+    "TENSION_READOUT_SAMPLE_FACET",
+    "TENSION_READOUT_SAMPLE_VERSION",
 ]

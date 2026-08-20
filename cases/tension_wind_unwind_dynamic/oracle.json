@@ -1,0 +1,172 @@
+{
+  "arrays": {},
+  "case_id": "case/tension_wind_unwind_dynamic",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/tension_wind_unwind_dynamic",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/tension_wind_unwind_dynamic/generate_oracle.py",
+    "sha256": "059157d8d7c601c8e6c1a6af4c813db11b71da114889ba77f5dd1a1e049f7d8b"
+  },
+  "load_tier": "local_batch",
+  "manifest_self_sha256": "3e50c97ff046c94207dc47bd19227f854b0137b8571300f1eeeadb1a2c05b162",
+  "oracles": [
+    {
+      "expected": {
+        "bad_peak_ratio_to_open": 0.9926569066479157,
+        "final_measured_error_n": [
+          0.030704461473305855,
+          0.41266188962625705,
+          0.030704461473305855
+        ],
+        "final_true_error_n": [
+          0.048971769332737836,
+          0.5555442016120189,
+          0.17272647766111504
+        ],
+        "good_ise_ratio_to_open": 0.1025505396733124,
+        "good_peak_ratio_to_open": 0.5882790967209635,
+        "integral_squared_error_n2_s": [
+          0.0036015159442344103,
+          0.04079757562783139,
+          0.03511942458525807
+        ],
+        "peak_measured_excursion_n": [
+          0.6242338404725771,
+          1.0524945305717388,
+          1.0600473610719376
+        ],
+        "peak_true_excursion_n": [
+          0.6238348954302566,
+          1.052653444612453,
+          1.060440357149318
+        ]
+      },
+      "id": "oracle:tension-wind-unwind/dynamic-step",
+      "inputs": {
+        "adc_bits": 16,
+        "adc_full_scale_n": 100.0,
+        "axial_stiffness_n": 60000.0,
+        "bearing_damping_nmm_s": 50.0,
+        "brake_torque_nmm": 1200.0,
+        "clutch_lag_s": 0.0005,
+        "control_decimation": 10,
+        "controllers": [
+          {
+            "derivative": 1.7561293801847282e-05,
+            "integral_gain": 2.3909045882870474,
+            "integral_limit": 1000000.0,
+            "name": "good",
+            "proportional": 0.007739938080495356
+          },
+          {
+            "derivative": 0.0,
+            "integral_gain": 0.0,
+            "integral_limit": 1000000.0,
+            "name": "bad",
+            "proportional": 7.739938080495357e-05
+          },
+          {
+            "derivative": 0.0,
+            "integral_gain": 0.0,
+            "integral_limit": 1000000.0,
+            "name": "open",
+            "proportional": 0.0
+          }
+        ],
+        "delay_samples": 5,
+        "dt_s": 1e-05,
+        "geometric_length_mm": 300.0,
+        "inertia_kg_mm2": 5000.0,
+        "line_speed_mm_s": 20.0,
+        "measurement_delay_s": 0.0005,
+        "radius_mm": 60.0,
+        "rated_torque_nmm": 50000.0,
+        "roll_gain_sensor_per_span": 1.4142135623730951,
+        "sample_period_s": 0.0001,
+        "steps": 10000,
+        "takeup_step_mm_s": 22.0,
+        "tare_axis_force_n": 5.0,
+        "torque_per_ampere_nmm": 23256.0
+      },
+      "tolerances": {
+        "bad_peak_ratio_to_open": {
+          "abs": 2e-08,
+          "reason": "独立标量离散推进；余量覆盖标定斜率与求和末位，不覆盖一步错序。",
+          "rel": 2e-07
+        },
+        "final_measured_error_n": {
+          "abs": 2e-08,
+          "reason": "独立标量离散推进；余量覆盖标定斜率与求和末位，不覆盖一步错序。",
+          "rel": 2e-07
+        },
+        "final_true_error_n": {
+          "abs": 2e-08,
+          "reason": "独立标量离散推进；余量覆盖标定斜率与求和末位，不覆盖一步错序。",
+          "rel": 2e-07
+        },
+        "good_ise_ratio_to_open": {
+          "abs": 2e-08,
+          "reason": "独立标量离散推进；余量覆盖标定斜率与求和末位，不覆盖一步错序。",
+          "rel": 2e-07
+        },
+        "good_peak_ratio_to_open": {
+          "abs": 2e-08,
+          "reason": "独立标量离散推进；余量覆盖标定斜率与求和末位，不覆盖一步错序。",
+          "rel": 2e-07
+        },
+        "integral_squared_error_n2_s": {
+          "abs": 2e-08,
+          "reason": "独立标量离散推进；余量覆盖标定斜率与求和末位，不覆盖一步错序。",
+          "rel": 2e-07
+        },
+        "peak_measured_excursion_n": {
+          "abs": 2e-08,
+          "reason": "独立标量离散推进；余量覆盖标定斜率与求和末位，不覆盖一步错序。",
+          "rel": 2e-07
+        },
+        "peak_true_excursion_n": {
+          "abs": 2e-08,
+          "reason": "独立标量离散推进；余量覆盖标定斜率与求和末位，不覆盖一步错序。",
+          "rel": 2e-07
+        }
+      }
+    },
+    {
+      "expected": {
+        "displayed_span_tensions_n": [
+          20.278270917250286,
+          15.156372862329185
+        ],
+        "steady_span_tensions_n": [
+          20.27777777777778,
+          15.15625
+        ]
+      },
+      "id": "oracle:tension-wind-unwind/radius-change",
+      "inputs": {
+        "bearing_damping_nmm_s": 50.0,
+        "brake_torque_nmm": 1200.0,
+        "line_speed_mm_s": 20.0,
+        "radii_mm": [
+          60.0,
+          80.0
+        ]
+      },
+      "tolerances": {
+        "displayed_span_tensions_n": {
+          "abs": 3e-14,
+          "reason": "16位ADC就近量化后除以测力轮增益。",
+          "rel": 3e-15
+        },
+        "steady_span_tensions_n": {
+          "abs": 0.0,
+          "reason": "独立稳态力矩平衡；半径增大必须降低同扭矩张力。",
+          "rel": 2e-15
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

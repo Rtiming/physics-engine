@@ -99,6 +99,9 @@
 - `physics_engine.tension_measurement` —— 测力轮张力测量物理：两侧带材张力/方向→
   轮上矢量合力→tare/支承→LTS敏感轴→mV/ADC→显示张力；旧`drives.TensionSensor`
   保持逐位兼容，跨边界样点用`tension_measurement_sample/0.1`draft面（决策0097）
+- `physics_engine.tension_readout` —— T-M2电气/标定层：原始gross桥路、显式tare位置、
+  五级正反程线性标定、独立holdout、ADC、采样时钟与整数样点时延；跨边界样点用
+  `tension_readout_sample/0.1`draft面（决策0098）
 - `physics_engine.modelgen` —— 参数化模型生成器（spec/11）
 - `physics_engine.winding` —— 卷绕堆积律：匝→层换算、堆积因子、有效半径随匝数生长、
   长度↔匝的正反解（决策0093，力学域实验档）。**它补的是两处已有实现之间缺的那一段**：

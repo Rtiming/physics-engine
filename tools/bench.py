@@ -23,6 +23,8 @@ MuJoCo的CI干脆不跑benchmark，Drake在README里明写其基准不承担回�
   并且**分物理加速度回调与常加速度回调两种**——两者之差正是加速档边界的位置。
 * ``tension_measurement_static``：1000个T-M1静力样点，覆盖矢量合力、敏感轴、
   tare与双支承，不接电气量化；这是plans/19要求新公开操作出生即带的预算。
+* ``tension_readout_sampled``：1000个plant步，完整经过T-M2测力轮、标定、16位ADC、
+  10步抽取、5样点时延和零阶保持；它回答采样通道是不是值得为GPU另开后端。
 
 这些物理组也**不进门**，理由与墙钟同（决策0018第一节未被本页改动）。它们的用途是
 spec/13第一节义务1的那个前提：**没有热点数据的优化提案不受理**。
@@ -52,6 +54,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from physics_engine.canonical import FTS_PROFILE, canonical_file_bytes
+from physics_engine.drives import TensionSensor
 from physics_engine.energies import (
     AxialStretch,
     EnergyContext,
@@ -70,6 +73,15 @@ from physics_engine.integrate import (
 from physics_engine.materials import EvidenceRef
 from physics_engine.state import State, StateField, StateLayout
 from physics_engine.tension_measurement import MeasuringRoll
+from physics_engine.tension_readout import (
+    CalibrationDirection,
+    CalibrationPurpose,
+    LinearSpanCalibration,
+    TareMode,
+    TensionCalibrationPoint,
+    TensionReadout,
+    TensionReadoutChannel,
+)
 
 EXAMPLE_SCENE = ROOT / "examples/collision_preview_cell.scene.json"
 
@@ -87,6 +99,7 @@ PROFILE_NODES = 512
 PROFILE_INTEGRATION_STEPS = 10
 PROFILE_TOP = 15
 TENSION_MEASUREMENT_BATCH_SIZE = 1000
+TENSION_READOUT_BATCH_SIZE = 1000
 
 
 class BenchmarkError(RuntimeError):
@@ -247,6 +260,75 @@ def _measure_tension_measurement(repeat: int) -> dict:
     result["batch_size"] = TENSION_MEASUREMENT_BATCH_SIZE
     result["median_per_sample_s"] = result["median_s"] / TENSION_MEASUREMENT_BATCH_SIZE
     result["min_per_sample_s"] = result["min_s"] / TENSION_MEASUREMENT_BATCH_SIZE
+    return result
+
+
+def _measure_tension_readout(repeat: int) -> dict:
+    """1000个plant步的采样读出；标定和队列在热身前构造，不混入计时。"""
+
+    evidence = EvidenceRef(
+        grade="estimated",
+        evidence_id="evidence/bench-tension-readout-synthetic",
+        method="Synthetic fixed input for sampled readout performance only.",
+    )
+    gain = math.sqrt(2.0)
+    points = tuple(
+        TensionCalibrationPoint(
+            point_id=f"calibration-point/bench-{index}-{direction.value}",
+            sensor_force_n=gain * tension,
+            reference_span_tension_n=tension,
+            direction=direction,
+            purpose=CalibrationPurpose.FIT,
+        )
+        for index, tension in enumerate((0.0, 10.0, 20.0, 30.0, 40.0))
+        for direction in (
+            CalibrationDirection.INCREASING,
+            CalibrationDirection.DECREASING,
+        )
+    )
+    calibration = LinearSpanCalibration.fit(
+        calibration_id="calibration/bench-tension-readout",
+        points=points,
+        evidence=evidence,
+        uncertainty_n=None,
+    )
+    root_half = math.sqrt(0.5)
+    roll = MeasuringRoll(
+        measurement_id="measurement/bench-tension-readout",
+        sensor_axis_xyz=(-root_half, root_half, 0.0),
+        tare_force_n_xyz=(-5.0 * root_half, 5.0 * root_half, 0.0),
+        support_shares=(0.5, 0.5),
+        evidence=evidence,
+    )
+    readout = TensionReadout(
+        readout_id="readout/bench-tension-readout",
+        transducer=TensionSensor(100.0, 20.0, 16),
+        calibration=calibration,
+        tare_mode=TareMode.ANALOG_PRE_ADC,
+        evidence=evidence,
+    )
+
+    def batch() -> None:
+        channel = TensionReadoutChannel.at_steady_state(
+            channel_id="measurement-channel/bench-tension-readout",
+            roll=roll,
+            incoming_tangent_xyz=(1.0, 0.0, 0.0),
+            outgoing_tangent_xyz=(0.0, 1.0, 0.0),
+            readout=readout,
+            plant_dt_s=1.0e-5,
+            sample_decimation=10,
+            delay_samples=5,
+            span_tension_n=20.0,
+        )
+        for index in range(TENSION_READOUT_BATCH_SIZE):
+            channel, _ = channel.advance(span_tension_n=20.0 + 0.001 * (index % 17))
+
+    result = _time_in_process(batch, repeat)
+    result["batch_size"] = TENSION_READOUT_BATCH_SIZE
+    result["sample_decimation"] = 10
+    result["delay_samples"] = 5
+    result["median_per_plant_step_s"] = result["median_s"] / TENSION_READOUT_BATCH_SIZE
+    result["min_per_plant_step_s"] = result["min_s"] / TENSION_READOUT_BATCH_SIZE
     return result
 
 
@@ -578,6 +660,7 @@ def measure_physics(repeat: int, *, with_profile: bool) -> dict:
         "integration": _measure_integration(repeat),
         "solver_path_assembly": _measure_solver_path(repeat),
         "tension_measurement_static": _measure_tension_measurement(repeat),
+        "tension_readout_sampled": _measure_tension_readout(repeat),
     }
     if with_profile:
         report["hotspots"] = {
@@ -657,6 +740,13 @@ def _print_physics(physics: dict) -> None:
         f"  张力测量静力 {measurement['batch_size']}样点 "
         f"median={measurement['median_s'] * 1e3:.3f}ms "
         f"per_sample={measurement['median_per_sample_s'] * 1e6:.3f}us"
+    )
+    readout = physics["tension_readout_sampled"]
+    print(
+        f"  张力采样读出 {readout['batch_size']} plant步 "
+        f"median={readout['median_s'] * 1e3:.3f}ms "
+        f"per_step={readout['median_per_plant_step_s'] * 1e6:.3f}us "
+        f"decimation={readout['sample_decimation']} delay_samples={readout['delay_samples']}"
     )
     print("  积分推进 pure_python/numpy 耗时比")
     for record in physics["integration"]:

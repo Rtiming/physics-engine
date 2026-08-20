@@ -523,15 +523,19 @@
           "evidence": [
             "case:tension_measuring_roll_resultant",
             "case:tension_measuring_roll_installation",
+            "case:tension_readout_calibration",
+            "case:tension_wind_unwind_dynamic",
             "test:tests/cases/test_tension_measuring_roll_resultant.py::test_vector_force_and_closed_form_magnitude_match_independent_oracle",
             "test:tests/cases/test_tension_measuring_roll_installation.py::test_installation_layers_match_the_independent_statics_oracles",
+            "test:tests/cases/test_tension_readout_calibration.py::test_fit_and_holdout_match_the_independent_least_squares_oracle",
+            "test:tests/cases/test_tension_wind_unwind_dynamic.py::test_dynamic_open_good_and_bad_loops_match_the_independent_discrete_oracle",
             "test:tests/test_drives.py::test_the_load_cell_spans_five_kilograms_over_twenty_millivolts",
             "test:tests/test_drives.py::test_the_adc_resolution_is_the_floor_of_the_whole_loop",
             "test:tests/test_drives.py::test_the_loop_regulates_what_it_measures_not_what_matters",
             "test:tests/test_tension_measurement.py::test_sealed_sample_round_trips_and_recomputes_every_derived_quantity"
           ],
-          "why": "闭环要测量。spec/10六接口里它与`Actuator`成对。0062轨道乙已落`drives.TensionSensor`：按真机LTS1-5（5kg满量程、20mV max，2026-06-08已核）建满量程截断＋线性mV输出＋ADC就近量化，并接进`TensionLoop`。0097又补上此前缺失的力学半边：两侧跨段张力按材料行进切向装配为三维web合力，再分出敏感轴上的gross、tare、net与逐支承载荷，最后组合旧`TensionSensor`得到mV、量化力和显示张力；跨边界样点会严格复读并重算全部派生量。T-M0用0°/60°/90°/180°对独立`2*T*sin(beta/2)`闭式，T-M1用三种安装/支承构型对独立刚体静力。**量化台阶仍是电气链精度的地板**——8/10/12/16位实测末态偏差92.4/19.3/0.685/0.179 mN，恒不超过半个台阶。此前已经量出的另一边界也不变：闭环调的是它测到的量，不是要紧的那个量；隔一个摩擦包角时被控点张力可以明显偏离设定。",
-          "missing": "**仍然没有接`sensors.SensorDeclaration`**：`read()`这个方法名不存在，新模块是mechanics域测量模型，不是spec/10 `Sensor`接口实现。**T-M2尚未形成正式案例，测量路径也没有时延**：五点正反程标定、留出点、采样/转换延迟、ATC600内部位数都未闭合。无计米/匝数读出（真机`MPOS AXIS(0)`比例仍需现场标定），无零漂/温漂/非线性/蠕变和动态惯性。安装角、tare和支承份额已经能显式建模，**但现场值仍未知**：LTS单/双支承、真实敏感轴、导轮组件重量、包角和`VR451`比例都没有现场标定。一个LTS仍不能直接拆出T0—T4。故只报partial。"
+          "why": "闭环要测量。spec/10六接口里它与`Actuator`成对。0062先落`drives.TensionSensor`的满量程、mV与ADC；0097补上两侧跨段张力→三维web合力→敏感轴gross/tare/net→逐支承载荷，T-M0/T-M1分别对独立闭式与刚体静力。0098继续补上T-M2/T-M3：raw gross/tare/zeroed桥路、`analog_pre_adc`/`digital_post_adc`显式清零位置、gross过载、五级正反程线性拟合、holdout隔离、采样抽取、整数样点时延和零阶保持；完整测量通道已成为`ClosedTensionLoop`真实控制输入。T-M3三档对独立离散oracle：好控制器峰值/开环0.5883、ISE/开环0.1026，坏控制器峰值/开环0.9927。**量化台阶仍是电气链精度的地板**，而tare也不能清掉物理gross过载。此前量出的另一边界不变：闭环调的是它测到的量，不是要紧的那个量；隔一个摩擦包角时被控点张力可以明显偏离设定。",
+          "missing": "**仍然没有接`sensors.SensorDeclaration`**：`observation_space()`/`read(state)`不存在，mechanics域测量通道不是spec/10 `Sensor`接口实现。T-M2/T-M3已经有合成案例和显式测量时延，**但没有一项现场电气事实**：LTS单/双支承、真实敏感轴、导轮组件重量、包角、ATC600清零位置/采样率/内部ADC位数/滤波、VR451比例和参考张力计不确定度均未知。无计米/匝数读出，无零漂/温漂/非线性/蠕变/动态频响；T-M3只做两个固定半径构型，没有连续卷径。一个LTS仍不能直接拆出T0—T4。故只报partial。"
         },
         {
           "id": "S6.5",
@@ -570,12 +574,14 @@
           "exercises_physics": true,
           "evidence": [
             "case:winding_line_endtoend",
+            "case:tension_wind_unwind_dynamic",
             "test:tests/cases/test_winding_line_endtoend.py::test_the_lay_point_tension_is_the_payout_times_the_capstan_ratio",
             "test:tests/cases/test_winding_line_endtoend.py::test_the_rub_force_is_the_lateral_component_of_the_tension",
-            "test:tests/cases/test_winding_line_endtoend.py::test_the_tape_stays_clear_until_the_traverse_exceeds_the_half_clearance"
+            "test:tests/cases/test_winding_line_endtoend.py::test_the_tape_stays_clear_until_the_traverse_exceeds_the_half_clearance",
+            "test:tests/cases/test_tension_wind_unwind_dynamic.py::test_dynamic_open_good_and_bad_loops_match_the_independent_discrete_oracle"
           ],
-          "why": "这是场景⑥本身，也是plans/05第一节那句『端到端能跑通的是零』的度量点。0062丙2已把四件事装在一条链路上跑一次：放线端张力（力边界条件）＋导向轮罚接触与多槽位库仑摩擦＋收线端位移控制＋排线横动把带材边缘顶上法兰内环面。**混合控制照真机来**——力在放线端（磁粉离合器）、位移在收线端（伺服卷走）。四条闭式全中：放线端轴力＝外载；落位点/放线端＝`exp(μθ)`（480步实测1.604693、偏差1.695e-3）；半间隙6.5mm阈值两侧零容差；蹭边力＝`T·δ/L`（7mm与8mm两档实测差0.11%）。**它还跑出了`PenaltyAnnulusLimit`的一个真bug**：法兰朝向原先从限位坐标的符号推出来，收线盘横动过原点时符号翻了、蹭边力凭空归零——单元门里槽心恒在原点，只有端到端发现得了。",
-          "missing": "**2026-08-18（0088）划掉两条**：不再是「只有一只导轮」（已扩成R4→R1四轮路由），也不再是「张力取稳态值当力边界条件」（已由`drives`回路经`PointLoad`真的进求解器）。**其余全部仍在。** **这一位是partial，场景⑥因此仍未完成，主分母仍0/6**——七位里S6.3/S6.4/S6.5/S6.6都是partial。本案例只有**一只**导轮，不是R4→R3→R2→R1加两只活动小导轮；没有放线盘转动、没有伺服、没有KUKA；**控制回路与准静态平衡分离处理**（张力取稳态值当力边界条件，不做同步耦合）；带材是固定长度的一段，**没有喂料、没有匝数增长、没有半径生长、没有匝间接触**（S5.4/S5.2）；带材只有`AxialStretch`、**没有弯曲刚度**，落位点的横向平衡是一根张紧的弦不是一根梁；`Scene`与`CollisionQuery`两个接口没有进这条回路（接触对是声明的不是检测的）。**2026-08-17审计的三条不落在任何单一位上的缺漏**（传感器位置≠被控点、真机双执行器、多轮路由）见plans/13第六节；它们不改42这个分母。"
+          "why": "这是场景⑥本身，也是plans/05第一节那句『端到端能跑通的是零』的度量点。`winding_line_endtoend`把放线端力、R4→R1多轮路由、罚接触/摩擦、收线端位移和排线横动接进同一条准静态链，抓出过一次法兰朝向真bug。0098的`tension_wind_unwind_dynamic`从另一侧补上小型动态链：放线盘转动、收线速度阶跃、磁粉离合器/PID、90°测力轮、tare、标定、16位ADC、100μs采样与0.5ms测量时延同步推进；好/坏/开环三档30000步对独立离散oracle，另判60/80mm固定半径。两案合起来证明静态接触链和动态测量链各自能跑且有分辨力。",
+          "missing": "**仍然没有一个案例把两条链合成同一次运行。** `winding_line_endtoend`有R4→R1、接触/摩擦、横动和求解器，但控制与准静态平衡仍分层；`tension_wind_unwind_dynamic`有放线盘、收线速度、控制器和完整测量通道，却没有任何导轮接触、横漂、杆弯扭、落位、WII运动或GCW工件。T-M3的60/80mm只是两个固定半径构型，没有连续卷径、喂料、匝数/层增长或匝间接触；两案都没有KUKA，`Scene`与`CollisionQuery`也没有进入同一动态回路。**因此本位仍是partial，场景⑥仍未完成，主分母仍0/6。** 下一步不是再加第三条孤立小链，而是P3输入闭包后把真实运动/工件、动态测量和既有多轮接触接进同一短窗口。"
         }
       ]
     }

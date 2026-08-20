@@ -157,6 +157,9 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
         #: 没长进`sensors`的理由是`sensors`只做“装得住吗”的声明校验，本模块算的是
         #: 两侧带材张力如何变成测力轮合力与敏感轴读数，是真物理。
         "tension_measurement",
+        #: `tension_readout`接在测力轮静力之后，仍归力学。它只依赖同域的
+        #: `tension_measurement`/`drives`与基座证据/面，不把控制装配反向import进来。
+        "tension_readout",
         "transport",
         #: `winding`归力学（2026-08-18，决策0093）：包内只import`feed`一条边、
         #: 在域内、不向上。它补的是`drives`（吃匝答力）与`modelgen.generate_spool`
