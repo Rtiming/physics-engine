@@ -286,8 +286,8 @@ WDS随后在R25固定材料顶点完成逐纤维塑性history事务，再完成�
 最常用的三条（验收分层与并行裁决见[0102](docs/decisions/0102_验收分层去重与负载下120秒目标_20260820.md)）：
 
 ```bash
-.venv/bin/python tools/accept.py quick             # 日常门，干净提交实测17.1s/30s
-.venv/bin/python tools/accept.py full              # 本机全档，干净提交实测96.4s/120s
+.venv/bin/python tools/accept.py quick             # 日常门，当前干净提交实测23.5s/30s
+.venv/bin/python tools/accept.py full              # 本机全档，load1=10.060时实测95.2s/120s
 bash tools/master/run_accept_on_master.sh full     # 跨机全档（最终墙钟回执以master为准）
 ```
 

@@ -24,6 +24,9 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
   修复只对权威`RIGID_BODY_LAYOUT`对象走identity快路径，重建的等价layout仍走指纹。
 - 当前只有解析球—球、单候选和法向罚簧/压缩阻尼；无摩擦历史、滚动阻力、
   非球dynamic响应、WII adapter或真实标定。GPU对当前26维小状态/Python组装不对症。
+- 干净`8685cf8`回执：Mac quick 2636 passed/5 skipped、23.531s/30s；Mac full
+  2846 passed/5 skipped、95.190s/120s（load1=10.060）；master 8核full 2829 passed/
+  22个有理由skip、31.653s/120s。三份均四轴绿、resource=QUALIFIED、仓库稳定。
 
 ### 验收分层、去重与并行提速（决策0102）
 

@@ -14,14 +14,14 @@
 | 想干什么 | 命令 | 期望 |
 |---|---|---|
 | **改完代码的内循环**（秒级） | `.venv/bin/python -m pytest tests/test_你在动的.py -q` | 绿 |
-| **本机快档**（30秒预算） | `.venv/bin/python tools/accept.py quick` | `functional/timing/overall=PASS`；`c289b92`在Mac实测2622 passed、5 skipped、17.129s/30s |
+| **本机快档**（30秒预算） | `.venv/bin/python tools/accept.py quick` | `functional/timing/overall=PASS`；`8685cf8`在Mac实测2636 passed、5 skipped、23.531s/30s |
 
 ## 二、验收：**墙钟以master为准，不以本机为准**
 
 | 想干什么 | 命令 | 期望 |
 |---|---|---|
-| **全档验收（跨机回执）** | `bash tools/master/run_accept_on_master.sh full` | `overall=PASS functional=PASS timing=PASS perf=EVALUABLE resource=QUALIFIED`；`c289b92`在master 8核实测2814 passed、22个有理由skip、31.606s/120s |
-| **本机全档** | `.venv/bin/python tools/accept.py full` | 同样必须四轴绿；`c289b92`在10核Mac、load1=7.679时实测2831 passed、5 skipped、96.366s/120s |
+| **全档验收（跨机回执）** | `bash tools/master/run_accept_on_master.sh full` | `overall=PASS functional=PASS timing=PASS perf=EVALUABLE resource=QUALIFIED`；`8685cf8`在master 8核实测2829 passed、22个有理由skip、31.653s/120s |
+| **本机全档** | `.venv/bin/python tools/accept.py full` | 同样必须四轴绿；`8685cf8`在10核Mac、load1=10.060时实测2846 passed、5 skipped、95.190s/120s |
 | **在master跑任意一条命令** | `bash tools/master/run_on_master.sh '<命令>'` | 回执带节点、负载、核数 |
 
 **为什么还要master**：本机门是开发节奏的一级事实，master是跨机可移植与干净提交的第二份回执。
