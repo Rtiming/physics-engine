@@ -25,6 +25,8 @@ MuJoCo的CI干脆不跑benchmark，Drake在README里明写其基准不承担回�
   tare与双支承，不接电气量化；这是plans/19要求新公开操作出生即带的预算。
 * ``tension_readout_sampled``：1000个plant步，完整经过T-M2测力轮、标定、16位ADC、
   10步抽取、5样点时延和零阶保持；它回答采样通道是不是值得为GPU另开后端。
+* ``model_motion_input_load``：100份P3-M0严格输入包复读，覆盖四层内容哈希、模型组件、
+  规划track和虚拟物理所有权闭包；WII适配以后不会改变这条内核成本口径。
 
 这些物理组也**不进门**，理由与墙钟同（决策0018第一节未被本页改动）。它们的用途是
 spec/13第一节义务1的那个前提：**没有热点数据的优化提案不受理**。
@@ -53,7 +55,7 @@ from zipfile import BadZipFile, ZipFile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from physics_engine.canonical import FTS_PROFILE, canonical_file_bytes
+from physics_engine.canonical import FTS_PROFILE, WDS_PROFILE, canonical_file_bytes
 from physics_engine.drives import TensionSensor
 from physics_engine.energies import (
     AxialStretch,
@@ -71,6 +73,29 @@ from physics_engine.integrate import (
     integrate,
 )
 from physics_engine.materials import EvidenceRef
+from physics_engine.model_physics import (
+    BodyBehavior,
+    GeometrySource,
+    ModelPhysicsRelation,
+    PhysicsBodyBinding,
+    PhysicsModelMotionInput,
+    load_physics_model_motion_input,
+)
+from physics_engine.model_snapshot import (
+    AssetRole,
+    ModelAssetRef,
+    ModelComponent,
+    ModelSnapshot,
+)
+from physics_engine.motion import InterpolationSemantics, Pose
+from physics_engine.planned_motion import (
+    MotionParameterization,
+    MotionSourceArtifact,
+    MotionTrack,
+    PlannedMotion,
+    PlannedMotionSample,
+    TrackPose,
+)
 from physics_engine.state import State, StateField, StateLayout
 from physics_engine.tension_measurement import MeasuringRoll
 from physics_engine.tension_readout import (
@@ -100,6 +125,7 @@ PROFILE_INTEGRATION_STEPS = 10
 PROFILE_TOP = 15
 TENSION_MEASUREMENT_BATCH_SIZE = 1000
 TENSION_READOUT_BATCH_SIZE = 1000
+MODEL_MOTION_INPUT_BATCH_SIZE = 100
 
 
 class BenchmarkError(RuntimeError):
@@ -329,6 +355,122 @@ def _measure_tension_readout(repeat: int) -> dict:
     result["delay_samples"] = 5
     result["median_per_plant_step_s"] = result["median_s"] / TENSION_READOUT_BATCH_SIZE
     result["min_per_plant_step_s"] = result["min_s"] / TENSION_READOUT_BATCH_SIZE
+    return result
+
+
+def _measure_model_motion_input(repeat: int) -> dict:
+    """100份最小模型—运动—物理包严格复读；构造与序列化不混入计时。"""
+
+    evidence = EvidenceRef(
+        grade="estimated",
+        evidence_id="evidence/bench-model-motion-synthetic",
+        method="Synthetic fixed model-motion input for performance measurement only.",
+    )
+    identity = Pose((0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0))
+    model = ModelSnapshot.create(
+        model_id="model/bench-model-motion",
+        root_frame_id="frame/bench-root",
+        producer_id="producer/bench",
+        source_manifest_sha256="b" * 64,
+        components=(
+            ModelComponent(
+                component_id="model-component/bench-workpiece",
+                semantic_role="workpiece",
+                parent_component_id=None,
+                parent_from_component=identity,
+                visual_asset=None,
+                collision_asset=ModelAssetRef(
+                    asset_id="asset/bench-workpiece-collision",
+                    role=AssetRole.COLLISION,
+                    path_relative="assets/workpiece.collision.stl",
+                    sha256="a" * 64,
+                    format="stl",
+                    units="mm",
+                    frame_id="frame/bench-root",
+                    component_from_asset=identity,
+                ),
+            ),
+        ),
+    )
+    semantics = InterpolationSemantics(
+        "linear", "slerp", "shortest", "hold_interval_start", "reject"
+    )
+    motion = PlannedMotion.create(
+        motion_id="motion/bench-model-motion",
+        producer_id="producer/bench",
+        root_frame_id="frame/bench-root",
+        parameterization=MotionParameterization.TIME_S,
+        coordinate_unit="s",
+        source_artifacts=(
+            MotionSourceArtifact(
+                "selected_plan", "artifact/bench-motion-plan", "c" * 64
+            ),
+        ),
+        tracks=(
+            MotionTrack(
+                "motion-track/bench-workpiece",
+                "model-component/bench-workpiece",
+                "frame/bench-workpiece",
+                semantics,
+            ),
+        ),
+        state_coordinates=(),
+        samples=(
+            PlannedMotionSample(
+                "motion-sample/bench-0", 0.0, 0.0,
+                (TrackPose("motion-track/bench-workpiece", identity),),
+                (), 0.0, "laydown",
+            ),
+            PlannedMotionSample(
+                "motion-sample/bench-1", 1.0, 1.0,
+                (
+                    TrackPose(
+                        "motion-track/bench-workpiece",
+                        Pose((1.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)),
+                    ),
+                ),
+                (), 1.0, "laydown",
+            ),
+        ),
+    )
+    relation = ModelPhysicsRelation.create(
+        relation_id="model-physics/bench",
+        model_snapshot_sha256=model.content_sha256,
+        motion_plan_sha256=motion.content_sha256,
+        body_bindings=(
+            PhysicsBodyBinding(
+                "body/bench-workpiece",
+                "model-component/bench-workpiece",
+                BodyBehavior.KINEMATIC,
+                GeometrySource.COLLISION_ASSET,
+                "motion-track/bench-workpiece",
+                None,
+                None,
+                None,
+            ),
+        ),
+        virtual_frame_bindings=(),
+        excluded_component_ids=(),
+        excluded_motion_track_ids=(),
+    )
+    package = PhysicsModelMotionInput.create(
+        input_id="physics-input/bench-model-motion",
+        model=model,
+        motion=motion,
+        relation=relation,
+        evidence=evidence,
+    )
+    payload = canonical_file_bytes(package.to_document(), WDS_PROFILE)
+
+    def batch() -> None:
+        for _ in range(MODEL_MOTION_INPUT_BATCH_SIZE):
+            load_physics_model_motion_input(payload)
+
+    result = _time_in_process(batch, repeat)
+    result["batch_size"] = MODEL_MOTION_INPUT_BATCH_SIZE
+    result["payload_bytes"] = len(payload)
+    result["median_per_document_s"] = result["median_s"] / MODEL_MOTION_INPUT_BATCH_SIZE
+    result["min_per_document_s"] = result["min_s"] / MODEL_MOTION_INPUT_BATCH_SIZE
     return result
 
 
@@ -661,6 +803,7 @@ def measure_physics(repeat: int, *, with_profile: bool) -> dict:
         "solver_path_assembly": _measure_solver_path(repeat),
         "tension_measurement_static": _measure_tension_measurement(repeat),
         "tension_readout_sampled": _measure_tension_readout(repeat),
+        "model_motion_input_load": _measure_model_motion_input(repeat),
     }
     if with_profile:
         report["hotspots"] = {
@@ -747,6 +890,13 @@ def _print_physics(physics: dict) -> None:
         f"median={readout['median_s'] * 1e3:.3f}ms "
         f"per_step={readout['median_per_plant_step_s'] * 1e6:.3f}us "
         f"decimation={readout['sample_decimation']} delay_samples={readout['delay_samples']}"
+    )
+    model_motion = physics["model_motion_input_load"]
+    print(
+        f"  模型运动输入严格复读 {model_motion['batch_size']}份 "
+        f"payload={model_motion['payload_bytes']}B "
+        f"median={model_motion['median_s'] * 1e3:.3f}ms "
+        f"per_document={model_motion['median_per_document_s'] * 1e6:.3f}us"
     )
     print("  积分推进 pure_python/numpy 耗时比")
     for record in physics["integration"]:

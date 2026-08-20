@@ -77,6 +77,14 @@
       "workload": "T-M2完整采样通道1000个plant步：90°测力轮＋5N tare＋五级正反程标定＋16位ADC＋10步抽取＋5样点时延＋零阶保持",
       "measured_by": "docs/decisions/0098_T-M2电气标定与T-M3动态收放线测量链_20260820.md；Apple M4本机同进程先热身、9次中位12.073459ms，最小11.447958ms，1分钟负载13.911。负载记录只解释墙钟，不进入功能判据"
     },
+    "model_motion_input_load_100_documents": {
+      "budget_s": 0.1,
+      "measured_median_s": 0.061002,
+      "load_tier": "interactive",
+      "measured_on": "2026-08-20",
+      "workload": "100份3494字节physics_model_motion_input/0.1严格复读：四层内容哈希+模型层级+多track运动+组件/track/几何/状态所有权闭包",
+      "measured_by": "docs/decisions/0099_模型快照_规划运动与虚拟物理绑定归本仓_WII后适配_20260820.md；Apple M4本机同进程先热身、9次中位61.001709ms，最小59.423292ms，最大70.325208ms，1分钟负载12.244。负载记录只解释墙钟，不进入功能判据"
+    },
     "accept_full_batch_tier_on_master": {
       "budget_s": 90.0,
       "measured_median_s": 59.21,

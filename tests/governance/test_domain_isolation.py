@@ -192,12 +192,19 @@ SUBSTRATE_RINGS: dict[str, tuple[str, ...]] = {
     #: 于是只能归力学。同一页的三个接口分在两个圈，正是这条判据在起作用。
     #: 触发条件：`actuators`的`apply`物理落地那天它会import `state`，届时门当场红,
     #: 要么整体改归力学、要么按"声明层留在scene / 物理半边进力学"分裂——两条都走决策。
-    "scene": ("actuators", "motion", "scene"),
+    "scene": ("actuators", "model_physics", "motion", "planned_motion", "scene"),
     "orchestration": ("cli",),
     #: `mesh`（0085）归这一圈的判据仍是0035那条"import决定环"：它只import
     #: `geometry`与`shapes`，两者都在本圈内。它算的是几何量不是物理量——
     #: 与`geometry`给解析原语惯量是同一件事的两种输入（一个吃形状声明、一个吃三角）。
-    "modelgen": ("collision", "geometry", "mesh", "modelgen", "shapes"),
+    "modelgen": (
+        "collision",
+        "geometry",
+        "mesh",
+        "model_snapshot",
+        "modelgen",
+        "shapes",
+    ),
     "materials": ("materials",),
 }
 

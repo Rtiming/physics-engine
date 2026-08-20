@@ -103,6 +103,12 @@
   五级正反程线性标定、独立holdout、ADC、采样时钟与整数样点时延；跨边界样点用
   `tension_readout_sample/0.1`draft面（决策0098）
 - `physics_engine.modelgen` —— 参数化模型生成器（spec/11）
+- `physics_engine.model_snapshot` —— 上游无关的模型快照：组件层级、参考位姿与独立
+  visual/collision资产身份；生产者名称不进入求解语义（决策0099）
+- `physics_engine.planned_motion` —— 时间或无时间规划尺度上的多track运动、源状态、
+  process frame与累计送带；无时间规划不能冒充秒（决策0099）
+- `physics_engine.model_physics` —— 模型组件到static/kinematic/dynamic虚拟物理体、
+  运动track与虚拟工艺frame的显式绑定；输入面`physics_model_motion_input/0.1`
 - `physics_engine.winding` —— 卷绕堆积律：匝→层换算、堆积因子、有效半径随匝数生长、
   长度↔匝的正反解（决策0093，力学域实验档）。**它补的是两处已有实现之间缺的那一段**：
   `drives`吃匝答力、`modelgen.generate_spool`吃层答形，中间那层换算此前由调用方随手给。

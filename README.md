@@ -27,8 +27,9 @@ Blender、OCCT、Three.js、VTK等只是可替换适配器。四项目的
 不表示平台、Studio、模型资产系统、Blender桥接或新facet已经实现。
 
 **2026-08-20物理基础设施主线**：用户确认绕制偏差的公共物理基础设施继续在本仓建设，
-WDS维持只读消费方，GCW/WII仍拥有制造几何、中心线、机器人运动学和路径；本仓只通过
-版本化、内容寻址产物消费上游模型事实。第一条新纵切是“测力轮两侧张力→矢量合力→
+WDS维持只读消费方。本仓自己定义`ModelSnapshot`、`PlannedMotion`与
+`ModelPhysicsRelation`；WII以后在产物出口适配模型、规划和运动状态，GCW/CAD只可作为
+可选模型生产者与溯源，不是physics-engine运行时依赖。第一条新纵切是“测力轮两侧张力→矢量合力→
 LTS敏感轴→mV/ADC→小型放线—收线链”。研究、裁决与执行入口分别见
 [research/19](docs/research/19_绕制偏差物理基础设施与上游模型接入调研_20260820.md)、
 [decision/0096](docs/decisions/0096_绕制偏差物理基础设施归本仓与WDS单向消费边界_20260820.md)和
@@ -38,8 +39,10 @@ LTS敏感轴→mV/ADC→小型放线—收线链”。研究、裁决与执行�
 再组合旧`TensionSensor`的mV/ADC；`tension_measurement_sample/0.1`严格复读全部派生量，
 T-M0/T-M1两个合成静力案例使案例数47→49。[decision/0098](docs/decisions/0098_T-M2电气标定与T-M3动态收放线测量链_20260820.md)
 又补上raw/tare桥路、显式清零位置、五级正反程标定、独立holdout、采样时延和小型动态闭环，
-T-M2/T-M3使案例数49→51。四案均为`hypothesis_only`；official WII时间线、现场标定、
-连续卷径、真实导轮/工件和WDS采用仍未落地，主能力分母仍为17/42、端到端仍为0/6。
+T-M2/T-M3使案例数49→51。[decision/0099](docs/decisions/0099_模型快照_规划运动与虚拟物理绑定归本仓_WII后适配_20260820.md)
+又落下合成P3-M0案例，案例数51→52。五案均为`hypothesis_only`；official WII时间线、
+WII真实adapter、现场标定、连续卷径、真实导轮/工件和WDS采用仍未落地，
+主能力分母仍为17/42、端到端仍为0/6。
 
 ## 能力边界（诚实条款）
 

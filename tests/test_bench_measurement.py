@@ -56,6 +56,16 @@ def test_sampled_tension_readout_benchmark_reports_plant_step_costs():
     )
 
 
+def test_model_motion_input_benchmark_reports_strict_document_costs():
+    result = bench._measure_model_motion_input(repeat=2)
+    assert result["batch_size"] == bench.MODEL_MOTION_INPUT_BATCH_SIZE == 100
+    assert result["payload_bytes"] > 0
+    assert result["median_s"] > 0.0
+    assert result["median_per_document_s"] == pytest.approx(
+        result["median_s"] / result["batch_size"], rel=0.0, abs=0.0
+    )
+
+
 def test_source_bytes_include_python_subpackages(tmp_path: Path):
     """必须红：只用``glob('*.py')``会让新增物理域整个隐身。"""
 

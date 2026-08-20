@@ -81,6 +81,11 @@ TENSION_MEASUREMENT_SAMPLE_VERSION = "0.1"
 TENSION_READOUT_SAMPLE_FACET = "tension_readout_sample"
 TENSION_READOUT_SAMPLE_VERSION = "0.1"
 
+#: 上游无关的模型+规划运动+虚拟物理绑定输入包。WII以后通过adapter生成；GCW、CAD
+#: 或其它生产者只可出现在producer/provenance身份中，不进入运行时语义（决策0099）。
+PHYSICS_MODEL_MOTION_INPUT_FACET = "physics_model_motion_input"
+PHYSICS_MODEL_MOTION_INPUT_VERSION = "0.1"
+
 ENGINE_REGISTRY = FacetRegistry(
     Facet(
         name=ACCEPTANCE_RECEIPT_FACET,
@@ -142,6 +147,12 @@ ENGINE_REGISTRY = FacetRegistry(
         max_tested_minor=1,
         status=FacetStatus.DRAFT,
     ),
+    Facet(
+        name=PHYSICS_MODEL_MOTION_INPUT_FACET,
+        major=0,
+        max_tested_minor=1,
+        status=FacetStatus.DRAFT,
+    ),
 )
 
 __all__ = [
@@ -160,6 +171,8 @@ __all__ = [
     "ORACLE_MANIFEST_VERSION",
     "PERF_BASELINE_FACET",
     "PERF_BASELINE_VERSION",
+    "PHYSICS_MODEL_MOTION_INPUT_FACET",
+    "PHYSICS_MODEL_MOTION_INPUT_VERSION",
     "PHYSICS_SCENE_FACET",
     "PHYSICS_SCENE_VERSION",
     "TENSION_MEASUREMENT_SAMPLE_FACET",

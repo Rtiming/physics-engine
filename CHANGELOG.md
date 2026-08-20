@@ -6,6 +6,23 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
 
 ## Unreleased
 
+### 模型、运动与虚拟物理输入基础设施（决策0099）
+
+- 新增`model_snapshot`、`planned_motion`和`model_physics`：引擎自有合同显式记录模型组件与
+  visual/collision资产、时间/无时间规划、多track运动、源状态、送带、
+  static/kinematic/dynamic物理体、虚拟工艺frame和组件/track的明确排除。
+- 新增draft面`physics_model_motion_input/0.1`。严格reader重验模型、运动、关系与
+  外层四层哈希，并对组件、track、几何来源和状态所有权做闭包校验。
+- visual不得回退为collision；dynamic体不得同时订阅运动track；无时间规划不得冒充秒；
+  模型或adapter有实测证据也不得把`PlannedMotion`整包升格为已标定物理。
+- 新增P3-M0`cases/model_motion_physics_binding`：张力机static体、工件kinematic体、
+  机器人visual-only及其显示运动显式排除、process frame虚拟绑定在同一包内闭合；
+  案例51→52。
+- 本机100份3494字节严格包9次中位61.002ms，预算100ms；这是小文档解析/哈希路径，
+  不满足GPU三门槛。
+- WII后续只需在产物出口加adapter。GCW/CAD可作为模型生产者和溯源，但GCW不是
+  physics-engine运行时依赖；本批没有修改WII、GCW或WDS，17/42和端到端0/6不变。
+
 ### 绕制偏差物理基础设施｜张力测量第二批（决策0098）
 
 - 新增`physics_engine.tension_readout`和draft面`tension_readout_sample/0.1`：分别保留
@@ -30,7 +47,7 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
   skip，仓库稳定。srv01墙钟246.0s/180s仍为timing FAIL；比0097同机244.6s增加1.4s，
   与新增T-M3本机中位1.15s量级一致。master预约仍到2026-08-30，不宣称四轴绿。
 - T-M2/T-M3仍是合成小场景；现场标定、ATC600内部结构、连续卷径、摆杆、真实导轮/工件、
-  official WII时间线、GCW输入闭包与WDS采用均未完成，17/42和端到端0/6不变。
+  official WII时间线、WII真实adapter与WDS采用均未完成，17/42和端到端0/6不变。
 
 ### 绕制偏差物理基础设施｜张力测量第一批（决策0096—0097）
 
