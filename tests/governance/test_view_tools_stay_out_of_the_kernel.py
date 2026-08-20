@@ -39,6 +39,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOT = ROOT / "src/physics_engine"
 TOOLS_VIEW = ROOT / "tools/view"
@@ -164,6 +166,7 @@ def test_the_viewer_dependency_never_enters_pyproject():
     )
 
 
+@pytest.mark.batch
 def test_the_viewer_dependency_lives_only_under_tools_view():
     """**边界3**：全仓只有`tools/view/`认识rerun。
 

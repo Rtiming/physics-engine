@@ -74,7 +74,10 @@ Chrono／Bullet／MuJoCo**没有一家为`a = (5/7)g sinθ`立过数值门**
 
 ## 五、档位与负载级
 
-A档、`interactive`（交互级，无marker）。清单`case_id`是`case/rolling_ball_incline`。实测五条门合计约35秒——**主要花在两次20000步积分上**。
+A档、`local_batch`（本机批级，`batch` marker）。清单`case_id`是`case/rolling_ball_incline`。
+顺序基线曾对滚动支重算3次、滑动支重算2次，五条门合计约27.5秒；0102改为
+同一pytest worker内两支各算一次、共享只读module fixture。这是运行内缓存，
+每轮验收都重算，不跨提交沿用结果。单次积分仍明显超过1秒，因此不再冒充交互级。
 
 ## 六、本案例不是什么
 

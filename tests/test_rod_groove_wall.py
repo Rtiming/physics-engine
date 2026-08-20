@@ -60,6 +60,8 @@ from physics_engine.rod import (
 )
 from physics_engine.solve import solve_equilibrium
 
+pytestmark = pytest.mark.batch
+
 NODE_COUNT = 21
 EDGE_COUNT = NODE_COUNT - 1
 LENGTH_MM = 200.0
@@ -193,16 +195,29 @@ FREE_GROOVED_TWIST_RAD = END_TWIST_RAD * (LAST_GROOVED + 1 - FIRST_GROOVED) / (E
 def prescribed():
     """四档罚刚度＋五档槽宽各跑一次，六道门共用。"""
 
+    stiffness_runs = {
+        stiffness: _prescribed_twist(half_gap=HALF_GAP_MM, stiffness=stiffness)
+        for stiffness in (1.0e3, 1.0e4, 1.0e5, 1.0e6)
+    }
+    gap_runs = {
+        gap: (
+            stiffness_runs[WALL_STIFFNESS_N_PER_MM]
+            if gap == HALF_GAP_MM
+            else _prescribed_twist(half_gap=gap)
+        )
+        for gap in (0.9, 0.7, 0.5, 0.3, 0.1)
+    }
     return {
         "free": _prescribed_twist(half_gap=None),
-        "stiffness": {
-            stiffness: _prescribed_twist(half_gap=HALF_GAP_MM, stiffness=stiffness)
-            for stiffness in (1.0e3, 1.0e4, 1.0e5, 1.0e6)
-        },
-        "gaps": {
-            gap: _prescribed_twist(half_gap=gap) for gap in (0.9, 0.7, 0.5, 0.3, 0.1)
-        },
+        "stiffness": stiffness_runs,
+        "gaps": gap_runs,
     }
+
+
+def test_the_same_gap_and_stiffness_fixture_is_computed_once(prescribed):
+    """0.5mm与1e4N/mm是两条扫描的交点，不许重跑同一个确定性求解。"""
+
+    assert prescribed["gaps"][HALF_GAP_MM] is prescribed["stiffness"][WALL_STIFFNESS_N_PER_MM]
 
 
 def _grooved_twist(result, layout) -> float:

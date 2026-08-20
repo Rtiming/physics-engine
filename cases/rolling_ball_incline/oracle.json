@@ -7,10 +7,10 @@
     "algorithm_id": "algorithm:oracle/rolling_ball_incline",
     "algorithm_version": "1.0.0",
     "path_relative": "cases/rolling_ball_incline/generate_oracle.py",
-    "sha256": "172561fb6864b57e68bdb24d841ce2665f26cb9bdc0084d1de3208e1b0ba10f1"
+    "sha256": "bc67f4d41b4e1699a1826613f20ce6018eb3bc08a6f3ab6fd5934ed652914963"
   },
-  "load_tier": "interactive",
-  "manifest_self_sha256": "12ee29ffda3bed9d2db9817a6a8647db14999d7230b63d15416c3a03fc0c6d3b",
+  "load_tier": "local_batch",
+  "manifest_self_sha256": "74731fc310596269474ae34e4b1512b985e8ea7f2c2d55fda1ed9f33b355ceab",
   "oracles": [
     {
       "expected": {

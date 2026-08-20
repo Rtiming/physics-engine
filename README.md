@@ -280,11 +280,12 @@ WDS随后在R25固定材料顶点完成逐纤维塑性history事务，再完成�
 后果是有三条选择进入的通道**从来没有被整体跑过一次**，
 而`accept full`只会报skipped，**skip在回执里看起来和pass一样绿**。
 
-最常用的两条：
+最常用的三条（验收分层与并行裁决见[0102](docs/decisions/0102_验收分层去重与负载下120秒目标_20260820.md)）：
 
 ```bash
-.venv/bin/python -m pytest tests -q -m "not batch and not serverclass"   # 本机快档，约32秒
-bash tools/master/run_accept_on_master.sh full                            # 全档验收（墙钟以master为准）
+.venv/bin/python tools/accept.py quick             # 日常门，当前Mac实测18.4—19.0s/30s
+.venv/bin/python tools/accept.py full              # 本机全档，显著负载下实测90.4s/120s
+bash tools/master/run_accept_on_master.sh full     # 跨机全档（最终墙钟回执以master为准）
 ```
 
 ## 安装与调用（舰队wheelhouse链路，decisions/0010）

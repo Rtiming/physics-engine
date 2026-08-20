@@ -108,7 +108,8 @@ if [ ! -x "$VENV/bin/python" ]; then
     "$VENV/bin/python" -m pip install -q --upgrade pip
 fi
 # 依赖只装本仓声明的dev档，版本按pyproject的约束——不用系统那份pytest 7.4.4。
-"$VENV/bin/python" -m pip install -q 'pytest>=8' 'ruff>=0.15,<1' 'numpy>=1.24'
+"$VENV/bin/python" -m pip install -q \
+    'pytest>=8' 'pytest-xdist>=3.6,<4' 'ruff>=0.15,<1' 'numpy>=1.24'
 
 # `accept.py`把解释器写死成`.venv/bin/python`（它第54行起那张命令表）。
 # 所以检出目录里必须有那条路径——软链指向共享venv，不在每个检出里重装一遍。

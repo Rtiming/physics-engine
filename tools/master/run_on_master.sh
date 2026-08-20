@@ -86,7 +86,8 @@ if [ ! -x "$VENV/bin/python" ]; then
     python3 -m venv "$VENV"
     "$VENV/bin/python" -m pip install -q --upgrade pip
 fi
-"$VENV/bin/python" -m pip install -q 'pytest>=8' 'ruff>=0.15,<1' 'numpy>=1.24'
+"$VENV/bin/python" -m pip install -q \
+    'pytest>=8' 'pytest-xdist>=3.6,<4' 'ruff>=0.15,<1' 'numpy>=1.24'
 ln -sfn "$VENV" "$DIR/.venv"
 echo "[master] uptime: $(uptime)"
 echo "[master] 分区=$PARTITION 核数=$CORES 命令: $USER_CMD"

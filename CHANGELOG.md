@@ -6,6 +6,23 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
 
 ## Unreleased
 
+### 验收分层、去重与并行提速（决策0102）
+
+- `accept.py`的full预算从0089的180s恢复为120s；quick仍为30s。
+- quick/full各只启动一次pytest：full用`not serverclass`在一次收集内包含
+  交互级和batch，不再先重放quick再二次收集batch。五道必需工具门保留。
+- dev档新增`pytest-xdist>=3.6,<4`，核心运行时仍零依赖。默认worker数
+  `min(8, cpu_count-1)`、单核退化1，用`loadscope`保留module fixture复用。
+- `rolling_ball_incline`从错置的interactive改为`local_batch`，同轮两个分支
+  各计算一次，五条门约27.5s→8.22s。`rod_groove_wall`改为module级batch，
+  并去掉槽宽/刚度扫描交点的一次重复牛顿求解。
+- 不采用跨运行结果缓存或`--lf`作验收绿灯；只允许当前worker内的
+  只读fixture复用，代码/输入变化后仍会重算。
+- 当前Mac实测：旧quick 80.798s；改造后quick 18.4—19.0s/30s，提速约4.25倍；
+  load1=8.185/10核时full 2826 passed、6 skipped、五道工具门全过、90.4s/120s。
+- 回归套件的主负载是Python控制流、小状态时步、AST/文件与子进程，GPU不是
+  当前有效路线；Mac和服务器均用有上限的CPU多进程。
+
 ### dynamic质心状态、惯量与几何位姿闭环（决策0101）
 
 - 新增`DynamicBodyInitialState`与唯一状态frame

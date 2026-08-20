@@ -200,7 +200,7 @@ def main() -> int:
         "facet": "engine_oracle_manifest",
         "facet_version": "0.1",
         "case_id": "case/rolling_ball_incline",
-        "load_tier": "interactive",
+        "load_tier": "local_batch",
         "generator": {
             "algorithm_id": ALGORITHM_ID,
             "algorithm_version": ALGORITHM_VERSION,

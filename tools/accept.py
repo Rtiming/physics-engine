@@ -5,9 +5,11 @@ quick 30秒 / full 120秒；功能、计时、资源资格、仓库稳定四轴�
 验收期间仓库身份变了→BLOCKED；零执行命令→BLOCKED。裁决逻辑全部是纯函数，
 governance元测试直接测它们——"判据本身也要被验"。
 
-**双档分家**（plans/02第二节T1）：quick只跑交互级（无marker的测试，spec/13零之二
-第一级）；full = quick的全部命令 + 本机批级（`batch` marker）+ 案例页校验位。
-`quick ⊆ full`由governance元测试守着。
+**双档分家**（plans/02第二节T1）：quick只跑交互级（无marker的测试，
+spec/13零之二第一级）；full用一次pytest收集跑交互级+本机批级，
+另加必需工具门。两档都用有上限的多进程，``loadscope``保证同模块只在一个
+worker中建立fixture，不把运行内只读缓存拆成多份。``quick ⊆ full``由marker
+表达式的语义包含保证，不再靠把quick命令整段重放一遍。
 
 **墙钟不是性能门**（research/05第四节）：共享runner墙钟CV=2.66%，配2%阈值假阳率
 45%——墙钟做门测不到小回退。本验收器的计时轴只裁决**开发吞吐**（30/120预算，
@@ -46,37 +48,54 @@ from physics_engine.engine_facets import (
 )
 
 #: 双档预算，轴6规则1冻结值。改这里必须走决策记录。
-#:
-#: **2026-08-18：full档 120 → 180**（决策0089，所有者裁决）。
-#: 基础设施批次合入后在master同机同分区同核数上实测三次106.8/107.7/106.8，
-#: **余量只剩11%**；而合入前那一棵树是87.7秒（2067条测试）、现在2374条——
-#: 两组数直接可比，**这一次是套件真的在长，不是宿主污染**。
-#: 预算这一轴按spec/07规则1只裁决**开发吞吐**、不裁决物理正确性，
-#: 120这个数是2026-08-05立的（当时26个案例），它代表的判断今天对应的数不再是120。
-#: **代价登记在0089第五节**：分档这件事被推迟了，180的余量约够再来三批；
-#: 0080那条"要裁的是分档而不是抬预算"仍然有效，本次只是买了三批的时间。
-BUDGETS: dict[str, float] = {"quick": 30.0, "full": 180.0}
+#: 0089把full从120抬到180秒，并把"下次必须真分层"登记为代价。
+#: 2026-08-20的0102完成分层、去重和并行后，按用户新口径恢复30/120。
+BUDGETS: dict[str, float] = {"quick": 30.0, "full": 120.0}
 
-#: 交互级命令（spec/13零之二第一级）：quick与full都跑。
-#: pytest的``-m``表达式是双档分家的执行体——无marker=交互级。
-QUICK_COMMANDS: tuple[tuple[str, ...], ...] = (
-    (".venv/bin/python", "-m", "ruff", "check", "src", "tests", "tools", "cases"),
-    (
-        ".venv/bin/python", "-m", "pytest", "tests", "-q",
-        "-m", "not batch and not serverclass",
-    ),
+
+def parallel_worker_count(cpu_count: int | None) -> int:
+    """默认留一个逻辑核给用户负载，同时把worker上限封在8。
+
+    不用全核``-n auto``：本机10核A/B已观测到重测试单项变慢。
+    不知道CPU数时只启一个worker，不冒充可并行。
+    """
+
+    if cpu_count is None or cpu_count < 2:
+        return 1
+    return min(8, cpu_count - 1)
+
+
+PYTEST_WORKERS = parallel_worker_count(os.cpu_count())
+INTERACTIVE_MARKER_EXPRESSION = "not batch and not serverclass"
+FULL_MARKER_EXPRESSION = "not serverclass"
+RUFF_COMMAND = (
+    ".venv/bin/python", "-m", "ruff", "check", "src", "tests", "tools", "cases",
 )
 
-#: 本机批级命令（<2分钟，与120秒全档预算同源）：只有full跑。
-#: 服务器级（`serverclass`）两档都不跑——它按定义不在本机跑，走独立入口。
+
+def _pytest_command(marker_expression: str) -> tuple[str, ...]:
+    return (
+        ".venv/bin/python", "-m", "pytest", "tests", "-q",
+        "-m", marker_expression,
+        "-n", str(PYTEST_WORKERS), "--dist", "loadscope",
+    )
+
+
+QUICK_PYTEST_COMMAND = _pytest_command(INTERACTIVE_MARKER_EXPRESSION)
+FULL_PYTEST_COMMAND = _pytest_command(FULL_MARKER_EXPRESSION)
+
+#: ``BATCH_COMMANDS``保留为档位收集探针，不再由full单独执行。
+#: 这个旧名有governance和历史读者，不做无缓冲破坏。
 BATCH_COMMANDS: tuple[tuple[str, ...], ...] = (
     (".venv/bin/python", "-m", "pytest", "tests", "-q", "-m", "batch"),
 )
 
-#: 各档的命令集。full是quick的**严格超集**（governance测试守着这层关系）。
+#: full与quick各只启一次pytest。full的marker集在语义上包含quick。
+QUICK_COMMANDS: tuple[tuple[str, ...], ...] = (RUFF_COMMAND, QUICK_PYTEST_COMMAND)
+FULL_COMMANDS: tuple[tuple[str, ...], ...] = (RUFF_COMMAND, FULL_PYTEST_COMMAND)
 COMMANDS: dict[str, tuple[tuple[str, ...], ...]] = {
     "quick": QUICK_COMMANDS,
-    "full": QUICK_COMMANDS + BATCH_COMMANDS,
+    "full": FULL_COMMANDS,
 }
 
 #: 工具门（**2026-08-12由"可选位"升为必需**，决策0053第二节）。

@@ -92,6 +92,14 @@ def has_no_nested_quote_job_body(source: str) -> bool:
     return True
 
 
+def installs_parallel_test_dependency(source: str) -> bool:
+    """master共享venv必须与``pyproject.toml``的并行验收依赖一致。"""
+
+    return "pytest-xdist>=3.6,<4" in "\n".join(
+        line for line in source.splitlines() if not line.strip().startswith("#")
+    )
+
+
 @pytest.mark.parametrize("entry", ENTRIES, ids=lambda p: p.name)
 def test_every_master_entry_bundles_the_baseline_ref(entry: Path):
     assert bundles_the_baseline_ref(entry.read_text(encoding="utf-8")), (
@@ -119,6 +127,13 @@ def test_no_master_entry_uses_a_nested_quote_job_body(entry: Path):
     )
 
 
+@pytest.mark.parametrize("entry", ENTRIES, ids=lambda p: p.name)
+def test_every_master_entry_installs_the_parallel_test_dependency(entry: Path):
+    assert installs_parallel_test_dependency(entry.read_text(encoding="utf-8")), (
+        f"{entry.name}没装pytest-xdist——本机门会并行、master却在收集前直接失败"
+    )
+
+
 # ---------------------------------------------------------------------------
 # 必红：三条判据各喂一份植入的坏脚本
 # ---------------------------------------------------------------------------
@@ -134,6 +149,7 @@ def test_no_master_entry_uses_a_nested_quote_job_body(entry: Path):
         ('RUN_TAG="x"\nDIR="$HOME/$REMOTE_DIR/$SHORT-$RUN_TAG"\n'
          'push "$STAGE/x" "$HOST:/tmp/pe-accept-$SHORT.bundle"\n', lands_under_a_run_tag),
         ('srun bash -lc "cd x && $CMD"\n', has_no_nested_quote_job_body),
+        ("pip install pytest ruff numpy\n", installs_parallel_test_dependency),
     ],
 )
 def test_the_three_checks_are_not_empty_gates(planted: str, checker):

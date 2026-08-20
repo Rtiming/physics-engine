@@ -26,19 +26,48 @@ def _result(code: int, elapsed: float = 1.0) -> accept.CommandResult:
 def test_timed_profiles_have_fixed_budgets():
     """预算是轴6规则1的冻结值——**改它必须走决策记录**，本门是那条纪律的执行体。
 
-    改过一次：**2026-08-18 full档 120 → 180**（决策0089，所有者裁决）。
-    当时master同机三次实测106.8/107.7/106.8，余量只剩11%；而合入前那一棵树是87.7秒，
-    两组数同机同分区同核数直接可比——**这一次是套件真的在长，不是宿主污染**。
+    2026-08-20的0102按用户新口径把full恢复为120秒：0089曾用抬到180秒
+    换取三批余量，但它自己登记的触发条件就是下一次应当做真正分层，
+    不许再抬。本轮用单次full收集、多进程与运行内只读fixture缓存兑现。
 
     **这道门红了不是坏事**：它红的那一刻正是"有人在动一个冻结值"，
     该做的是去写决策记录、把代价写下来，然后回来改这一行——**不是把这一行删掉**。
     """
 
-    assert accept.BUDGETS == {"quick": 30.0, "full": 180.0}
+    assert accept.BUDGETS == {"quick": 30.0, "full": 120.0}
 
 
-def test_quick_commands_are_a_subset_of_full():
-    assert set(accept.COMMANDS["quick"]) <= set(accept.COMMANDS["full"])
+def _pytest_commands(profile: str) -> list[tuple[str, ...]]:
+    return [
+        argv
+        for argv in accept.COMMANDS[profile]
+        if len(argv) >= 3 and argv[:3] == (".venv/bin/python", "-m", "pytest")
+    ]
+
+
+def test_each_profile_runs_pytest_once_and_full_semantically_contains_quick():
+    """full不再先跑quick、再启一次pytest收集batch。"""
+
+    quick = _pytest_commands("quick")
+    full = _pytest_commands("full")
+    assert len(quick) == len(full) == 1
+    assert accept.INTERACTIVE_MARKER_EXPRESSION == "not batch and not serverclass"
+    assert accept.FULL_MARKER_EXPRESSION == "not serverclass"
+    assert accept.INTERACTIVE_MARKER_EXPRESSION in quick[0]
+    assert accept.FULL_MARKER_EXPRESSION in full[0]
+
+
+def test_pytest_parallelism_reserves_capacity_and_keeps_module_fixtures_together():
+    """loadscope是缓存语义的一部分：同一模块不许被拆给多个worker重建fixture。"""
+
+    assert accept.parallel_worker_count(1) == 1
+    assert accept.parallel_worker_count(2) == 1
+    assert accept.parallel_worker_count(4) == 3
+    assert accept.parallel_worker_count(10) == 8
+    for profile in ("quick", "full"):
+        command = _pytest_commands(profile)[0]
+        assert command[command.index("-n") + 1] == str(accept.PYTEST_WORKERS)
+        assert command[command.index("--dist") + 1] == "loadscope"
 
 
 def test_all_green_within_budget_passes():
@@ -297,6 +326,7 @@ def test_no_tier_is_exempt_today_because_no_tier_is_empty_today():
         )
 
 
+@pytest.mark.batch
 def test_the_batch_tier_is_not_empty_which_is_why_its_exemption_was_removed():
     """**上一条的红分支**：如果`batch`还在豁免名单里，它现在就该红。
 
@@ -317,6 +347,7 @@ def test_hard_timeout_is_a_liveness_guard_not_the_sla():
     assert accept.HARD_TIMEOUT_FACTOR > 1.0
 
 
+@pytest.mark.batch
 def test_timeout_kills_the_whole_descendant_tree(tmp_path):
     """accept.py:152的洞：只杀直接子进程会让派生子进程的对拍脚本挂死。"""
 

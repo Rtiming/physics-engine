@@ -14,18 +14,19 @@
 | 想干什么 | 命令 | 期望 |
 |---|---|---|
 | **改完代码的内循环**（秒级） | `.venv/bin/python -m pytest tests/test_你在动的.py -q` | 绿 |
-| **本机快档**（约35秒、2525条） | `.venv/bin/python -m pytest tests -q -m "not batch and not serverclass"` | 全绿，5条skip各带理由 |
+| **本机快档**（30秒预算） | `.venv/bin/python tools/accept.py quick` | `functional/timing/overall=PASS`；2026-08-20在Mac实测2622—2632 passed、5—6 skipped、18.4—19.0s |
 
 ## 二、验收：**墙钟以master为准，不以本机为准**
 
 | 想干什么 | 命令 | 期望 |
 |---|---|---|
-| **全档验收（权威）** | `bash tools/master/run_accept_on_master.sh full` | `overall=PASS functional=PASS timing=PASS perf=EVALUABLE resource=QUALIFIED`，墙钟约**117秒/180**（2026-08-19 master三次中位数） |
-| **本机全档**（只作参考） | `.venv/bin/python tools/accept.py full` | 四轴绿，但**这台Mac整天负载5—20，本机墙钟不进台账** |
+| **全档验收（跨机回执）** | `bash tools/master/run_accept_on_master.sh full` | `overall=PASS functional=PASS timing=PASS perf=EVALUABLE resource=QUALIFIED`；预算已由0102恢复为120s |
+| **本机全档** | `.venv/bin/python tools/accept.py full` | 同样必须四轴绿；2026-08-20在10核Mac、load1=8.185时实测2826 passed、6 skipped、90.4s/120s |
 | **在master跑任意一条命令** | `bash tools/master/run_on_master.sh '<命令>'` | 回执带节点、负载、核数 |
 
-**为什么墙钟只认master**：plans/16的M8立的口径。同一功能面在本机实测到过
-93.7／121.5／188.8／225四个数，而在master上三次跑离散度<1%。
+**为什么还要master**：本机门是开发节奏的一级事实，master是跨机可移植与干净提交的第二份回执。
+历史上同一功能面在本机实测过93.7/121.5/188.8/225s，故0102同时保留资源资格轴与
+当前树的本机实测，不用任一个旧墙钟代替本次结果。
 
 ## 三、选择进入档：**真实资产永不进仓（0073），所以要指给它**
 

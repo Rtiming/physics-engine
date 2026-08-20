@@ -139,6 +139,7 @@ def test_portability_check_reds_when_the_checker_is_missing(checker, tmp_path):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.batch
 def test_tests_are_collectable_in_this_repo(checker):
     """绿分支：主仓收集得到用例。"""
 
