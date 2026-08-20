@@ -33,7 +33,11 @@ LTS敏感轴→mV/ADC→小型放线—收线链”。研究、裁决与执行�
 [research/19](docs/research/19_绕制偏差物理基础设施与上游模型接入调研_20260820.md)、
 [decision/0096](docs/decisions/0096_绕制偏差物理基础设施归本仓与WDS单向消费边界_20260820.md)和
 [plans/19](docs/plans/19_绕制偏差物理基础设施与张力测量小场景计划_20260820.md)。
-三页当前只完成方向与验收设计，不表示物理代码、official WII时间线或现场标定已经落地。
+[decision/0097](docs/decisions/0097_测力轮张力测量物理与T-M0_T-M1_20260820.md)已经落下第一片：
+`tension_measurement`把两侧张力装配为三维合力，分出敏感轴、tare、gross/net与支承载荷，
+再组合旧`TensionSensor`的mV/ADC；`tension_measurement_sample/0.1`严格复读全部派生量，
+T-M0/T-M1两个合成静力案例使案例数47→49。它们不表示T-M2/T-M3、official WII时间线、
+现场标定或WDS采用已经落地，主能力分母仍为17/42、端到端仍为0/6。
 
 ## 能力边界（诚实条款）
 

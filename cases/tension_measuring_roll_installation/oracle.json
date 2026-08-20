@@ -1,0 +1,253 @@
+{
+  "arrays": {},
+  "case_id": "case/tension_measuring_roll_installation",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/tension_measuring_roll_installation",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/tension_measuring_roll_installation/generate_oracle.py",
+    "sha256": "702a0437cdfa27388c00f1fa414caf78d77b7f56b295b22fc6c457c6cd1ee9a8"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "2e27b0fcb911d3dc1acc42abeee0fdf11d6a62629d19c02fbe970acdbe006de0",
+  "oracles": [
+    {
+      "expected": {
+        "gross_axis_force_n": 14.142135623730951,
+        "net_axis_force_n": 14.142135623730951,
+        "support_gross_forces_n": [
+          14.142135623730951
+        ],
+        "support_net_forces_n": [
+          14.142135623730951
+        ],
+        "support_tare_forces_n": [
+          0.0
+        ],
+        "tare_axis_force_n": 0.0
+      },
+      "id": "oracle:tension-measuring-roll/single_aligned_no_tare",
+      "inputs": {
+        "incoming_tangent_xyz": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "incoming_tension_n": 10.0,
+        "outgoing_tangent_xyz": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "outgoing_tension_n": 10.0,
+        "sensor_axis_xyz": [
+          -0.7071067811865476,
+          0.7071067811865476,
+          0.0
+        ],
+        "support_shares": [
+          1.0
+        ],
+        "tare_force_n_xyz": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "tolerances": {
+        "gross_axis_force_n": {
+          "abs": 8e-15,
+          "reason": "刚体矢量和后一次轴投影；给约4 ulp覆盖第三个非轴对齐构型。",
+          "rel": 4e-16
+        },
+        "net_axis_force_n": {
+          "abs": 8e-15,
+          "reason": "net=gross-tare；角度改变读数但tare后仍只保留web轴向分量。",
+          "rel": 4e-16
+        },
+        "support_gross_forces_n": {
+          "abs": 8e-15,
+          "reason": "显式支承份额乘gross；不由实现猜单/双支承。",
+          "rel": 4e-16
+        },
+        "support_net_forces_n": {
+          "abs": 8e-15,
+          "reason": "各支承net之和必须回到总net，支承分配不能改变总测量力。",
+          "rel": 4e-16
+        },
+        "support_tare_forces_n": {
+          "abs": 4e-15,
+          "reason": "同一支承份额必须作用于tare层。",
+          "rel": 4e-16
+        },
+        "tare_axis_force_n": {
+          "abs": 4e-15,
+          "reason": "tare单独投影，不能从gross倒猜，否则门对共同错误失明。",
+          "rel": 4e-16
+        }
+      }
+    },
+    {
+      "expected": {
+        "gross_axis_force_n": 19.14213562373095,
+        "net_axis_force_n": 14.142135623730951,
+        "support_gross_forces_n": [
+          9.571067811865476,
+          9.571067811865476
+        ],
+        "support_net_forces_n": [
+          7.0710678118654755,
+          7.0710678118654755
+        ],
+        "support_tare_forces_n": [
+          2.5000000000000004,
+          2.5000000000000004
+        ],
+        "tare_axis_force_n": 5.000000000000001
+      },
+      "id": "oracle:tension-measuring-roll/double_aligned_with_tare",
+      "inputs": {
+        "incoming_tangent_xyz": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "incoming_tension_n": 10.0,
+        "outgoing_tangent_xyz": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "outgoing_tension_n": 10.0,
+        "sensor_axis_xyz": [
+          -0.7071067811865476,
+          0.7071067811865476,
+          0.0
+        ],
+        "support_shares": [
+          0.5,
+          0.5
+        ],
+        "tare_force_n_xyz": [
+          -3.5355339059327378,
+          3.5355339059327378,
+          0.0
+        ]
+      },
+      "tolerances": {
+        "gross_axis_force_n": {
+          "abs": 8e-15,
+          "reason": "刚体矢量和后一次轴投影；给约4 ulp覆盖第三个非轴对齐构型。",
+          "rel": 4e-16
+        },
+        "net_axis_force_n": {
+          "abs": 8e-15,
+          "reason": "net=gross-tare；角度改变读数但tare后仍只保留web轴向分量。",
+          "rel": 4e-16
+        },
+        "support_gross_forces_n": {
+          "abs": 8e-15,
+          "reason": "显式支承份额乘gross；不由实现猜单/双支承。",
+          "rel": 4e-16
+        },
+        "support_net_forces_n": {
+          "abs": 8e-15,
+          "reason": "各支承net之和必须回到总net，支承分配不能改变总测量力。",
+          "rel": 4e-16
+        },
+        "support_tare_forces_n": {
+          "abs": 4e-15,
+          "reason": "同一支承份额必须作用于tare层。",
+          "rel": 4e-16
+        },
+        "tare_axis_force_n": {
+          "abs": 4e-15,
+          "reason": "tare单独投影，不能从gross倒猜，否则门对共同错误失明。",
+          "rel": 4e-16
+        }
+      }
+    },
+    {
+      "expected": {
+        "gross_axis_force_n": 17.577575732838085,
+        "net_axis_force_n": 12.24744871391589,
+        "support_gross_forces_n": [
+          5.273272719851425,
+          12.304303012986658
+        ],
+        "support_net_forces_n": [
+          3.674234614174767,
+          8.573214099741122
+        ],
+        "support_tare_forces_n": [
+          1.599038105676658,
+          3.7310889132455354
+        ],
+        "tare_axis_force_n": 5.330127018922194
+      },
+      "id": "oracle:tension-measuring-roll/explicit_asymmetric_support_and_thirty_degree_axis",
+      "inputs": {
+        "incoming_tangent_xyz": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "incoming_tension_n": 10.0,
+        "outgoing_tangent_xyz": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "outgoing_tension_n": 10.0,
+        "sensor_axis_xyz": [
+          -0.25881904510252085,
+          0.9659258262890683,
+          0.0
+        ],
+        "support_shares": [
+          0.3,
+          0.7
+        ],
+        "tare_force_n_xyz": [
+          -2.121320343559643,
+          4.949747468305833,
+          0.0
+        ]
+      },
+      "tolerances": {
+        "gross_axis_force_n": {
+          "abs": 8e-15,
+          "reason": "刚体矢量和后一次轴投影；给约4 ulp覆盖第三个非轴对齐构型。",
+          "rel": 4e-16
+        },
+        "net_axis_force_n": {
+          "abs": 8e-15,
+          "reason": "net=gross-tare；角度改变读数但tare后仍只保留web轴向分量。",
+          "rel": 4e-16
+        },
+        "support_gross_forces_n": {
+          "abs": 8e-15,
+          "reason": "显式支承份额乘gross；不由实现猜单/双支承。",
+          "rel": 4e-16
+        },
+        "support_net_forces_n": {
+          "abs": 8e-15,
+          "reason": "各支承net之和必须回到总net，支承分配不能改变总测量力。",
+          "rel": 4e-16
+        },
+        "support_tare_forces_n": {
+          "abs": 4e-15,
+          "reason": "同一支承份额必须作用于tare层。",
+          "rel": 4e-16
+        },
+        "tare_axis_force_n": {
+          "abs": 4e-15,
+          "reason": "tare单独投影，不能从gross倒猜，否则门对共同错误失明。",
+          "rel": 4e-16
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

@@ -6,6 +6,26 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
 
 ## Unreleased
 
+### 绕制偏差物理基础设施｜张力测量第一批（决策0096—0097）
+
+- 新增`physics_engine.tension_measurement`：入口/出口材料行进切向与两侧张力装配成三维
+  web合力，继续分出导轮静载/tare、敏感轴gross/net和显式支承份额；不再把“带材张力”
+  “传感器轴向力”和“显示张力”压成同一个裸量。
+- 保持`drives.TensionSensor`源码与公开行为不变，在外层组合5kg/20mV、ADC和
+  `sensor_force_per_span_tension_gain`。电气字段明确是tare清零后的理想路径，不冒充原始gross
+  桥路或真实过载结构。未标定样点恒为`hypothesis_only`；标定证据完整时也只报
+  `calibrated_model`，不冒充直接硬件测量。
+- 新增draft面`tension_measurement_sample/0.1`：严格键集、版本、自指哈希与派生量重算；
+  手改net力或显示值后即使重算哈希仍会红。
+- 新增T-M0`cases/tension_measuring_roll_resultant`和T-M1
+  `cases/tension_measuring_roll_installation`，案例47→49。独立生成器分别验证
+  0°/60°/90°/180°闭式与三种安装/tare/支承刚体静力；两个案例均为合成
+  `hypothesis_only`，所以17/42和端到端0/6均不变。
+- 性能台账新增1000个静态测量样点工作负载：Apple M4本机中位数约25ms，预算50ms；
+  当前是Python常数规模交互路径，不满足GPU三门槛，零运行时依赖不变。
+- T-M2五点标定/采样时延、T-M3动态收放线、现场LTS参数、official WII时间线、上游输入闭包
+  与WDS采用均未完成；本批没有修改WDS、WII或GCW。
+
 ### 基础设施批次二｜五条轨并行（决策0089—0094）
 
 用户口径："预算抬到180"、"看看所有相关的基础设施有没有补好，你都跑一跑试一试各种场景

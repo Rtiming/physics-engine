@@ -69,6 +69,12 @@ MATERIAL_RECORD_VERSION = "0.1"
 ENGINE_RUN_TRACE_FACET = "engine_run_trace"
 ENGINE_RUN_TRACE_VERSION = "0.1"
 
+#: 张力测量样点面：从两侧带材张力/方向一路保留到测力轮合力、敏感轴、
+#: tare、支承、电气量化与显示张力的分层结果（决策0097、plans/19 P0）。
+#: 出生draft——真实LTS标定与WDS消费均未完成，不作兼容承诺。
+TENSION_MEASUREMENT_SAMPLE_FACET = "tension_measurement_sample"
+TENSION_MEASUREMENT_SAMPLE_VERSION = "0.1"
+
 ENGINE_REGISTRY = FacetRegistry(
     Facet(
         name=ACCEPTANCE_RECEIPT_FACET,
@@ -118,6 +124,12 @@ ENGINE_REGISTRY = FacetRegistry(
         max_tested_minor=1,
         status=FacetStatus.DRAFT,
     ),
+    Facet(
+        name=TENSION_MEASUREMENT_SAMPLE_FACET,
+        major=0,
+        max_tested_minor=1,
+        status=FacetStatus.DRAFT,
+    ),
 )
 
 __all__ = [
@@ -138,4 +150,6 @@ __all__ = [
     "PERF_BASELINE_VERSION",
     "PHYSICS_SCENE_FACET",
     "PHYSICS_SCENE_VERSION",
+    "TENSION_MEASUREMENT_SAMPLE_FACET",
+    "TENSION_MEASUREMENT_SAMPLE_VERSION",
 ]

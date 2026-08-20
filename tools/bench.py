@@ -21,8 +21,10 @@ MuJoCo的CI干脆不跑benchmark，Drake在README里明写其基准不承担回�
   WDS在≤321节点上测到0.59）；
 * ``integration``：``integrate``在``PurePythonOps``与``NumpyOps``下各跑固定步数，
   并且**分物理加速度回调与常加速度回调两种**——两者之差正是加速档边界的位置。
+* ``tension_measurement_static``：1000个T-M1静力样点，覆盖矢量合力、敏感轴、
+  tare与双支承，不接电气量化；这是plans/19要求新公开操作出生即带的预算。
 
-这三组也**不进门**，理由与墙钟同（决策0018第一节未被本页改动）。它们的用途是
+这些物理组也**不进门**，理由与墙钟同（决策0018第一节未被本页改动）。它们的用途是
 spec/13第一节义务1的那个前提：**没有热点数据的优化提案不受理**。
 
 进程内计时不关GC（``timeit``默认会关）——关掉GC测出来的是实验室数，
@@ -65,7 +67,9 @@ from physics_engine.integrate import (
     PurePythonOps,
     integrate,
 )
+from physics_engine.materials import EvidenceRef
 from physics_engine.state import State, StateField, StateLayout
+from physics_engine.tension_measurement import MeasuringRoll
 
 EXAMPLE_SCENE = ROOT / "examples/collision_preview_cell.scene.json"
 
@@ -82,6 +86,7 @@ INTEGRATION_CASES: tuple[tuple[int, int, int], ...] = ((8, 200, 2000), (128, 40,
 PROFILE_NODES = 512
 PROFILE_INTEGRATION_STEPS = 10
 PROFILE_TOP = 15
+TENSION_MEASUREMENT_BATCH_SIZE = 1000
 
 
 class BenchmarkError(RuntimeError):
@@ -211,6 +216,38 @@ def _time_in_process(work: Callable[[], object], repeat: int) -> dict:
         "repeat": repeat,
         "load_average_1m": _load_average(),
     }
+
+
+def _measure_tension_measurement(repeat: int) -> dict:
+    """1000个静力测量样点；输入固定，便于跨版本同口径复测。"""
+
+    root_half = math.sqrt(0.5)
+    roll = MeasuringRoll(
+        measurement_id="measurement/bench-tension-roll",
+        sensor_axis_xyz=(-root_half, root_half, 0.0),
+        tare_force_n_xyz=(-5.0 * root_half, 5.0 * root_half, 0.0),
+        support_shares=(0.5, 0.5),
+        evidence=EvidenceRef(
+            grade="estimated",
+            evidence_id="evidence/bench-tension-roll-synthetic",
+            method="Synthetic fixed input for performance measurement only.",
+        ),
+    )
+
+    def batch() -> None:
+        for _ in range(TENSION_MEASUREMENT_BATCH_SIZE):
+            roll.measure(
+                incoming_tension_n=10.0,
+                outgoing_tension_n=10.0,
+                incoming_tangent_xyz=(1.0, 0.0, 0.0),
+                outgoing_tangent_xyz=(0.0, 1.0, 0.0),
+            )
+
+    result = _time_in_process(batch, repeat)
+    result["batch_size"] = TENSION_MEASUREMENT_BATCH_SIZE
+    result["median_per_sample_s"] = result["median_s"] / TENSION_MEASUREMENT_BATCH_SIZE
+    result["min_per_sample_s"] = result["min_s"] / TENSION_MEASUREMENT_BATCH_SIZE
+    return result
 
 
 def build_chain(
@@ -540,6 +577,7 @@ def measure_physics(repeat: int, *, with_profile: bool) -> dict:
         "scaling": _fit_scaling(assembly),
         "integration": _measure_integration(repeat),
         "solver_path_assembly": _measure_solver_path(repeat),
+        "tension_measurement_static": _measure_tension_measurement(repeat),
     }
     if with_profile:
         report["hotspots"] = {
@@ -613,6 +651,12 @@ def _print_physics(physics: dict) -> None:
     print(
         f"  求解器那一次装配（{'+'.join(solver['terms'])}，N={solver['nodes']}，梯度＋Hessian）"
         f" median={solver['median_s'] * 1e3:.1f}ms min={solver['min_s'] * 1e3:.1f}ms"
+    )
+    measurement = physics["tension_measurement_static"]
+    print(
+        f"  张力测量静力 {measurement['batch_size']}样点 "
+        f"median={measurement['median_s'] * 1e3:.3f}ms "
+        f"per_sample={measurement['median_per_sample_s'] * 1e6:.3f}us"
     )
     print("  积分推进 pure_python/numpy 耗时比")
     for record in physics["integration"]:

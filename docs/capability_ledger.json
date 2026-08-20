@@ -521,12 +521,17 @@
           "status": "partial",
           "exercises_physics": true,
           "evidence": [
+            "case:tension_measuring_roll_resultant",
+            "case:tension_measuring_roll_installation",
+            "test:tests/cases/test_tension_measuring_roll_resultant.py::test_vector_force_and_closed_form_magnitude_match_independent_oracle",
+            "test:tests/cases/test_tension_measuring_roll_installation.py::test_installation_layers_match_the_independent_statics_oracles",
             "test:tests/test_drives.py::test_the_load_cell_spans_five_kilograms_over_twenty_millivolts",
             "test:tests/test_drives.py::test_the_adc_resolution_is_the_floor_of_the_whole_loop",
-            "test:tests/test_drives.py::test_the_loop_regulates_what_it_measures_not_what_matters"
+            "test:tests/test_drives.py::test_the_loop_regulates_what_it_measures_not_what_matters",
+            "test:tests/test_tension_measurement.py::test_sealed_sample_round_trips_and_recomputes_every_derived_quantity"
           ],
-          "why": "闭环要测量。spec/10六接口里它与`Actuator`成对。0062轨道乙已落`drives.TensionSensor`：按真机LTS1-5（5kg满量程、20mV max，2026-06-08已核）建满量程截断＋线性mV输出＋ADC就近量化，并接进`TensionLoop`。**量化台阶是整条回路精度的地板**——8/10/12/16位实测末态偏差92.4/19.3/0.685/0.179 mN，恒不超过半个台阶。同批量出了这条链路上最大的一个误差源：**闭环调的是它测到的量，不是要紧的那个量**。传感器与被控点之间每隔一个包角张力乘`exp(μθ)`，μ=0.3、90°时被控点真实张力比设定高**60.2%**（30N设定给出48.06N）；方向搞反误差是平方（r²=2.566）。",
-          "missing": "**没有接`sensors.SensorDeclaration`**：`read()`这个方法名仍不存在，本片是`drives`里的一个换算器而不是spec/10 `Sensor`接口的实现（与S6.3同一形状，0062第9.1节）。**测量路径没有时延**：命令路径有`ActuationDelayLine`，采样与转换延迟没建，真机ATC600的采样周期与内部转换位数手册都没给。无计米/匝数读出（真机`MPOS AXIS(0)`，比例仍需现场标定）、无零漂/温漂/非线性/蠕变、无悬臂安装角（真机LTS读的是合力在悬臂方向的分量，方向由两侧包角决定）。`VR451`的换算比例至今仍需现场标定确认。故只报partial。"
+          "why": "闭环要测量。spec/10六接口里它与`Actuator`成对。0062轨道乙已落`drives.TensionSensor`：按真机LTS1-5（5kg满量程、20mV max，2026-06-08已核）建满量程截断＋线性mV输出＋ADC就近量化，并接进`TensionLoop`。0097又补上此前缺失的力学半边：两侧跨段张力按材料行进切向装配为三维web合力，再分出敏感轴上的gross、tare、net与逐支承载荷，最后组合旧`TensionSensor`得到mV、量化力和显示张力；跨边界样点会严格复读并重算全部派生量。T-M0用0°/60°/90°/180°对独立`2*T*sin(beta/2)`闭式，T-M1用三种安装/支承构型对独立刚体静力。**量化台阶仍是电气链精度的地板**——8/10/12/16位实测末态偏差92.4/19.3/0.685/0.179 mN，恒不超过半个台阶。此前已经量出的另一边界也不变：闭环调的是它测到的量，不是要紧的那个量；隔一个摩擦包角时被控点张力可以明显偏离设定。",
+          "missing": "**仍然没有接`sensors.SensorDeclaration`**：`read()`这个方法名不存在，新模块是mechanics域测量模型，不是spec/10 `Sensor`接口实现。**T-M2尚未形成正式案例，测量路径也没有时延**：五点正反程标定、留出点、采样/转换延迟、ATC600内部位数都未闭合。无计米/匝数读出（真机`MPOS AXIS(0)`比例仍需现场标定），无零漂/温漂/非线性/蠕变和动态惯性。安装角、tare和支承份额已经能显式建模，**但现场值仍未知**：LTS单/双支承、真实敏感轴、导轮组件重量、包角和`VR451`比例都没有现场标定。一个LTS仍不能直接拆出T0—T4。故只报partial。"
         },
         {
           "id": "S6.5",

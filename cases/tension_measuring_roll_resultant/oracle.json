@@ -1,0 +1,105 @@
+{
+  "arrays": {},
+  "case_id": "case/tension_measuring_roll_resultant",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/tension_measuring_roll_resultant",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/tension_measuring_roll_resultant/generate_oracle.py",
+    "sha256": "d0db6bce23fd09bdf1984743103035d65dee5a6bd3d1d4566796a45e218a0cba"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "f5401969f6e28ab7d290bd69ed6eb8a92605f74e53ea0b490f8dbb45960a760b",
+  "oracles": [
+    {
+      "expected": {
+        "resultant_force_n": [
+          0.0,
+          16.999999999999996,
+          24.041630560342615,
+          34.0
+        ],
+        "web_force_x_n": [
+          0.0,
+          -8.5,
+          -17.0,
+          -34.0
+        ],
+        "web_force_y_n": [
+          0.0,
+          14.722431864335457,
+          17.0,
+          0.0
+        ],
+        "web_force_z_n": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "id": "oracle:tension-measuring-roll/equal-tension-resultant",
+      "inputs": {
+        "incoming_tangent_xyz": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "incoming_tension_n": 17.0,
+        "outgoing_tangent_xyz": [
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.5,
+            0.8660254037844386,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            -1.0,
+            0.0,
+            0.0
+          ]
+        ],
+        "outgoing_tension_n": 17.0,
+        "wrap_angles_deg": [
+          0.0,
+          60.0,
+          90.0,
+          180.0
+        ]
+      },
+      "tolerances": {
+        "resultant_force_n": {
+          "abs": 4e-15,
+          "reason": "2*T*sin(beta/2)独立闭式；余量约2 ulp，不给符号或补角错误留空间。",
+          "rel": 4e-16
+        },
+        "web_force_x_n": {
+          "abs": 4e-15,
+          "reason": "直接矢量和只有一次乘加；4e-15约覆盖17N量级的2 ulp。",
+          "rel": 0.0
+        },
+        "web_force_y_n": {
+          "abs": 4e-15,
+          "reason": "同上；判绝对误差可覆盖0分量而不在零点除法。",
+          "rel": 0.0
+        },
+        "web_force_z_n": {
+          "abs": 0.0,
+          "reason": "全部输入在xy平面，z分量按构造必须逐位为0.0。",
+          "rel": 0.0
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

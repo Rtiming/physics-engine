@@ -152,6 +152,11 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
         #: 装配层同时依赖两边，塞进任何一边都会让那一边反向依赖另一边。
         #: 判据仍是0035那条：**import决定环，不是愿望决定环**。
         "tension_control",
+        #: `tension_measurement`归力学（2026-08-20，决策0096）：它import`drives`
+        #: 的LTS电气量化与`materials`的证据记录，前者在力学、后者在基座；没有跨域边。
+        #: 没长进`sensors`的理由是`sensors`只做“装得住吗”的声明校验，本模块算的是
+        #: 两侧带材张力如何变成测力轮合力与敏感轴读数，是真物理。
+        "tension_measurement",
         "transport",
         #: `winding`归力学（2026-08-18，决策0093）：包内只import`feed`一条边、
         #: 在域内、不向上。它补的是`drives`（吃匝答力）与`modelgen.generate_spool`
