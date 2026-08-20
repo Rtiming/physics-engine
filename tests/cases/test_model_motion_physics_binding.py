@@ -63,6 +63,7 @@ def _package() -> PhysicsModelMotionInput:
     components = (
         ModelComponent(
             "model-component/tension-machine",
+            "frame/tension-machine",
             "tension_machine",
             None,
             identity,
@@ -71,6 +72,7 @@ def _package() -> PhysicsModelMotionInput:
         ),
         ModelComponent(
             "model-component/workpiece",
+            "frame/workpiece",
             "workpiece",
             None,
             identity,
@@ -79,6 +81,7 @@ def _package() -> PhysicsModelMotionInput:
         ),
         ModelComponent(
             "model-component/robot-display",
+            "frame/robot-display",
             "robot_display",
             None,
             identity,

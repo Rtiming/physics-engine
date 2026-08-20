@@ -136,6 +136,7 @@ class ModelAssetRef:
 @dataclass(frozen=True)
 class ModelComponent:
     component_id: str
+    frame_id: str
     semantic_role: str
     parent_component_id: str | None
     parent_from_component: Pose
@@ -144,6 +145,7 @@ class ModelComponent:
 
     def __post_init__(self) -> None:
         _require_namespace(self.component_id, "model-component", "component_id")
+        _require_namespace(self.frame_id, "frame", "frame_id")
         _require_identifier(self.semantic_role, "semantic_role")
         if self.parent_component_id is not None:
             _require_namespace(
@@ -167,6 +169,7 @@ class ModelComponent:
     def to_document(self) -> dict[str, Any]:
         return {
             "component_id": self.component_id,
+            "frame_id": self.frame_id,
             "semantic_role": self.semantic_role,
             "parent_component_id": self.parent_component_id,
             "parent_from_component": pose_to_document(self.parent_from_component),
@@ -200,6 +203,9 @@ class ModelSnapshot:
         component_ids = tuple(component.component_id for component in self.components)
         if len(set(component_ids)) != len(component_ids):
             raise ModelSnapshotError("model component IDs must be unique")
+        component_frames = tuple(component.frame_id for component in self.components)
+        if len(set(component_frames)) != len(component_frames):
+            raise ModelSnapshotError("model component frame IDs must be unique")
         known = set(component_ids)
         for component in self.components:
             if (
@@ -331,6 +337,7 @@ def model_snapshot_from_document(value: object) -> ModelSnapshot:
     components = []
     component_keys = {
         "component_id",
+        "frame_id",
         "semantic_role",
         "parent_component_id",
         "parent_from_component",
@@ -343,6 +350,7 @@ def model_snapshot_from_document(value: object) -> ModelSnapshot:
         components.append(
             ModelComponent(
                 component_id=raw["component_id"],
+                frame_id=raw["frame_id"],
                 semantic_role=raw["semantic_role"],
                 parent_component_id=raw["parent_component_id"],
                 parent_from_component=pose_from_document(

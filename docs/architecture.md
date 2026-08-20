@@ -40,7 +40,9 @@ WII规划/运动状态adapter ─├─> 模型—运动—物理绑定 ─> phy
 
 `model_snapshot`记模型组件、visual/collision资产与参考位姿；`planned_motion`记时间/
 无时间规划、多track、源状态和送带；`model_physics`独立裁决static/kinematic/dynamic体、
-虚拟工艺frame与明确排除。模型生产者可以是WII、CAD、人工包或GCW；GCW只是可选溯源，
+虚拟工艺frame与明确排除。0100起，`scene_resources`重读包内资产字节/SHA并接显式AABB/凸性，
+`model_scene`把static/kinematic体、时间/规划尺度运动、虚拟frame和显式候选接进既有Scene/CollisionQuery。
+模型生产者可以是WII、CAD、人工包或GCW；GCW只是可选溯源，
 不是运行时前置。WII保留IK/FK和路径规划所有权，后续只加产物adapter。WDS不得反向改写上游，
 也不复制公共物理。
 完整证据与实施路线见[research/19](research/19_绕制偏差物理基础设施与上游模型接入调研_20260820.md)、

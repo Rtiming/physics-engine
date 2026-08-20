@@ -27,6 +27,8 @@ MuJoCo的CI干脆不跑benchmark，Drake在README里明写其基准不承担回�
   10步抽取、5样点时延和零阶保持；它回答采样通道是不是值得为GPU另开后端。
 * ``model_motion_input_load``：100份P3-M0严格输入包复读，覆盖四层内容哈希、模型组件、
   规划track和虚拟物理所有权闭包；WII适配以后不会改变这条内核成本口径。
+* ``model_scene_assembly``：100份P3.1两体场景装配，资源已预加载，量位姿组合、
+  Scene finalize、MotionSource、虚拟frame和显式候选装配的进程内成本。
 
 这些物理组也**不进门**，理由与墙钟同（决策0018第一节未被本页改动）。它们的用途是
 spec/13第一节义务1的那个前提：**没有热点数据的优化提案不受理**。
@@ -53,6 +55,7 @@ from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 from physics_engine.canonical import FTS_PROFILE, WDS_PROFILE, canonical_file_bytes
@@ -81,6 +84,7 @@ from physics_engine.model_physics import (
     PhysicsModelMotionInput,
     load_physics_model_motion_input,
 )
+from physics_engine.model_scene import assemble_model_physics_scene
 from physics_engine.model_snapshot import (
     AssetRole,
     ModelAssetRef,
@@ -107,6 +111,7 @@ from physics_engine.tension_readout import (
     TensionReadout,
     TensionReadoutChannel,
 )
+from tools.bench_model_scene import build_model_scene_benchmark_fixture
 
 EXAMPLE_SCENE = ROOT / "examples/collision_preview_cell.scene.json"
 
@@ -126,6 +131,7 @@ PROFILE_TOP = 15
 TENSION_MEASUREMENT_BATCH_SIZE = 1000
 TENSION_READOUT_BATCH_SIZE = 1000
 MODEL_MOTION_INPUT_BATCH_SIZE = 100
+MODEL_SCENE_ASSEMBLY_BATCH_SIZE = 100
 
 
 class BenchmarkError(RuntimeError):
@@ -375,6 +381,7 @@ def _measure_model_motion_input(repeat: int) -> dict:
         components=(
             ModelComponent(
                 component_id="model-component/bench-workpiece",
+                frame_id="frame/bench-workpiece",
                 semantic_role="workpiece",
                 parent_component_id=None,
                 parent_from_component=identity,
@@ -471,6 +478,24 @@ def _measure_model_motion_input(repeat: int) -> dict:
     result["payload_bytes"] = len(payload)
     result["median_per_document_s"] = result["median_s"] / MODEL_MOTION_INPUT_BATCH_SIZE
     result["min_per_document_s"] = result["min_s"] / MODEL_MOTION_INPUT_BATCH_SIZE
+    return result
+
+
+def _measure_model_scene_assembly(repeat: int) -> dict:
+    """100份预加载资源的P3.1场景装配；fixture构造不混入计时。"""
+
+    package, resources, interactions = build_model_scene_benchmark_fixture()
+
+    def batch() -> None:
+        for _ in range(MODEL_SCENE_ASSEMBLY_BATCH_SIZE):
+            assemble_model_physics_scene(package, resources, interactions)
+
+    result = _time_in_process(batch, repeat)
+    result["batch_size"] = MODEL_SCENE_ASSEMBLY_BATCH_SIZE
+    result["physical_body_count"] = len(package.relation.body_bindings)
+    result["motion_track_count"] = len(package.motion.tracks)
+    result["median_per_scene_s"] = result["median_s"] / MODEL_SCENE_ASSEMBLY_BATCH_SIZE
+    result["min_per_scene_s"] = result["min_s"] / MODEL_SCENE_ASSEMBLY_BATCH_SIZE
     return result
 
 
@@ -804,6 +829,7 @@ def measure_physics(repeat: int, *, with_profile: bool) -> dict:
         "tension_measurement_static": _measure_tension_measurement(repeat),
         "tension_readout_sampled": _measure_tension_readout(repeat),
         "model_motion_input_load": _measure_model_motion_input(repeat),
+        "model_scene_assembly": _measure_model_scene_assembly(repeat),
     }
     if with_profile:
         report["hotspots"] = {
@@ -897,6 +923,14 @@ def _print_physics(physics: dict) -> None:
         f"payload={model_motion['payload_bytes']}B "
         f"median={model_motion['median_s'] * 1e3:.3f}ms "
         f"per_document={model_motion['median_per_document_s'] * 1e6:.3f}us"
+    )
+    model_scene = physics["model_scene_assembly"]
+    print(
+        f"  模型场景装配 {model_scene['batch_size']}份 "
+        f"bodies={model_scene['physical_body_count']} "
+        f"tracks={model_scene['motion_track_count']} "
+        f"median={model_scene['median_s'] * 1e3:.3f}ms "
+        f"per_scene={model_scene['median_per_scene_s'] * 1e6:.3f}us"
     )
     print("  积分推进 pure_python/numpy 耗时比")
     for record in physics["integration"]:

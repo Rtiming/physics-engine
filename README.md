@@ -40,8 +40,10 @@ LTS敏感轴→mV/ADC→小型放线—收线链”。研究、裁决与执行�
 T-M0/T-M1两个合成静力案例使案例数47→49。[decision/0098](docs/decisions/0098_T-M2电气标定与T-M3动态收放线测量链_20260820.md)
 又补上raw/tare桥路、显式清零位置、五级正反程标定、独立holdout、采样时延和小型动态闭环，
 T-M2/T-M3使案例数49→51。[decision/0099](docs/decisions/0099_模型快照_规划运动与虚拟物理绑定归本仓_WII后适配_20260820.md)
-又落下合成P3-M0案例，案例数51→52。五案均为`hypothesis_only`；official WII时间线、
-WII真实adapter、现场标定、连续卷径、真实导轮/工件和WDS采用仍未落地，
+又落下合成P3-M0案例，案例数51→52。[decision/0100](docs/decisions/0100_P3-M1模型输入到Scene的模块化装配_20260820.md)
+继续把资产字节/SHA、static/kinematic体、时间/规划尺度运动、虚拟frame和显式接触候选装进
+既有Scene/CollisionQuery，P3-M1使案例数52→53。六案均为`hypothesis_only`；dynamic状态frame/质心交接、
+official WII时间线、WII真实adapter、现场标定、连续卷径、真实导轮/工件和WDS采用仍未落地，
 主能力分母仍为17/42、端到端仍为0/6。
 
 ## 能力边界（诚实条款）

@@ -6,6 +6,27 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
 
 ## Unreleased
 
+### 模型输入到Scene的模块化装配（决策0100）
+
+- 新增`pose_math`、`scene_resources`和`model_scene`：位姿组合、资产字节/SHA/形状记录、
+  场景装配分属三个单一职责模块，不继续堆进`model_physics.py`。
+- `time_s`计划以`MotionSource`进既有`SceneAssembly`；`planning_scale`保留独立无量纲
+  采样API，调时间API失败关闭。组件层级和`component_from_asset/shape`均显式组合。
+- `ModelComponent`新增显式`frame_id`，并与所属`MotionTrack.frame_id`强制一致；
+  track frame不再由assembler或未来WII adapter猜测。这是`physics_model_motion_input/0.1`
+  draft面内的破坏性修订；它尚无外部消费方，P3.2首次真实适配前再审版本/冻结。
+- 碰撞资产必须从包根重新读字节并核SHA，再与显式AABB、凸性和保守方向闭合；
+  visual、改字节、路径逃逸、缺资源与资产身份不同均拒绝。
+- `SceneInteractionPlan`只接受调用方显式声明的接触/允许对，不自动全体两两检测；
+  候选直接交给既有`BroadPhaseCollisionQuery`。
+- dynamic状态frame相对质心的语义尚未冻结，P3.1首片见dynamic明确拒绝，不把它当成
+  static体冒充完成。故意绕过dynamic门和资产SHA门时，对应必红用例均已实际失败。
+- 新增P3-M1`cases/model_scene_assembly`：两份合成资产、static张力机、kinematic工件、
+  虚拟process frame和一对候选进Scene/CollisionQuery；0s分离、1s只报broad-phase重叠。
+  案例52→53，17/42和端到端0/6不变。
+- 100份预加载资源两体装配三组各9次的批中位为26.233/8.250/7.605ms，
+  三组中位8.250ms，预算100ms。这仍是小对象编排而非数组核，GPU不适用。
+
 ### 模型、运动与虚拟物理输入基础设施（决策0099）
 
 - 新增`model_snapshot`、`planned_motion`和`model_physics`：引擎自有合同显式记录模型组件与

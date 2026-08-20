@@ -1,0 +1,112 @@
+{
+  "arrays": {},
+  "case_id": "case/model_scene_assembly",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/model_scene_assembly",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/model_scene_assembly/generate_oracle.py",
+    "sha256": "ace5cc22f7b67509e11a8d2ea0662862593336d72bae20f2a07dcb49db52ae37"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "c6cd76c38bd7f9f6e7d339e4f6ad2fef4574445923f208df736faba3857f2123",
+  "oracles": [
+    {
+      "expected": {
+        "body_ids": [
+          "body/tension-machine",
+          "body/workpiece"
+        ],
+        "candidate_pair_count": [
+          1,
+          1
+        ],
+        "event_confidence": "broad_phase",
+        "event_count": [
+          0,
+          1
+        ],
+        "excluded_component_ids": [
+          "model-component/robot-display"
+        ],
+        "excluded_motion_track_ids": [
+          "motion-track/robot-display"
+        ],
+        "process_frame_midpoint_x_mm": 11.0,
+        "qualification": "hypothesis_only",
+        "workpiece_asset_x_mm": [
+          21.0,
+          11.0,
+          1.0
+        ]
+      },
+      "id": "oracle:model-scene/time-and-collision",
+      "inputs": {
+        "component_from_asset_x_mm": 1.0,
+        "process_frame_x_mm": [
+          10.0,
+          12.0
+        ],
+        "sample_times_s": [
+          0.0,
+          1.0
+        ],
+        "tension_asset_sha256": "d55f6a4d3d4c09eb44eada404312e20b6f14ecbc104f62e1b5faa180b8928af5",
+        "workpiece_asset_sha256": "49aaff86160008055ddbe4c39a5abf9a4ab6dbe667c22cefddbc5fe5f2815798",
+        "workpiece_component_x_mm": [
+          20.0,
+          0.0
+        ]
+      },
+      "tolerances": {
+        "body_ids": {
+          "abs": 0.0,
+          "reason": "只有物理组件进入Scene，显示组件保持明确排除。",
+          "rel": 0.0
+        },
+        "candidate_pair_count": {
+          "abs": 0.0,
+          "reason": "接触候选按声明固定为一对，不自动全连接。",
+          "rel": 0.0
+        },
+        "event_confidence": {
+          "abs": 0.0,
+          "reason": "fixture只声明AABB，不能冒充网格窄相。",
+          "rel": 0.0
+        },
+        "event_count": {
+          "abs": 0.0,
+          "reason": "0s分离，1s的AABB重叠。",
+          "rel": 0.0
+        },
+        "excluded_component_ids": {
+          "abs": 0.0,
+          "reason": "模型排除身份逐字。",
+          "rel": 0.0
+        },
+        "excluded_motion_track_ids": {
+          "abs": 0.0,
+          "reason": "显示运动排除身份逐字。",
+          "rel": 0.0
+        },
+        "process_frame_midpoint_x_mm": {
+          "abs": 2e-15,
+          "reason": "10mm到12mm线性插值中点。",
+          "rel": 2e-15
+        },
+        "qualification": {
+          "abs": 0.0,
+          "reason": "合成规划场景永久是假设级。",
+          "rel": 0.0
+        },
+        "workpiece_asset_x_mm": {
+          "abs": 2e-15,
+          "reason": "组件位姿线性插值后再显式后乘1mm资产安装偏置。",
+          "rel": 2e-15
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

@@ -335,6 +335,20 @@ class PhysicsModelMotionInput:
                 f"unaccounted model components: {sorted(unaccounted_components)}"
             )
         motion_tracks = {track.track_id: track for track in self.motion.tracks}
+        for track in self.motion.tracks:
+            if track.component_id is None:
+                continue
+            component = model_components.get(track.component_id)
+            if component is None:
+                raise ModelPhysicsError(
+                    f"motion track {track.track_id} names unknown component "
+                    f"{track.component_id}"
+                )
+            if track.frame_id != component.frame_id:
+                raise ModelPhysicsError(
+                    f"motion track {track.track_id} frame {track.frame_id!r} differs from "
+                    f"component frame {component.frame_id!r}"
+                )
         excluded_tracks = set(self.relation.excluded_motion_track_ids)
         unknown_tracks = excluded_tracks - set(motion_tracks)
         if unknown_tracks:

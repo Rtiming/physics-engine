@@ -413,6 +413,33 @@ def _interpolate(
     )
 
 
+def interpolate_pose_fraction(
+    left: Pose,
+    right: Pose,
+    fraction: float,
+    semantics: InterpolationSemantics,
+) -> Pose:
+    """按声明语义在两个位姿之间取无量纲分数，不赋予它时间含义。
+
+    ``SampledPoseTimeline``的旧热路径继续直接走私有``_interpolate``，避免为了
+    新的planning-scale调用面改变既有数值路径。本函数给无时间计划复用同一套
+    线性/SLERP语义；端点原对象直接返回，保持指纹稳定。
+    """
+
+    if not isinstance(left, Pose) or not isinstance(right, Pose):
+        raise MotionError("interpolate_pose_fraction expects two Pose values")
+    if not isinstance(semantics, InterpolationSemantics):
+        raise MotionError("semantics must be InterpolationSemantics")
+    value = _require_finite(fraction, "fraction")
+    if not 0.0 <= value <= 1.0:
+        raise MotionError(f"fraction must live in [0, 1], got {value!r}")
+    if value == 0.0:
+        return left
+    if value == 1.0:
+        return right
+    return _interpolate(left, right, value, semantics)
+
+
 @dataclass(frozen=True)
 class SampledPoseTimeline:
     """离散样点 + **显式声明的**插值语义。WII位姿时间线的形制。
@@ -648,4 +675,5 @@ __all__ = [
     "PoseSample",
     "SampledPoseTimeline",
     "assert_replayable_for_fingerprint",
+    "interpolate_pose_fraction",
 ]

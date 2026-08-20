@@ -79,11 +79,19 @@
     },
     "model_motion_input_load_100_documents": {
       "budget_s": 0.1,
-      "measured_median_s": 0.061002,
+      "measured_median_s": 0.040522,
       "load_tier": "interactive",
       "measured_on": "2026-08-20",
-      "workload": "100份3494字节physics_model_motion_input/0.1严格复读：四层内容哈希+模型层级+多track运动+组件/track/几何/状态所有权闭包",
-      "measured_by": "docs/decisions/0099_模型快照_规划运动与虚拟物理绑定归本仓_WII后适配_20260820.md；Apple M4本机同进程先热身、9次中位61.001709ms，最小59.423292ms，最大70.325208ms，1分钟负载12.244。负载记录只解释墙钟，不进入功能判据"
+      "workload": "100份3529字节physics_model_motion_input/0.1严格复读：四层内容哈希+模型层级+组件frame/多track交叉核对+组件/track/几何/状态所有权闭包",
+      "measured_by": "docs/decisions/0100_P3-M1模型输入到Scene的模块化装配_20260820.md；决策0100补ModelComponent.frame_id后，Apple M4本机同进程三组各先热身、各9次，批中位数40.046417/42.062542/40.522250ms，三组中位40.522250ms，最快单批36.880333ms，1分钟负载6.664—6.809。较本批改前65.404292ms没有性能回推；墙钟仍只作观测"
+    },
+    "model_scene_assembly_100_preloaded": {
+      "budget_s": 0.1,
+      "measured_median_s": 0.00825,
+      "load_tier": "interactive",
+      "measured_on": "2026-08-20",
+      "workload": "100份P3.1预加载资源两体装配：2个物理体、2条运动track、1个虚拟frame、1对显式接触候选；不把磁盘资产SHA读取混入装配热路径",
+      "measured_by": "docs/decisions/0100_P3-M1模型输入到Scene的模块化装配_20260820.md；Apple M4本机同进程每组先热身，三组各9次的批中位数为26.232750/8.250083/7.605167ms，三组中位8.250083ms，最快单批7.144500ms；当时1分钟负载9.278—9.314。首组有显著瞬时扰动，故墙钟只作观测，100ms预算不是回退门"
     },
     "accept_full_batch_tier_on_master": {
       "budget_s": 90.0,

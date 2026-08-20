@@ -109,6 +109,11 @@
   process frame与累计送带；无时间规划不能冒充秒（决策0099）
 - `physics_engine.model_physics` —— 模型组件到static/kinematic/dynamic虚拟物理体、
   运动track与虚拟工艺frame的显式绑定；输入面`physics_model_motion_input/0.1`
+- `physics_engine.pose_math` —— 域中立的parent-from-child刚体位姿组合，不反向依赖力学域
+- `physics_engine.scene_resources` —— 包内碰撞资产字节/SHA复读、AABB/凸性声明
+  与解析形状资源目录
+- `physics_engine.model_scene` —— P3.1将已验证模型输入装配为`FinalizedScene`、
+  时间/规划尺度运行面、虚拟frame与显式碰撞候选
 - `physics_engine.winding` —— 卷绕堆积律：匝→层换算、堆积因子、有效半径随匝数生长、
   长度↔匝的正反解（决策0093，力学域实验档）。**它补的是两处已有实现之间缺的那一段**：
   `drives`吃匝答力、`modelgen.generate_spool`吃层答形，中间那层换算此前由调用方随手给。

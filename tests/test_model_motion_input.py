@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -83,6 +84,7 @@ def _model() -> ModelSnapshot:
         components=(
             ModelComponent(
                 component_id="model-component/tension-machine",
+                frame_id="frame/tension-machine",
                 semantic_role="tension_machine",
                 parent_component_id=None,
                 parent_from_component=identity,
@@ -101,6 +103,7 @@ def _model() -> ModelSnapshot:
             ),
             ModelComponent(
                 component_id="model-component/workpiece",
+                frame_id="frame/workpiece",
                 semantic_role="workpiece",
                 parent_component_id=None,
                 parent_from_component=identity,
@@ -119,6 +122,7 @@ def _model() -> ModelSnapshot:
             ),
             ModelComponent(
                 component_id="model-component/robot-display",
+                frame_id="frame/robot-display",
                 semantic_role="robot_display",
                 parent_component_id=None,
                 parent_from_component=identity,
@@ -340,6 +344,7 @@ def test_red_visual_asset_cannot_silently_become_collision_geometry():
     motion = _motion()
     bad_component = ModelComponent(
         component_id="model-component/visual-only-physical",
+        frame_id="frame/visual-only-physical",
         semantic_role="workpiece",
         parent_component_id=None,
         parent_from_component=Pose((0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)),
@@ -443,6 +448,33 @@ def test_red_unaccounted_motion_track_is_rejected():
         PhysicsModelMotionInput.create(
             input_id="physics-input/unaccounted-track",
             model=model,
+            motion=motion,
+            relation=relation,
+            evidence=_estimated(),
+        )
+
+
+def test_red_component_motion_track_frame_mismatch_is_rejected():
+    model = _model()
+    motion = _motion()
+    components = tuple(
+        replace(component, frame_id="frame/workpiece-other")
+        if component.component_id == "model-component/workpiece"
+        else component
+        for component in model.components
+    )
+    bad_model = ModelSnapshot.create(
+        model_id=model.model_id,
+        root_frame_id=model.root_frame_id,
+        producer_id=model.producer_id,
+        source_manifest_sha256=model.source_manifest_sha256,
+        components=components,
+    )
+    relation = _relation(bad_model, motion)
+    with pytest.raises(ModelPhysicsError, match="frame.*differs from component frame"):
+        PhysicsModelMotionInput.create(
+            input_id="physics-input/frame-mismatch",
+            model=bad_model,
             motion=motion,
             relation=relation,
             evidence=_estimated(),

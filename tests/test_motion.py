@@ -31,6 +31,7 @@ from physics_engine.motion import (
     PoseSample,
     SampledPoseTimeline,
     assert_replayable_for_fingerprint,
+    interpolate_pose_fraction,
 )
 
 IDENTITY = (0.0, 0.0, 0.0, 1.0)
@@ -83,6 +84,27 @@ def test_a_wii_shaped_timeline_is_accepted_and_answers_the_three_methods():
     assert timeline.horizon_s() == 2.0
     assert timeline.is_replayable() is True
     assert timeline.pose_at(0.5).translation_mm == (50.0, 0.0, 0.0)
+
+
+def test_dimensionless_pose_fraction_reuses_interpolation_without_inventing_time():
+    left = Pose((0.0, 0.0, 0.0), IDENTITY)
+    right = Pose((2.0, 0.0, 0.0), _q(180.0))
+    midpoint = interpolate_pose_fraction(left, right, 0.5, _semantics())
+    assert midpoint.translation_mm == (1.0, 0.0, 0.0)
+    assert midpoint.rotation_xyzw == pytest.approx((0.0, 0.0, 2**-0.5, 2**-0.5))
+    assert interpolate_pose_fraction(left, right, 0.0, _semantics()) is left
+    assert interpolate_pose_fraction(left, right, 1.0, _semantics()) is right
+
+
+@pytest.mark.parametrize("fraction", (-0.1, 1.1, float("nan")))
+def test_red_dimensionless_pose_fraction_rejects_values_outside_its_domain(fraction):
+    with pytest.raises(MotionError, match="fraction"):
+        interpolate_pose_fraction(
+            Pose((0.0, 0.0, 0.0), IDENTITY),
+            Pose((1.0, 0.0, 0.0), IDENTITY),
+            fraction,
+            _semantics(),
+        )
 
 
 def test_sample_times_come_back_byte_identical():
@@ -699,6 +721,7 @@ def test_the_module_stops_where_spec_10_is_still_a_draft():
         "PoseSample",
         "SampledPoseTimeline",
         "assert_replayable_for_fingerprint",
+        "interpolate_pose_fraction",
     ]
 
 
