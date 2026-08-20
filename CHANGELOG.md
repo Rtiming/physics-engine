@@ -26,6 +26,9 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
   案例52→53，17/42和端到端0/6不变。
 - 100份预加载资源两体装配三组各9次的批中位为26.233/8.250/7.605ms，
   三组中位8.250ms，预算100ms。这仍是小对象编排而非数组核，GPU不适用。
+- 本机quick为2623 passed/6 skipped、functional=PASS但66.1s/30s timing=FAIL；master
+  full在8核SLURM下交互2621 passed/8 skipped、batch170 passed/14 skipped、
+  118.593s/180s，functional/timing/overall=PASS、resource=QUALIFIED、repo稳定。
 
 ### 模型、运动与虚拟物理输入基础设施（决策0099）
 
