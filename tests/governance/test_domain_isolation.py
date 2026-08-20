@@ -124,10 +124,14 @@ PHYSICS_DOMAINS: dict[str, tuple[str, ...]] = {
         "contact_pipeline",
         "disturbance",
         "drives",
-        #: `dynamic_body`与`model_scene`由0101归力学：前者直接import刚体13维State与
-        #: 惯量，后者从0101起import前者并要求逐帧dynamic State。0100时`model_scene`
+        #: `dynamic_body`、`dynamic_contact`与`model_scene`由0101/0103归力学：
+        #: 前者直接import刚体13维State与惯量；`dynamic_contact`把两个该状态
+        #: 与基座CollisionEvent的法向/见证点装成26维耦合积分，仍只依赖同域
+        #: `rigidbody`和基座场景/碰撞。后者从0101起import`dynamic_body`并要求
+        #: 逐帧dynamic State。0100时`model_scene`
         #: 仍只做static/kinematic基座编排；**import边改变时归属同批改变**。
         "dynamic_body",
+        "dynamic_contact",
         "energies",
         "feed",
         "integrate",

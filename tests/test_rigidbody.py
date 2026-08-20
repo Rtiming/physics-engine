@@ -29,6 +29,7 @@ from physics_engine.rigidbody import (
     integrate_free_flight,
     make_state,
     quaternion_multiply,
+    rigid_body_state_derivative,
     rotate_body_to_world,
     rotate_world_to_body,
 )
@@ -124,6 +125,19 @@ def test_must_be_red_a_layout_with_the_blocks_reordered_is_a_different_contract(
         integrate_free_flight(
             RK4_BODY, state=state, inertia=ASYMMETRIC, dt_s=1.0e-3, steps=1
         )
+
+
+def test_an_equivalent_layout_object_still_passes_the_fingerprint_fallback():
+    """同一对象走热路径，但从严格reader重建的等价布局仍按指纹放行。"""
+
+    clone = StateLayout(
+        layout_id=RIGID_BODY_LAYOUT.layout_id,
+        fields=RIGID_BODY_LAYOUT.fields,
+        node_dof_count=RIGID_BODY_LAYOUT.node_dof_count,
+    )
+    assert clone is not RIGID_BODY_LAYOUT
+    state = State(clone, make_state(angular_velocity_rad_per_s=(1.0, 2.0, 3.0)).vector)
+    assert rigidbody.angular_velocity_body_rad_per_s(state) == (1.0, 2.0, 3.0)
 
 
 def test_the_integrator_reads_block_offsets_from_the_layout_not_from_literals():
@@ -369,6 +383,63 @@ def test_the_unit_conversion_constant_is_imported_not_re_typed():
         __import__("pathlib").Path(rigidbody.__file__).read_text(encoding="utf-8")
     )
     assert "1000.0" not in source, "刚体模块里出现了裸的1000.0——单位换算必须走命名常量"
+
+
+def test_the_public_single_body_derivative_is_the_euler_equation_formula_source():
+    """P3-M3的26维积分只许复用这一份单体公式，不许抄第二份。"""
+
+    inertia = RigidBodyInertia(
+        mass_kg=2.0,
+        inertia_body_kg_mm2=(
+            (2.0, 0.0, 0.0),
+            (0.0, 3.0, 0.0),
+            (0.0, 0.0, 4.0),
+        ),
+    )
+    state = make_state(
+        position_mm=(7.0, 8.0, 9.0),
+        velocity_mm_per_s=(1.0, -2.0, 3.0),
+        angular_velocity_rad_per_s=(0.5, -1.0, 2.0),
+    )
+    force = (1.0, -2.0, 3.0)
+    torque = (4.0, 5.0, -6.0)
+    derivative = rigid_body_state_derivative(
+        state.vector,
+        inertia=inertia,
+        force_world_n=force,
+        torque_body_nmm=torque,
+    )
+
+    angular_momentum = (1.0, -3.0, 8.0)
+    gyroscopic = cross((0.5, -1.0, 2.0), angular_momentum)
+    expected_angular = (
+        (torque[0] * energies.MM_PER_M - gyroscopic[0]) / 2.0,
+        (torque[1] * energies.MM_PER_M - gyroscopic[1]) / 3.0,
+        (torque[2] * energies.MM_PER_M - gyroscopic[2]) / 4.0,
+    )
+    assert derivative == (
+        1.0,
+        -2.0,
+        3.0,
+        500.0,
+        -1000.0,
+        1500.0,
+        *expected_angular,
+        0.25,
+        -0.5,
+        1.0,
+        0.0,
+    )
+
+
+def test_must_be_red_the_public_derivative_rejects_a_non_rigid_body_vector():
+    with pytest.raises(RigidBodyError, match="13"):
+        rigid_body_state_derivative(
+            (0.0,) * 12,
+            inertia=ASYMMETRIC,
+            force_world_n=(0.0, 0.0, 0.0),
+            torque_body_nmm=(0.0, 0.0, 0.0),
+        )
 
 
 # ---------------------------------------------------------------------------

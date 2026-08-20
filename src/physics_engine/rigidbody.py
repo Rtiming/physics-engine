@@ -117,6 +117,7 @@ RIGID_BODY_LAYOUT = StateLayout(
         ),
     ),
 )
+_RIGID_BODY_LAYOUT_FINGERPRINT = RIGID_BODY_LAYOUT.fingerprint()
 
 _POSITION = "centre_of_mass_position_mm"
 _VELOCITY = "centre_of_mass_velocity_mm_per_s"
@@ -438,7 +439,10 @@ def _require_layout(state: State) -> None:
     """布局指纹是**进函数的门**。次序换了指纹就变，本函数当场拒——
     spec/12第2.2节说次序换了"多数测试不会发现"，这里让它发现。"""
 
-    if state.layout.fingerprint() != RIGID_BODY_LAYOUT.fingerprint():
+    if (
+        state.layout is not RIGID_BODY_LAYOUT
+        and state.layout.fingerprint() != _RIGID_BODY_LAYOUT_FINGERPRINT
+    ):
         raise RigidBodyError(
             f"state layout {state.layout.layout_id!r} does not match "
             f"{RIGID_BODY_LAYOUT.layout_id!r} — 打包次序是形制的一部分，"
@@ -614,47 +618,104 @@ class RotationDiagnostics:
     renormalisations: int
 
 
+def _rigid_body_state_derivative_unchecked(
+    vector: Vector,
+    *,
+    inertia: RigidBodyInertia,
+    inverse_mass_mm_per_s2_per_n: float,
+    force_world_n: Vector3,
+    torque_body_nmm: Vector3,
+) -> Vector:
+    """Euler方程与姿态运动学的**唯一**公式源。"""
+
+    velocity = vector[_VELOCITY_SLICE]
+    omega = vector[_OMEGA_SLICE]
+    quaternion = vector[_ATTITUDE_SLICE]
+    acceleration = tuple(
+        component * inverse_mass_mm_per_s2_per_n for component in force_world_n
+    )
+    gyroscopic = cross(omega, inertia.apply(omega))
+    angular_acceleration = inertia.solve(
+        tuple(
+            torque_body_nmm[axis] * MM_PER_M - gyroscopic[axis]
+            for axis in range(3)
+        )
+    )
+    rate = quaternion_multiply(
+        quaternion, (omega[0], omega[1], omega[2], 0.0)
+    )
+    computed = (
+        velocity,
+        acceleration,
+        angular_acceleration,
+        (0.5 * rate[0], 0.5 * rate[1], 0.5 * rate[2], 0.5 * rate[3]),
+    )
+    return (
+        computed[_ASSEMBLY[0]]
+        + computed[_ASSEMBLY[1]]
+        + computed[_ASSEMBLY[2]]
+        + computed[_ASSEMBLY[3]]
+    )
+
+
+def _finite_vector(value: Sequence[float], *, width: int, name: str) -> tuple[float, ...]:
+    if len(value) != width:
+        raise RigidBodyError(f"{name} must have {width} components: {value!r}")
+    result = tuple(float(component) for component in value)
+    if not all(math.isfinite(component) for component in result):
+        raise RigidBodyError(f"{name} must contain finite components")
+    return result
+
+
+def rigid_body_state_derivative(
+    vector: Sequence[float],
+    *,
+    inertia: RigidBodyInertia,
+    force_world_n: Sequence[float] = (0.0, 0.0, 0.0),
+    torque_body_nmm: Sequence[float] = (0.0, 0.0, 0.0),
+) -> Vector:
+    """Evaluate one rigid body's derivative from an already assembled wrench.
+
+    P3-M3的多体积分器只负责同时组装多个状态与接触旋量；
+    单体的Euler方程、单位换算和四元数速率仍以本函数为公开入口。
+    """
+
+    if not isinstance(inertia, RigidBodyInertia):
+        raise RigidBodyError("inertia must be RigidBodyInertia")
+    checked_vector = _finite_vector(
+        vector,
+        width=RIGID_BODY_LAYOUT.dof_count,
+        name="rigid body state vector",
+    )
+    checked_force = _finite_vector(force_world_n, width=3, name="force_world_n")
+    checked_torque = _finite_vector(torque_body_nmm, width=3, name="torque_body_nmm")
+    return _rigid_body_state_derivative_unchecked(
+        checked_vector,
+        inertia=inertia,
+        inverse_mass_mm_per_s2_per_n=MM_PER_M / inertia.mass_kg,
+        force_world_n=checked_force,  # type: ignore[arg-type]
+        torque_body_nmm=checked_torque,  # type: ignore[arg-type]
+    )
+
+
 def _derivative_factory(
     inertia: RigidBodyInertia,
     force_world_n: ForceCallback | None,
     torque_body_nmm: TorqueCallback | None,
 ) -> Callable[[Vector, float], Vector]:
-    """把Euler方程与姿态运动学写成一份公式源。**只写这一遍。**"""
+    """把回调边界接到上面的唯一公式源。"""
 
     inverse_mass = MM_PER_M / inertia.mass_kg
 
     def derivative(y: Vector, t: float) -> Vector:
-        velocity = y[_VELOCITY_SLICE]
-        omega = y[_OMEGA_SLICE]
-        quaternion = y[_ATTITUDE_SLICE]
         force = force_world_n(y, t) if force_world_n is not None else (0.0, 0.0, 0.0)
         torque = torque_body_nmm(y, t) if torque_body_nmm is not None else (0.0, 0.0, 0.0)
-        # 平动：`a = f/m`，N/kg = m/s²是**米制**，到mm制乘MM_PER_M（与energies同一个常量）。
-        acceleration = tuple(component * inverse_mass for component in force)
-        # 转动：`I·ω̇ = τ·MM_PER_M − ω × (I·ω)`。陀螺项少一个负号或者叉乘反一次,
-        # 能量照样守恒——只有带符号的进动率与惯性系角动量能指出来。
-        gyroscopic = cross(omega, inertia.apply(omega))
-        angular_acceleration = inertia.solve(
-            tuple(
-                torque[axis] * MM_PER_M - gyroscopic[axis] for axis in range(3)
-            )
-        )
-        # 姿态：`q̇ = ½·q ⊗ (ω_body, 0)`。ω在体系所以四元数在**左**。
-        rate = quaternion_multiply(
-            quaternion, (omega[0], omega[1], omega[2], 0.0)
-        )
-        computed = (
-            velocity,
-            acceleration,
-            angular_acceleration,
-            (0.5 * rate[0], 0.5 * rate[1], 0.5 * rate[2], 0.5 * rate[3]),
-        )
-        # **按布局次序拼**：`_ASSEMBLY`是从`RIGID_BODY_LAYOUT`导出的置换。
-        return (
-            computed[_ASSEMBLY[0]]
-            + computed[_ASSEMBLY[1]]
-            + computed[_ASSEMBLY[2]]
-            + computed[_ASSEMBLY[3]]
+        return _rigid_body_state_derivative_unchecked(
+            y,
+            inertia=inertia,
+            inverse_mass_mm_per_s2_per_n=inverse_mass,
+            force_world_n=force,
+            torque_body_nmm=torque,
         )
 
     return derivative
@@ -751,6 +812,7 @@ __all__ = [
     "make_state",
     "normalise_quaternion",
     "quaternion_multiply",
+    "rigid_body_state_derivative",
     "rotate_body_to_world",
     "rotate_world_to_body",
     "rotational_kinetic_energy_nmm",

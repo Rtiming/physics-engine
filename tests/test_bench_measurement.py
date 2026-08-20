@@ -90,6 +90,16 @@ def test_dynamic_scene_benchmarks_report_assembly_and_free_flight_costs():
     assert flight["renormalisations"] == flight["steps"]
 
 
+def test_dynamic_two_body_contact_benchmark_reports_coupled_stage_counts():
+    result = bench._measure_dynamic_two_body_contact(repeat=2)
+    assert result["steps"] == bench.DYNAMIC_TWO_BODY_CONTACT_STEPS == 400
+    assert result["body_count"] == 2
+    assert result["candidate_pair_count"] == 1
+    assert result["derivative_evaluations"] == 4 * result["steps"]
+    assert result["renormalisations"] == 2 * result["steps"]
+    assert result["median_s"] > 0.0
+
+
 def test_source_bytes_include_python_subpackages(tmp_path: Path):
     """必须红：只用``glob('*.py')``会让新增物理域整个隐身。"""
 

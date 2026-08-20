@@ -31,6 +31,8 @@ MuJoCo的CI干脆不跑benchmark，Drake在README里明写其基准不承担回�
   Scene finalize、MotionSource、虚拟frame和显式候选装配的进程内成本。
 * ``dynamic_model_scene``：100份一静一动场景装配，以及同一dynamic体500步RK4自由飞行
   加COM状态→geometry位姿回读；两条分别量装配成本与运行成本。
+* ``dynamic_two_body_contact``：P3-M3两dynamic球、一候选的400步耦合RK4，
+  每趟1600次同步Scene位姿/窄相/旋量导数求值；fixture构造不进计时。
 
 这些物理组也**不进门**，理由与墙钟同（决策0018第一节未被本页改动）。它们的用途是
 spec/13第一节义务1的那个前提：**没有热点数据的优化提案不受理**。
@@ -62,6 +64,11 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from physics_engine.canonical import FTS_PROFILE, WDS_PROFILE, canonical_file_bytes
 from physics_engine.drives import TensionSensor
+from physics_engine.dynamic_contact import (
+    DynamicNormalContactLaw,
+    DynamicSpherePairRuntime,
+    integrate_dynamic_sphere_pair,
+)
 from physics_engine.energies import (
     AxialStretch,
     EnergyContext,
@@ -114,6 +121,7 @@ from physics_engine.tension_readout import (
     TensionReadout,
     TensionReadoutChannel,
 )
+from tools.bench_dynamic_contact import build_dynamic_sphere_pair_fixture
 from tools.bench_model_scene import (
     build_dynamic_model_scene_benchmark_fixture,
     build_model_scene_benchmark_fixture,
@@ -140,6 +148,7 @@ MODEL_MOTION_INPUT_BATCH_SIZE = 100
 MODEL_SCENE_ASSEMBLY_BATCH_SIZE = 100
 DYNAMIC_MODEL_SCENE_BATCH_SIZE = 100
 DYNAMIC_MODEL_SCENE_FLIGHT_STEPS = 500
+DYNAMIC_TWO_BODY_CONTACT_STEPS = 400
 
 
 class BenchmarkError(RuntimeError):
@@ -554,6 +563,43 @@ def _measure_dynamic_model_scene_free_flight(repeat: int) -> dict:
     return result
 
 
+def _measure_dynamic_two_body_contact(repeat: int) -> dict:
+    """P3-M3两dynamic体、一候选、400步耦合RK4；fixture不进计时。"""
+
+    prepared = build_dynamic_sphere_pair_fixture(centroid_y_mm=0.0)
+    runtime = DynamicSpherePairRuntime(
+        prepared,
+        DynamicNormalContactLaw(
+            normal_stiffness_n_per_mm=100.0,
+            normal_damping_n_s_per_mm=0.0,
+        ),
+    )
+    states = prepared.initial_dynamic_states()
+    omega = math.sqrt(1000.0 * 100.0 / 0.5)
+    dt_s = math.pi / (2.0 * omega) / DYNAMIC_TWO_BODY_CONTACT_STEPS
+    last = [None]
+
+    def contact_run() -> None:
+        last[0] = integrate_dynamic_sphere_pair(
+            runtime,
+            states=states,
+            dt_s=dt_s,
+            steps=DYNAMIC_TWO_BODY_CONTACT_STEPS,
+        )
+
+    result = _time_in_process(contact_run, repeat)
+    completed = last[0]
+    assert completed is not None
+    result["steps"] = DYNAMIC_TWO_BODY_CONTACT_STEPS
+    result["body_count"] = 2
+    result["candidate_pair_count"] = 1
+    result["derivative_evaluations"] = completed.diagnostics.derivative_evaluations
+    result["renormalisations"] = sum(
+        count for _, count in completed.diagnostics.renormalisations
+    )
+    return result
+
+
 def build_chain(
     nodes: int, *, with_bending: bool = False
 ) -> tuple[EnergyRegistry, State, EnergyContext]:
@@ -889,6 +935,7 @@ def measure_physics(repeat: int, *, with_profile: bool) -> dict:
         "dynamic_model_scene_free_flight": _measure_dynamic_model_scene_free_flight(
             repeat
         ),
+        "dynamic_two_body_contact": _measure_dynamic_two_body_contact(repeat),
     }
     if with_profile:
         report["hotspots"] = {
@@ -993,6 +1040,7 @@ def _print_physics(physics: dict) -> None:
     )
     dynamic_scene = physics["dynamic_model_scene_assembly"]
     dynamic_flight = physics["dynamic_model_scene_free_flight"]
+    dynamic_contact = physics["dynamic_two_body_contact"]
     print(
         f"  dynamic场景装配 {dynamic_scene['batch_size']}份 "
         f"median={dynamic_scene['median_s'] * 1e3:.3f}ms "
@@ -1002,6 +1050,11 @@ def _print_physics(physics: dict) -> None:
         f"  dynamic自由飞行 {dynamic_flight['steps']}步 "
         f"median={dynamic_flight['median_s'] * 1e3:.3f}ms "
         f"renormalisations={dynamic_flight['renormalisations']}"
+    )
+    print(
+        f"  dynamic双体接触 {dynamic_contact['steps']}步 "
+        f"median={dynamic_contact['median_s'] * 1e3:.3f}ms "
+        f"derivative_evaluations={dynamic_contact['derivative_evaluations']}"
     )
     print("  积分推进 pure_python/numpy 耗时比")
     for record in physics["integration"]:

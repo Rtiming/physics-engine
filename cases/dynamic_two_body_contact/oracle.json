@@ -1,0 +1,218 @@
+{
+  "arrays": {},
+  "case_id": "case/dynamic_two_body_contact",
+  "facet": "engine_oracle_manifest",
+  "facet_version": "0.1",
+  "generator": {
+    "algorithm_id": "algorithm:oracle/dynamic_two_body_contact",
+    "algorithm_version": "1.0.0",
+    "path_relative": "cases/dynamic_two_body_contact/generate_oracle.py",
+    "sha256": "c2f406b3ea8d9caa34c5848ed285351ca7ac903b9fbfdf714d094be0c2606361"
+  },
+  "load_tier": "interactive",
+  "manifest_self_sha256": "7f55d8e6d4baa57913f052226ed7ef1d3df51e2ac847e1e9193a628418ed32cb",
+  "oracles": [
+    {
+      "expected": {
+        "force_a_world_n": [
+          -100.0,
+          0.0,
+          0.0
+        ],
+        "force_b_world_n": [
+          100.0,
+          0.0,
+          0.0
+        ],
+        "lever_a_world_mm": [
+          10.0,
+          -2.0,
+          0.0
+        ],
+        "lever_b_world_mm": [
+          -10.0,
+          -2.0,
+          0.0
+        ],
+        "normal_ab": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "penetration_mm": 1.0,
+        "torque_a_body_nmm": [
+          0.0,
+          0.0,
+          -200.0
+        ],
+        "torque_b_body_nmm": [
+          0.0,
+          0.0,
+          200.0
+        ],
+        "total_force_world_n": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "total_torque_about_origin_world_nmm": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "witness_a_mm": [
+          0.5,
+          0.0,
+          0.0
+        ],
+        "witness_b_mm": [
+          -0.5,
+          0.0,
+          0.0
+        ]
+      },
+      "id": "oracle:dynamic-contact/eccentric-wrench",
+      "inputs": {
+        "centre_a_x_mm": -9.5,
+        "centre_b_x_mm": 9.5,
+        "centroid_y_mm": 2.0,
+        "normal_damping_n_s_per_mm": 0.0,
+        "normal_stiffness_n_per_mm": 100.0,
+        "radius_mm": 10.0
+      },
+      "tolerances": {
+        "force_a_world_n": {
+          "abs": 1e-14,
+          "reason": "球心、见证点、作用反作用与r×F的独立手算。",
+          "rel": 1e-14
+        },
+        "force_b_world_n": {
+          "abs": 1e-14,
+          "reason": "球心、见证点、作用反作用与r×F的独立手算。",
+          "rel": 1e-14
+        },
+        "lever_a_world_mm": {
+          "abs": 1e-14,
+          "reason": "球心、见证点、作用反作用与r×F的独立手算。",
+          "rel": 1e-14
+        },
+        "lever_b_world_mm": {
+          "abs": 1e-14,
+          "reason": "球心、见证点、作用反作用与r×F的独立手算。",
+          "rel": 1e-14
+        },
+        "normal_ab": {
+          "abs": 1e-14,
+          "reason": "球心、见证点、作用反作用与r×F的独立手算。",
+          "rel": 1e-14
+        },
+        "penetration_mm": {
+          "abs": 1e-14,
+          "reason": "球心、见证点、作用反作用与r×F的独立手算。",
+          "rel": 1e-14
+        },
+        "torque_a_body_nmm": {
+          "abs": 1e-14,
+          "reason": "球心、见证点、作用反作用与r×F的独立手算。",
+          "rel": 1e-14
+        },
+        "torque_b_body_nmm": {
+          "abs": 1e-14,
+          "reason": "球心、见证点、作用反作用与r×F的独立手算。",
+          "rel": 1e-14
+        },
+        "total_force_world_n": {
+          "abs": 1e-14,
+          "reason": "球心、见证点、作用反作用与r×F的独立手算。",
+          "rel": 1e-14
+        },
+        "total_torque_about_origin_world_nmm": {
+          "abs": 1e-13,
+          "reason": "球心、见证点、作用反作用与r×F的独立手算。",
+          "rel": 1e-14
+        },
+        "witness_a_mm": {
+          "abs": 1e-14,
+          "reason": "球心、见证点、作用反作用与r×F的独立手算。",
+          "rel": 1e-14
+        },
+        "witness_b_mm": {
+          "abs": 1e-14,
+          "reason": "球心、见证点、作用反作用与r×F的独立手算。",
+          "rel": 1e-14
+        }
+      }
+    },
+    {
+      "expected": {
+        "derivative_evaluations": 1600,
+        "final_centre_a_x_mm": -10.0,
+        "final_centre_b_x_mm": 10.0,
+        "final_kinetic_energy_nmm": 50.0,
+        "final_velocity_a_x_mm_per_s": -223.60679774997897,
+        "final_velocity_b_x_mm_per_s": 223.60679774997897,
+        "renormalisations_per_body": 400,
+        "total_linear_momentum_kg_mm_per_s": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "id": "oracle:dynamic-contact/aligned-quarter-period",
+      "inputs": {
+        "dt_s": 8.781018413800908e-06,
+        "effective_mass_kg": 0.5,
+        "initial_penetration_mm": 1.0,
+        "mass_a_kg": 1.0,
+        "mass_b_kg": 1.0,
+        "normal_stiffness_n_per_mm": 100.0,
+        "omega_rad_per_s": 447.21359549995793,
+        "quarter_period_s": 0.003512407365520363,
+        "steps": 400
+      },
+      "tolerances": {
+        "derivative_evaluations": {
+          "abs": 0.0,
+          "reason": "经典RK4每步四次耦合导数求值。",
+          "rel": 0.0
+        },
+        "final_centre_a_x_mm": {
+          "abs": 2e-08,
+          "reason": "δ(t)=δ0 cos(ωt)在四分之一周期归零。",
+          "rel": 2e-09
+        },
+        "final_centre_b_x_mm": {
+          "abs": 2e-08,
+          "reason": "等质量对称性。",
+          "rel": 2e-09
+        },
+        "final_kinetic_energy_nmm": {
+          "abs": 5e-06,
+          "reason": "初始罚簧能0.5kδ²=50N·mm。",
+          "rel": 1e-07
+        },
+        "final_velocity_a_x_mm_per_s": {
+          "abs": 5e-06,
+          "reason": "相对速度δ0ω由两等质量各分一半。",
+          "rel": 2e-08
+        },
+        "final_velocity_b_x_mm_per_s": {
+          "abs": 5e-06,
+          "reason": "作用反作用与对称性。",
+          "rel": 2e-08
+        },
+        "renormalisations_per_body": {
+          "abs": 0.0,
+          "reason": "每个完整步分别归一化两个四元数。",
+          "rel": 0.0
+        },
+        "total_linear_momentum_kg_mm_per_s": {
+          "abs": 1e-12,
+          "reason": "只有内力，初始总动量为零。",
+          "rel": 1e-12
+        }
+      }
+    }
+  ],
+  "regenerated_by": null
+}

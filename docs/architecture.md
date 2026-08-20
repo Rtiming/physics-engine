@@ -44,6 +44,9 @@ WII规划/运动状态adapter ─├─> 模型—运动—物理绑定 ─> phy
 `model_scene`把static/kinematic体、时间/规划尺度运动、虚拟frame和显式候选接进既有Scene/CollisionQuery。
 决策0101起`dynamic_body`又把geometry frame内质心与绕COM惯量接到13维刚体状态，
 `model_scene`因此改归力学域；dynamic运行位姿只经完整状态集反算，不读Scene里的声明占位位姿。
+决策0103起`dynamic_contact`在力学域中同时消费两个该状态：逐RK4子阶段经
+`model_scene`生成几何，让基座`collision`返回法向/见证点，再装成作用反作用力和
+两侧体系力矩。基座仍不反向import力学域。
 模型生产者可以是WII、CAD、人工包或GCW；GCW只是可选溯源，
 不是运行时前置。WII保留IK/FK和路径规划所有权，后续只加产物adapter。WDS不得反向改写上游，
 也不复制公共物理。
