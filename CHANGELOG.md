@@ -18,8 +18,10 @@ minor可破坏兼容，patch只含兼容修复，**不回port**——修复只�
   并去掉槽宽/刚度扫描交点的一次重复牛顿求解。
 - 不采用跨运行结果缓存或`--lf`作验收绿灯；只允许当前worker内的
   只读fixture复用，代码/输入变化后仍会重算。
-- 当前Mac实测：旧quick 80.798s；改造后quick 18.4—19.0s/30s，提速约4.25倍；
-  load1=8.185/10核时full 2826 passed、6 skipped、五道工具门全过、90.4s/120s。
+- 当前Mac实测：旧quick 80.798s；干净提交`c289b92`的quick为2622 passed/5 skipped、
+  17.129s/30s，提速约4.72倍；load1=7.679/10核时full为2831 passed/5 skipped、
+  五道工具门全过、96.366s/120s。master 8核full为2814 passed/22个有理由skip、
+  31.606s/120s，三份回执均为四轴绿且仓库稳定。
 - 回归套件的主负载是Python控制流、小状态时步、AST/文件与子进程，GPU不是
   当前有效路线；Mac和服务器均用有上限的CPU多进程。
 
