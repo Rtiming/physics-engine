@@ -34,7 +34,7 @@
 ## 开发循环（快慢分层，服务"开发提速"首要目标）
 
 - **内循环（秒级）**：`.venv/bin/python -m pytest tests/test_你在动的.py -q`；
-- **批末**：`.venv/bin/python tools/accept.py full`（30/180双档、功能/计时/仓库稳定三轴正交——超时/漂移/零执行绝不pass）；
+- **批末**：`.venv/bin/python tools/accept.py full`（30/120双档、功能/计时/仓库稳定三轴正交——超时/漂移/零执行绝不pass）；
 - **发版**：`.venv/bin/python tools/release.py`——干净仓+accept绿+CHANGELOG条目才发，**版本不可覆盖**，wheel入`~/wheelhouse`并自动镜像GitHub；
 - 环境重建：`python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'`。
 
