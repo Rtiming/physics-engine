@@ -25,11 +25,16 @@
    [`plans/10`](docs/plans/10_模型资产与呈现架构演进计划_20260809.md)；platform是上位
    产品提案，research/14与plans/10是资产/端点子系统资料，均不自动改写plans/08—09的
    当前物理主线或冻结spec。
+5. 动绕制偏差物理基础设施、GCW/WII模型输入、张力测量或WDS采用时，另读
+   [`research/19`](docs/research/19_绕制偏差物理基础设施与上游模型接入调研_20260820.md)、
+   [`decision/0096`](docs/decisions/0096_绕制偏差物理基础设施归本仓与WDS单向消费边界_20260820.md)与
+   [`plans/19`](docs/plans/19_绕制偏差物理基础设施与张力测量小场景计划_20260820.md)。
+   物理基础设施归本仓；WDS只读消费，不改写GCW/WII；上游模型只通过版本化产物进入。
 
 ## 开发循环（快慢分层，服务"开发提速"首要目标）
 
 - **内循环（秒级）**：`.venv/bin/python -m pytest tests/test_你在动的.py -q`；
-- **批末**：`.venv/bin/python tools/accept.py full`（30/120双档、功能/计时/仓库稳定三轴正交——超时/漂移/零执行绝不pass）；
+- **批末**：`.venv/bin/python tools/accept.py full`（30/180双档、功能/计时/仓库稳定三轴正交——超时/漂移/零执行绝不pass）；
 - **发版**：`.venv/bin/python tools/release.py`——干净仓+accept绿+CHANGELOG条目才发，**版本不可覆盖**，wheel入`~/wheelhouse`并自动镜像GitHub；
 - 环境重建：`python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'`。
 
